@@ -49,6 +49,70 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 > **Note:** If you cloned an existing prototype repo, run `npm install` first to install dependencies.
 
+## Deploying as an Easel Application
+
+Easel hosts lab school apps on Playlab's AWS infrastructure through DuploCloud.
+Each school gets its own tenants, and the infra side lives in
+[duplocloud-infrastructure](https://github.com/playlab-education/duplocloud-infrastructure)
+(`modules/exttenant`, `components/labapp`). This repo already has what an app needs
+to deploy there:
+
+- `Dockerfile`: the production image
+- `terraform/main.tf`: one `labapp` block; the tenant, nodes, image repo, URL and
+  cert all come from the app's entry in `config/exttenant/schools.tfvars`
+- `.github/workflows/deploy.yml`: builds and deploys the app, then prints its URL
+- `.github/workflows/plan.yml`: comments the Terraform plan on PRs that change `terraform/`
+
+This repo is the `home` app of the `template` school:
+
+| Environment | Tenant | Deploys | URL |
+|---|---|---|---|
+| dev | `exdtemplate` | every push to `main` | `https://template-home.dev.labschools.app` |
+| prod | `exttemplate` | by hand only (Actions → Deploy → Run workflow), from `main` | not yet: prod has no domain |
+
+### Setup
+
+1. **Register the app under its school.** In duplocloud-infrastructure, add it to
+   the school's `apps` in `config/exttenant/schools.tfvars` and merge. The Ext
+   Tenant workflow then creates the tenants, this repo's GitHub environments
+   (one per tenant) and its image registries.
+   ```hcl
+   template = {
+     apps = {
+       home = {
+         repo = "webapp-prototype-template"
+         # db = "home"  # optional: a database, as an <app>-db secret (DATABASE_URL)
+       }
+     }
+   }
+   ```
+2. **Do the manual steps below.**
+3. **Push to `main`.** The Deploy workflow builds the image, deploys to dev, and
+   ends with "Your app is live at https://…".
+
+### Manual steps
+
+These aren't automated, so someone does them by hand for each new repo:
+
+- **Give the repo the `DUPLO_TOKEN` org secret.** It's an organization secret
+  shared only with selected repositories, so a GitHub org admin adds this repo
+  to it: org **Settings → Secrets and variables → Actions → `DUPLO_TOKEN` →
+  Repository access**. Without it, the build fails to log in to Duplo.
+- **Check the repo can read the `DUPLO_HOST` variable** (same page, under
+  **Variables**), if it's also limited to selected repositories.
+- **Run the first prod deploy by hand** once dev works: Actions → Deploy → Run
+  workflow, with `exttemplate` and `apply`, from `main`.
+
+### Making a new app from this template
+
+- **Name it** by setting `name` in `terraform/main.tf` to the app's key under its
+  school in `schools.tfvars`. Its Terraform state is kept per repo automatically.
+- **Pick its school** by replacing `exdtemplate` / `exttemplate` in both
+  workflows with `exd<school>` / `ext<school>`, and register the app under that
+  school (step 1 above).
+- **The server must listen on `PORT`** (3000) and answer `/` with a 200, which
+  is the health check. `npm run start` already does both.
+
 ## Working with AI Assistants
 
 This template includes an `AGENTS.md` file with guidance for AI coding assistants (Claude Code, Cursor, etc.). The file documents:

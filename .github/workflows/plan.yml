@@ -1,0 +1,28 @@
+# Preview the Terraform change for a lab school tenant without building or
+# deploying anything. Runs on PRs that touch terraform/ (comment on the PR),
+# or by hand for either tenant.
+name: Terraform Plan
+on:
+  pull_request:
+    paths:
+      - terraform/**
+      - .github/workflows/plan.yml
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Tenant to plan against
+        type: choice
+        default: exdtemplate
+        options: [exdtemplate, exttemplate]
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  plan:
+    uses: playlab-education/duplocloud-infrastructure/.github/workflows/app-module.yml@labschools-domain
+    secrets: inherit
+    with:
+      labapp: true # terraform/ uses components/labapp; also sets its state key
+      cmd: plan
+      environment: ${{ inputs.environment || 'exdtemplate' }}
+      tag: main

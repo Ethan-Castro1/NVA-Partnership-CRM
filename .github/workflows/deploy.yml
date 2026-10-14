@@ -1,0 +1,77 @@
+# Build and deploy to the template school's tenants in Duplo (see terraform/).
+#   dev  (exdtemplate): every push to main.
+#   prod (exttemplate): only when run by hand (Actions → Deploy → Run workflow),
+#                     and only from main.
+# The tenants (GitHub environments) and ECR repos (<tenant>-<repo>) come from
+# duplocloud-infrastructure modules/exttenant.
+name: Deploy
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Where to deploy
+        type: choice
+        default: exdtemplate
+        options: [exdtemplate, exttemplate]
+      cmd:
+        description: plan to preview, apply to deploy
+        type: choice
+        default: plan
+        options: [plan, apply]
+
+# One deploy per tenant at a time; never interrupt a Terraform apply.
+concurrency:
+  group: deploy-${{ inputs.environment || 'exdtemplate' }}
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prod deploys only from main
+        if: inputs.environment == 'exttemplate' && github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Deploy to prod from main (this run is on ${GITHUB_REF_NAME})."
+          exit 1
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci && npm run typecheck
+
+  image:
+    needs: ci
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.build.outputs.tag }}
+    env:
+      DUPLO_HOST: ${{ vars.DUPLO_HOST }}
+      DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
+      DUPLO_TENANT: ${{ inputs.environment || 'exdtemplate' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: duplocloud/actions@main
+        with:
+          admin: true
+      - id: build
+        uses: duplocloud/actions/build-image@main
+        with:
+          type: buildx
+          repo: ${{ inputs.environment || 'exdtemplate' }}-${{ github.event.repository.name }}
+          push: true
+
+  deploy:
+    needs: image
+    uses: playlab-education/duplocloud-infrastructure/.github/workflows/app-module.yml@labschools-domain
+    secrets: inherit
+    with:
+      labapp: true # terraform/ uses components/labapp; also sets its state key
+      cmd: ${{ inputs.cmd || 'apply' }}
+      environment: ${{ inputs.environment || 'exdtemplate' }}
+      tag: ${{ needs.image.outputs.tag }}
+
+  # No curl check here: Bot Control (the WAF) blocks scripted requests. The
+  # deploy's last step prints the app's URL; open it in a browser.

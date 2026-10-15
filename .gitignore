@@ -6,3 +6,7 @@
 /.react-router/
 /build/
 .terraform/
+
+# Local embedded database
+/.data/
+.env.local

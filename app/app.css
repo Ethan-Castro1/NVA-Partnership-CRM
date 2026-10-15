@@ -1,15 +1,192 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * New Village Academy, from the NVA Brand Kit (rev. 1/5/26), laid out in a
+ * quiet editorial style: a warm eggshell page, taupe panels, hairline stone
+ * rules, black ink and pill buttons. Gold is the one brand spark; the four
+ * secondary brand colours mark the four ways people contribute.
+ *
+ * Contrast (WCAG) on canvas #fdfcfc / taupe #f5f3f1:
+ *   ink 21 / 19, graphite 10.0 / 9.3, smoke 5.6 / 5.2 (body text OK),
+ *   ash 2.6 (decorative only: never text people must read),
+ *   gold 1.9 (fills and dots only; black on gold is 11.0),
+ *   gold-ink 5.6, rust-ink 5.4, blue-ink 6.0, purple-ink 6.2, sage-ink 5.5
+ *   (the -ink shades are for text and icons in each colour).
+ */
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif,
-    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-sans: "Arimo", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Montserrat", "Arimo", ui-sans-serif, system-ui, sans-serif;
+  --font-accent: "Kaushan Script", "Brush Script MT", cursive;
+
+  /* Surfaces, lightest to deepest. */
+  --color-canvas: #fdfcfc;
+  --color-taupe: #f5f3f1;
+  --color-cream: #f8f4ea; /* sidebar and dashboard wash, warmed toward gold */
+  --color-stone: #ebe8e4;
+
+  /* Ink, strongest to quietest. */
+  --color-ink: #000000;
+  --color-graphite: #44403b;
+  --color-smoke: #6b655d;
+  --color-ash: #a59f97;
+
+  /* NVA brand. */
+  --color-gold: #faad00;
+  --color-gold-soft: #fff3d1;
+  --color-gold-ink: #8a5d00;
+  --color-rust: #cf6608;
+  --color-rust-soft: #fbe9db;
+  --color-rust-ink: #a84f05;
+  --color-blue: #277f93;
+  --color-blue-soft: #def0f3;
+  --color-blue-ink: #1f6a7b;
+  --color-purple: #7e6f8f;
+  --color-purple-soft: #ece8f1;
+  --color-purple-ink: #685a79;
+  --color-sage: #9cb47d;
+  --color-sage-soft: #ebf1e3;
+  --color-sage-ink: #55703a;
+
+  --radius-card: 20px;
+  --radius-panel: 24px;
+
+  --shadow-whisper: rgba(0, 0, 0, 0.4) 0px 0px 1px 0px, rgba(0, 0, 0, 0.04) 0px 1px 1px 0px,
+    rgba(0, 0, 0, 0.04) 0px 2px 4px 0px;
+  --shadow-hairline: rgb(235, 232, 228) 0px 0px 0px 1px inset;
 }
 
-html,
-body {
-  @apply bg-white dark:bg-gray-950;
+/* shadcn/ui variables, pointed at the NVA tokens above. */
+:root {
+  --radius: 0.75rem;
+  --background: #fdfcfc;
+  --foreground: #000000;
+  --card: #fdfcfc;
+  --card-foreground: #000000;
+  --popover: #fdfcfc;
+  --popover-foreground: #000000;
+  --primary: #000000;
+  --primary-foreground: #ffffff;
+  --secondary: #f5f3f1;
+  --secondary-foreground: #000000;
+  --muted: #f5f3f1;
+  --muted-foreground: #6b655d;
+  --accent: #fff3d1;
+  --accent-foreground: #000000;
+  --destructive: #b42318;
+  --border: #ebe8e4;
+  --input: #e2ded8;
+  --ring: #faad00;
+  --chart-1: #faad00;
+  --chart-2: #cf6608;
+  --chart-3: #277f93;
+  --chart-4: #7e6f8f;
+  --chart-5: #9cb47d;
+  --sidebar: #f8f4ea;
+  --sidebar-foreground: #000000;
+  --sidebar-primary: #000000;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #fff3d1;
+  --sidebar-accent-foreground: #000000;
+  --sidebar-border: #ebe8e4;
+  --sidebar-ring: #faad00;
+}
 
-  @media (prefers-color-scheme: dark) {
-    color-scheme: dark;
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
   }
+  html {
+    color-scheme: light;
+  }
+  body {
+    @apply bg-canvas text-ink font-sans antialiased;
+    letter-spacing: 0.01em;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-display;
+    letter-spacing: -0.02em;
+  }
+}
+
+/* Display type: Montserrat light, tight, as in the editorial reference. */
+@utility text-display {
+  font-family: var(--font-display);
+  font-weight: 300;
+  font-size: clamp(2.25rem, 4vw, 3rem);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+}
+@utility text-heading {
+  font-family: var(--font-display);
+  font-weight: 300;
+  font-size: clamp(1.75rem, 3vw, 2.25rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+/* Section headings: Arimo bold, per the brand kit. */
+@utility text-section {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 1.125rem;
+  line-height: 1.4;
+  letter-spacing: 0;
+}
+/* Small caps label above a heading. */
+@utility text-eyebrow {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+/* Brand accent script (Kaushan), usually all caps. */
+@utility text-script {
+  font-family: var(--font-accent);
+  font-weight: 400;
+  letter-spacing: 0.02em;
 }

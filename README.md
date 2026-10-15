@@ -54,11 +54,11 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 Easel hosts lab school apps on Playlab's AWS infrastructure through DuploCloud.
 Each school gets its own tenants, and the infra side lives in
 [duplocloud-infrastructure](https://github.com/playlab-education/duplocloud-infrastructure)
-(`modules/exttenant`, `components/labapp`). This repo already has what an app needs
+(`modules/exttenant`, `components/extapp`). This repo already has what an app needs
 to deploy there:
 
 - `Dockerfile`: the production image
-- `terraform/main.tf`: one `labapp` block; the tenant, nodes, image repo, URL and
+- `terraform/main.tf`: one `extapp` block; the tenant, nodes, image repo, URL and
   cert all come from the app's entry in `config/exttenant/schools.tfvars`
 - `.github/workflows/deploy.yml`: builds and deploys the app, then prints its URL
 - `.github/workflows/plan.yml`: comments the Terraform plan on PRs that change `terraform/`
@@ -67,7 +67,7 @@ This repo is the `home` app of the `template` school:
 
 | Environment | Tenant | Deploys | URL |
 |---|---|---|---|
-| dev | `exdtemplate` | every push to `main` | `https://template-home.dev.labschools.app` |
+| dev | `exdtemplate` | every push to `main` | `https://template-home.dev.labschools.ai` |
 | prod | `exttemplate` | by hand only (Actions → Deploy → Run workflow), from `main` | not yet: prod has no domain |
 
 ### Setup
@@ -98,6 +98,11 @@ These aren't automated, so someone does them by hand for each new repo:
   shared only with selected repositories, so a GitHub org admin adds this repo
   to it: org **Settings → Secrets and variables → Actions → `DUPLO_TOKEN` →
   Repository access**. Without it, the build fails to log in to Duplo.
+- **Give the `playlab-education` GitHub App access to the repo**, before the
+  Ext Tenant apply: org **Settings → GitHub Apps → playlab-education →
+  Configure → Repository access**. Terraform uses it to create the repo's
+  GitHub environments; without it the apply fails with a 404 on
+  `.../environments/<tenant>`.
 - **Check the repo can read the `DUPLO_HOST` variable** (same page, under
   **Variables**), if it's also limited to selected repositories.
 - **Run the first prod deploy by hand** once dev works: Actions → Deploy → Run
@@ -110,8 +115,9 @@ These aren't automated, so someone does them by hand for each new repo:
 - **Pick its school** by replacing `exdtemplate` / `exttemplate` in both
   workflows with `exd<school>` / `ext<school>`, and register the app under that
   school (step 1 above).
-- **The server must listen on `PORT`** (3000) and answer `/` with a 200, which
-  is the health check. `npm run start` already does both.
+- **The server must listen on `PORT`** (3000) and answer `/healthcheck` with a
+  200, which is the health check (`app/routes/healthcheck.ts`). `npm run start`
+  already does both.
 
 ## Working with AI Assistants
 

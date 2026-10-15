@@ -2,7 +2,7 @@
 #   dev  (exdtemplate): every push to main.
 #   prod (exttemplate): only when run by hand (Actions → Deploy → Run workflow),
 #                     and only from main.
-# The tenants (GitHub environments) and ECR repos (<tenant>-<repo>) come from
+# The tenants (GitHub environments) and ECR repo (named after this repo) come from
 # duplocloud-infrastructure modules/exttenant.
 name: Deploy
 on:
@@ -60,7 +60,7 @@ jobs:
         uses: duplocloud/actions/build-image@main
         with:
           type: buildx
-          repo: ${{ inputs.environment || 'exdtemplate' }}-${{ github.event.repository.name }}
+          repo: ${{ github.event.repository.name }} # one ECR repo for dev and prod
           push: true
 
   deploy:
@@ -68,7 +68,7 @@ jobs:
     uses: playlab-education/duplocloud-infrastructure/.github/workflows/app-module.yml@labschools-domain
     secrets: inherit
     with:
-      labapp: true # terraform/ uses components/labapp; also sets its state key
+      extapp: true # terraform/ uses components/extapp; also sets its state key
       cmd: ${{ inputs.cmd || 'apply' }}
       environment: ${{ inputs.environment || 'exdtemplate' }}
       tag: ${{ needs.image.outputs.tag }}

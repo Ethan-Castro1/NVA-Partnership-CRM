@@ -22,7 +22,7 @@ jobs:
     uses: playlab-education/duplocloud-infrastructure/.github/workflows/app-module.yml@labschools-domain
     secrets: inherit
     with:
-      labapp: true # terraform/ uses components/labapp; also sets its state key
+      extapp: true # terraform/ uses components/extapp; also sets its state key
       cmd: plan
       environment: ${{ inputs.environment || 'exdtemplate' }}
       tag: main

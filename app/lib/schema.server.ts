@@ -172,4 +172,35 @@ ALTER TABLE people ADD COLUMN IF NOT EXISTS funding_focus TEXT;
 -- Organization kinds are checked in the app (ORGANIZATION_KINDS), so new
 -- kinds such as 'foundation' need no migration.
 ALTER TABLE organizations DROP CONSTRAINT IF EXISTS organizations_kind_check;
+
+-- Saved "Ask the village" conversations, one row per chat, private to the
+-- staff member who had it. messages holds AI SDK UIMessages as JSON.
+CREATE TABLE IF NOT EXISTS assistant_chats (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  messages JSONB NOT NULL DEFAULT '[]',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS assistant_chats_user_idx ON assistant_chats (user_id, updated_at DESC);
+
+-- Personal keys for the MCP connector (/mcp/<key>). id is the SHA-256 of
+-- the key, like sessions, so the database never holds a usable key.
+CREATE TABLE IF NOT EXISTS mcp_keys (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  label TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_used_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS mcp_keys_user_idx ON mcp_keys (user_id);
+
+-- CAP details from the CAP Selection Guide: teacher, blocks (A meets Monday
+-- and Friday, B and C Tuesday and Thursday), labels such as 'misa' or
+-- 'bilingual' (CAP_LABELS), and how students might make an impact.
+ALTER TABLE caps ADD COLUMN IF NOT EXISTS teacher TEXT;
+ALTER TABLE caps ADD COLUMN IF NOT EXISTS blocks TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE caps ADD COLUMN IF NOT EXISTS labels TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE caps ADD COLUMN IF NOT EXISTS impact TEXT;
 `;

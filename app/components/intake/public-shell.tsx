@@ -29,7 +29,7 @@ export function PublicTopBar({ className, showStaffLink = true }: { className?: 
   return (
     <header className={cn("mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-4 md:px-8", className)}>
       <Link
-        to="/"
+        to="/home"
         aria-label={t("public.homeLink")}
         className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
       >
@@ -37,6 +37,9 @@ export function PublicTopBar({ className, showStaffLink = true }: { className?: 
         <VillageMark className="size-9 sm:hidden" />
       </Link>
       <div className="flex items-center gap-2">
+        <Button asChild variant="ghost" className="hidden sm:inline-flex">
+          <Link to="/home">{t("public.home")}</Link>
+        </Button>
         <LanguageToggle />
         {showStaffLink &&
           (root?.user ? (

@@ -108,6 +108,18 @@ assistant, find second-degree connections, and manage CAPs.
   Gold `#faad00` is the one spark (never as text colour; use `text-gold-ink`); the four
   ways to help are rust, blue, purple and sage dots (`CONTRIBUTION_COLOR`).
 
+- **Public pages:** `/` redirects to the sign-up form (`/join`); `/home` is a short welcome. The public
+  form offers practical skills, school volunteer, after-school and other; staff add CAP partners,
+  internship hosts and funders at `/app/people/new`.
+- **CAPs:** this semester's CAPs (from the CAP Selection Guide) live in `app/lib/cap-catalog.ts` and are
+  seeded by `app/lib/cap-catalog.server.ts`. A CAP key doubles as a person's CAP topic tag.
+- **Assistant:** AI SDK `useChat` on the client (`app/components/assistant/*`), streaming route
+  `app/routes/app.assistant.chat.ts`, Claude tool loop in `app/lib/ai/assistant.server.ts`. Chats are saved
+  per staff member (`assistant_chats`). The panel lives in the app layout so it stays open across pages.
+  The "Watch an example" walkthrough is scripted with `@shadcn/helpers/ai-sdk`.
+- **MCP connector:** `/mcp/<key>` (stateless Streamable HTTP, `app/lib/ai/mcp.server.ts`) exposes the same
+  read-only tools to Claude or ChatGPT. Staff make personal keys at `/app/connect`.
+
 ### Local development
 
 ```bash

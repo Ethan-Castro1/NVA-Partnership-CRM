@@ -37,7 +37,7 @@ const contributionTypesSchema = {
   type: "array",
   items: { type: "string", enum: [...CONTRIBUTION_TYPES] },
   description:
-    "Only people who offered one of these: skills_lesson (teach a practical lesson), classroom_volunteer (help in a class), internship (host students at work), cap_partner (partner on a Community Action Project).",
+    "Only people who offered one of these: skills_lesson (practical skills: teach a hands-on lesson), classroom_volunteer (school volunteer), after_school (lead an after-school activity), internship (host students at work), cap_partner (partner on a Community Action Project), funder (grants or donations), other.",
 };
 
 export const TOOLS: Anthropic.Beta.Messages.BetaTool[] = [
@@ -110,7 +110,7 @@ export const TOOLS: Anthropic.Beta.Messages.BetaTool[] = [
   {
     name: "list_caps",
     description:
-      "List Community Action Projects (CAPs) with their topics, needs, status and partner counts. Use mine=true for the signed-in teacher's own CAPs.",
+      "List Community Action Projects (CAPs) with their teacher, blocks (A meets Monday and Friday, B and C Tuesday and Thursday), labels (misa, gov_mcap, bilingual...), challenge, topics, needs, status and partner counts. Use mine=true for the signed-in teacher's own CAPs.",
     strict: true,
     input_schema: {
       type: "object",
@@ -136,7 +136,8 @@ export const WEB_TOOL: Anthropic.Beta.Messages.BetaTool = {
     properties: {
       query: {
         type: "string",
-        description: "What to look for, including the place, e.g. \"marine biologists Annapolis Maryland\" or \"USDA offices Annapolis\".",
+        description:
+          "Start with the entity you want, then the traits that qualify it, then the place, e.g. \"marine biologists who work on oyster restoration in Annapolis, Maryland\", \"foundations that fund youth workforce programs in Anne Arundel County\".",
       },
       kind: {
         type: "string",
@@ -371,7 +372,11 @@ const executors: { [K in ToolName]: Executor<K> } = {
           id: c.id,
           title: c.title,
           url: `/app/caps/${c.id}`,
-          driving_question: clip(c.driving_question, 200),
+          challenge: clip(c.driving_question, 200),
+          teacher: c.teacher,
+          blocks: c.blocks,
+          labels: c.labels,
+          impact: clip(c.impact, 200),
           topics: c.topics,
           needs: clip(c.needs, 240),
           term: c.term,
@@ -390,7 +395,9 @@ const executors: { [K in ToolName]: Executor<K> } = {
     if (!isWebSearchConfigured()) return { content: "Web search is not set up (no EXA_API_KEY).", isError: true, personIds: [] };
     const category = input.kind === "people" ? "people" : input.kind === "organizations" ? "company" : undefined;
     try {
-      const results = await exaSearch({ query: input.query, category, numResults: 8 });
+      // Exa's people index matches best when asked for profiles explicitly.
+      const query = category === "people" && !/profiles?/i.test(input.query) ? `professional profiles of ${input.query}` : input.query;
+      const results = await exaSearch({ query, category, numResults: 8 });
       return {
         content: json({
           note: "Unverified web results, not NVA contacts. Present them separately, with the page address in plain text. To save one, staff can use Search beyond our network on /app/connections.",

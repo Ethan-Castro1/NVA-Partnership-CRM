@@ -7,7 +7,7 @@ import { Form, Link, data, redirect, useActionData, useLoaderData, useNavigation
 import { ArrowLeft, CalendarDays, Loader2, Network, Pencil, Sparkles, Trash2, UserRound } from "lucide-react";
 import { z } from "zod";
 import type { Route } from "./+types/app.caps.$capId";
-import { CapStatusBadge, TopicList, useTopicLabel } from "~/components/caps/cap-bits";
+import { BlockChips, CapLabels, CapStatusBadge, TopicList, useTopicLabel } from "~/components/caps/cap-bits";
 import { CapForm } from "~/components/caps/cap-form";
 import { PartnerRow, SuggestionItem } from "~/components/caps/cap-partners";
 import { EmptyState, PageHeader, Panel, Sheet } from "~/components/nva";
@@ -202,10 +202,25 @@ export default function CapDetail() {
         <div className="grid min-w-0 gap-6">
           <Panel title={t("caps.detail.description")}>
             <dl className="grid gap-5 text-sm">
+              {(cap.blocks.length > 0 || cap.labels.length > 0) && (
+                <div className="grid gap-1.5">
+                  <dt className="text-eyebrow text-smoke">{t("caps.detail.blocks")}</dt>
+                  <dd className="grid gap-2">
+                    <BlockChips blocks={cap.blocks} />
+                    <CapLabels labels={cap.labels} />
+                  </dd>
+                </div>
+              )}
               {cap.description && (
                 <div className="grid gap-1">
                   <dt className="sr-only">{t("caps.detail.description")}</dt>
                   <dd className="leading-relaxed whitespace-pre-line text-graphite">{cap.description}</dd>
+                </div>
+              )}
+              {cap.impact && (
+                <div className="grid gap-1">
+                  <dt className="text-eyebrow text-smoke">{t("caps.detail.impact")}</dt>
+                  <dd className="leading-relaxed whitespace-pre-line text-graphite">{cap.impact}</dd>
                 </div>
               )}
               <div className="grid gap-1">
@@ -218,10 +233,10 @@ export default function CapDetail() {
               </div>
               <div className="grid gap-5 sm:grid-cols-2">
                 <div className="grid gap-1">
-                  <dt className="text-eyebrow text-smoke">{t("caps.detail.owner")}</dt>
+                  <dt className="text-eyebrow text-smoke">{cap.teacher ? t("caps.detail.teacher") : t("caps.detail.owner")}</dt>
                   <dd className="flex items-center gap-1.5 text-graphite">
                     <UserRound className="size-4 text-smoke" aria-hidden="true" />
-                    {cap.owner_name ?? t("caps.card.noOwner")}
+                    {cap.teacher ?? cap.owner_name ?? t("caps.card.noOwner")}
                   </dd>
                 </div>
                 <div className="grid gap-1">

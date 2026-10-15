@@ -2,8 +2,10 @@
  * Fictional demo data. Every person and organization here is made up.
  * Used by `npm run seed` locally and by SEED_DEMO=true on a demo deployment.
  */
+import { CATALOG_META_KEY, addDemoCapPartners, insertCatalogCaps, mapOldTopics, migrateDemoToCatalog } from "./cap-catalog.server";
 import { createUser } from "./auth.server";
 import type { Affiliation, ContributionType, RelationshipKind } from "./constants";
+import { normalizeTags } from "./constants";
 import { newId, query } from "./db.server";
 import type { IntakePayload } from "./intake-types";
 import { addRelationship, createPerson, logEngagement, type PersonInput } from "./people.server";
@@ -170,32 +172,16 @@ export async function seedDemoData(): Promise<boolean> {
   await createUser({ email: "maestra@nva.test", name: "Marisol Maestra", password: PASSWORD, role: "teacher", locale: "es" });
 
   const ids = new Map<string, string>();
-  for (const { key, ...person } of people) ids.set(key, await createPerson(person, adminId));
+  for (const { key, ...person } of people)
+    ids.set(key, await createPerson({ ...person, cap_topics: mapOldTopics(normalizeTags(person.cap_topics)) }, adminId));
   for (const [a, b, kind, note] of links) {
     await addRelationship({ personId: ids.get(a)!, relatedPersonId: ids.get(b)!, kind, note }, adminId);
   }
 
-  // CAPs.
-  const caps = [
-    { title: "Clean Creek, Healthy Bay", q: "How can we make our creek safe for wildlife and people?", topics: ["environment", "the bay"], status: "active",
-      partners: [["sam", "confirmed", "Water testing with students"], ["naomi", "contacted", null]] },
-    { title: "Housing for All Annapolis", q: "What would it take for every family in our city to afford a home?", topics: ["housing", "civic engagement"], status: "planning",
-      partners: [["gloria", "suggested", null]] },
-    { title: "Food Access in Our Neighborhood", q: "Why is it hard to buy fresh food near school, and what can we do?", topics: ["food access", "public health"], status: "planning",
-      partners: [] },
-  ] as const;
-  for (const cap of caps) {
-    const capId = newId();
-    await query(
-      "INSERT INTO caps (id, title, driving_question, topics, status, owner_id, term) VALUES ($1,$2,$3,$4,$5,$6,$7)",
-      [capId, cap.title, cap.q, cap.topics, cap.status, teacherId, "Spring 2027"],
-    );
-    for (const [key, status, note] of cap.partners) {
-      await query("INSERT INTO cap_partners (cap_id, person_id, status, note, added_by) VALUES ($1,$2,$3,$4,$5)", [
-        capId, ids.get(key)!, status, note, teacherId,
-      ]);
-    }
-  }
+  // CAPs: this semester's real CAPs from the CAP Selection Guide, with a few demo partners.
+  const capIds = await insertCatalogCaps(adminId);
+  await addDemoCapPartners(capIds, teacherId);
+  await query("INSERT INTO app_meta (key) VALUES ($1) ON CONFLICT (key) DO NOTHING", [CATALOG_META_KEY]);
 
   // Engagement history.
   await logEngagement({ personId: ids.get("lucia")!, kind: "lesson", happenedOn: "2026-09-18", notes: "Taught hemming and basic machine sewing to 12 students." }, teacherId);
@@ -223,7 +209,7 @@ export async function seedDemoData(): Promise<boolean> {
     const personId = await createPerson(
       {
         full_name: payload.full_name, email: payload.email, preferred_language: payload.preferred_language,
-        organization_name: payload.organization, title: payload.title, skills: payload.skills, cap_topics: payload.cap_topics,
+        organization_name: payload.organization, title: payload.title, skills: payload.skills, cap_topics: mapOldTopics(payload.cap_topics),
         contribution_types: payload.contribution_types, affiliations: payload.affiliations, availability: payload.availability,
         bio: payload.bio, status: "new", source: "intake",
       },
@@ -237,7 +223,7 @@ export async function seedDemoData(): Promise<boolean> {
     ]);
   }
 
-  console.log(`[nva] Seeded ${people.length + signups.length} fictional people, ${links.length} connections and ${caps.length} CAPs.`);
+  console.log(`[nva] Seeded ${people.length + signups.length} fictional people, ${links.length} connections and ${capIds.size} CAPs.`);
   return true;
 }
 
@@ -249,6 +235,8 @@ export async function seedDemoFromEnv(): Promise<void> {
   if (process.env.SEED_DEMO !== "true") return;
   const claimed = await query("INSERT INTO app_meta (key) VALUES ('demo_seed') ON CONFLICT (key) DO NOTHING RETURNING key");
   if (claimed.length) await seedDemoData();
+  // Databases seeded before the CAP catalog existed get the real CAPs once.
+  await migrateDemoToCatalog();
 }
 
 export const DEMO_PASSWORD = PASSWORD;

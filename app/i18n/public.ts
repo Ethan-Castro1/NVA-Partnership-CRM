@@ -7,6 +7,8 @@ export default defineMessages(
     description:
       "Join the New Village Academy village: teach a skills lesson, volunteer in a class, host an internship or partner on a Community Action Project.",
     homeLink: "New Village Academy home",
+    home: "Home",
+    homeBody: "Neighbors, businesses and organizations share what they know, and our students learn from the whole city. Pick a way to help and tell us about yourself.",
     goToDashboard: "Go to dashboard",
 
     heroTitle: "Join the village that teaches our students.",
@@ -44,6 +46,8 @@ export default defineMessages(
     description:
       "Únete a la aldea de New Village Academy: enseña una lección de habilidades, sé voluntario en una clase, ofrece una pasantía o colabora en un Proyecto de Acción Comunitaria.",
     homeLink: "Inicio de New Village Academy",
+    home: "Inicio",
+    homeBody: "Vecinos, empresas y organizaciones comparten lo que saben, y nuestros estudiantes aprenden de toda la ciudad. Elige cómo ayudar y cuéntanos sobre ti.",
     goToDashboard: "Ir al panel",
 
     heroTitle: "Únete a la aldea que enseña a nuestros estudiantes.",

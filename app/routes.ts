@@ -2,7 +2,9 @@ import { type RouteConfig, index, layout, prefix, route } from "@react-router/de
 
 export default [
   // Public: anyone can see these.
-  index("routes/home.tsx"),
+  index("routes/index.ts"),
+  route("home", "routes/home.tsx"),
+  route("mcp/:key", "routes/mcp.$key.ts"),
   route("join", "routes/join.tsx"),
   route("join/thanks", "routes/join.thanks.tsx"),
   route("login", "routes/login.tsx"),
@@ -14,6 +16,11 @@ export default [
   route("app", "routes/app.tsx", [
     index("routes/app._index.tsx"),
     route("ask", "routes/app.ask.tsx"),
+    ...prefix("assistant", [
+      route("chat", "routes/app.assistant.chat.ts"),
+      route("chats", "routes/app.assistant.chats.ts"),
+      route("chats/:chatId", "routes/app.assistant.chats.$chatId.ts"),
+    ]),
     ...prefix("people", [
       index("routes/app.people._index.tsx"),
       route("new", "routes/app.people.new.tsx"),
@@ -27,6 +34,7 @@ export default [
       route(":capId", "routes/app.caps.$capId.tsx"),
     ]),
     route("account", "routes/app.account.tsx"),
+    route("connect", "routes/app.connect.tsx"),
 
     // Admin only (each loader/action calls requireAdmin).
     ...prefix("admin", [

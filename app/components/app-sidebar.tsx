@@ -6,8 +6,10 @@ import {
   FolderKanban,
   LayoutDashboard,
   Network,
+  Plug,
   Sparkles,
   UserCog,
+  UserPlus,
   Users,
 } from "lucide-react";
 import { NavMain, type NavItem } from "~/components/nav-main";
@@ -39,9 +41,11 @@ export function AppSidebar({
     { title: t("common.nav.people"), url: "/app/people", icon: <Users /> },
     { title: t("common.nav.connections"), url: "/app/connections", icon: <Network /> },
     { title: t("common.nav.caps"), url: "/app/caps", icon: <FolderKanban /> },
+    { title: t("account.connect.title"), url: "/app/connect", icon: <Plug /> },
   ];
   const manage: NavItem[] = [
     { title: t("common.nav.adminOverview"), url: "/app/admin", icon: <Building2 />, end: true },
+    { title: t("people.new.title"), url: "/app/people/new", icon: <UserPlus /> },
     { title: t("common.nav.intake"), url: "/app/admin/intake", icon: <ClipboardList />, badge: newSignups || undefined },
     { title: t("common.nav.users"), url: "/app/admin/users", icon: <UserCog /> },
   ];

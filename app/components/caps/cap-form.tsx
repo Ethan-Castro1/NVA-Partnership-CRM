@@ -11,6 +11,7 @@ import { Input } from "~/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Textarea } from "~/components/ui/textarea";
 import { useT } from "~/i18n";
+import { BLOCK_DAYS, CAP_BLOCKS, CAP_LABELS, type CapBlock, type CapLabel } from "~/lib/cap-catalog";
 import { CAP_STATUSES, SUGGESTED_CAP_TOPICS, type CapStatus } from "~/lib/constants";
 import type { CapFormErrorKey, CapFormField } from "~/lib/caps.server";
 import { useTopicLabel } from "./cap-bits";
@@ -23,9 +24,15 @@ export type CapFormDefaults = {
   needs?: string | null;
   term?: string | null;
   status?: CapStatus;
+  teacher?: string | null;
+  blocks?: CapBlock[];
+  labels?: CapLabel[];
+  impact?: string | null;
 };
 
 const SUGGESTED = new Set<string>(SUGGESTED_CAP_TOPICS);
+const pill =
+  "group inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-stone bg-canvas px-3 py-1.5 text-sm text-graphite transition-colors select-none hover:border-gold has-checked:border-gold has-checked:bg-gold-soft has-checked:text-ink has-focus-visible:ring-3 has-focus-visible:ring-ring/50";
 
 export function CapForm({
   defaults = {},
@@ -142,6 +149,52 @@ export function CapForm({
           className="bg-canvas"
         />
       </Field>
+
+      <Field label={t("caps.form.impact")} htmlFor="cap-impact" optional error={err("impact")}>
+        <Textarea
+          id="cap-impact"
+          name="impact"
+          maxLength={1000}
+          rows={2}
+          defaultValue={defaults.impact ?? ""}
+          placeholder={t("caps.form.impactPlaceholder")}
+          aria-invalid={!!errors?.impact || undefined}
+          className="bg-canvas"
+        />
+      </Field>
+
+      <Field label={t("caps.form.teacher")} htmlFor="cap-teacher" optional error={err("teacher")}>
+        <Input id="cap-teacher" name="teacher" maxLength={120} defaultValue={defaults.teacher ?? ""} aria-invalid={!!errors?.teacher || undefined} />
+      </Field>
+
+      <fieldset className="grid gap-2">
+        <legend className="mb-1 text-sm font-medium text-graphite">{t("caps.form.blocks")}</legend>
+        <p className="-mt-0.5 text-xs text-smoke">{t("caps.form.blocksHint")}</p>
+        <div className="flex flex-wrap gap-2">
+          {CAP_BLOCKS.map((block) => (
+            <label key={block} className={pill}>
+              <input type="checkbox" name="blocks" value={block} defaultChecked={defaults.blocks?.includes(block)} className="peer sr-only" />
+              <Check className="hidden size-3.5 peer-checked:block" aria-hidden="true" />
+              {t("caps.block.name", { block })} · {t(`caps.days.${BLOCK_DAYS[block]}`)}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      <fieldset className="grid gap-2">
+        <legend className="mb-1 text-sm font-medium text-graphite">
+          {t("caps.form.labels")} <span className="font-normal text-smoke">({t("common.state.optional")})</span>
+        </legend>
+        <div className="flex flex-wrap gap-2">
+          {CAP_LABELS.map((label) => (
+            <label key={label} className={pill}>
+              <input type="checkbox" name="labels" value={label} defaultChecked={defaults.labels?.includes(label)} className="peer sr-only" />
+              <Check className="hidden size-3.5 peer-checked:block" aria-hidden="true" />
+              {t(`caps.label.${label}`)}
+            </label>
+          ))}
+        </div>
+      </fieldset>
 
       <div className="grid gap-6 sm:grid-cols-2">
         <Field label={t("caps.form.term")} htmlFor="cap-term" optional error={err("term")}>

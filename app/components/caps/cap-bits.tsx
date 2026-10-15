@@ -4,6 +4,7 @@ import { CalendarDays, UserRound, Users } from "lucide-react";
 import { Sheet, TagList } from "~/components/nva";
 import { useT } from "~/i18n";
 import type { CapStatus } from "~/lib/constants";
+import { BLOCK_DAYS, catalogCap, capTopicShort, type CapBlock, type CapLabel } from "~/lib/cap-catalog";
 import type { CapSummary } from "~/lib/caps.server";
 import { cn } from "~/lib/utils";
 
@@ -22,15 +23,52 @@ export function CapStatusBadge({ status, className }: { status: CapStatus; class
   );
 }
 
-/** Topics are stored as English keys; suggested ones have translated labels, typed ones show as typed. */
+/** Topics are stored as keys: this semester's CAPs show by their short title, older ones translated, typed ones as typed. */
 export function useTopicLabel(): (topic: string) => string {
   const { tx } = useT();
-  return (topic) => tx(`caps.topic.${topic}`, topic);
+  return (topic) => (catalogCap(topic) ? capTopicShort(topic) : tx(`caps.topic.${topic}`, topic));
 }
 
 export function TopicList({ topics, className }: { topics: string[]; className?: string }) {
   const label = useTopicLabel();
   return <TagList tags={topics.map(label)} className={className} />;
+}
+
+/** "Block A · Mon and Fri" chips. */
+export function BlockChips({ blocks, className }: { blocks: CapBlock[]; className?: string }) {
+  const { t } = useT();
+  if (!blocks.length) return null;
+  return (
+    <ul className={cn("flex flex-wrap gap-1.5", className)}>
+      {blocks.map((block) => (
+        <li key={block} className="inline-flex h-6 items-center gap-1 rounded-full bg-blue-soft px-2.5 text-xs text-blue-ink">
+          <span className="font-semibold">{t("caps.block.name", { block })}</span>
+          <span aria-hidden="true">·</span>
+          {t(`caps.days.${BLOCK_DAYS[block]}`)}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export function CapLabels({ labels, className }: { labels: CapLabel[]; className?: string }) {
+  const { t } = useT();
+  if (!labels.length) return null;
+  return (
+    <ul className={cn("flex flex-wrap gap-1.5", className)}>
+      {labels.map((label) => (
+        <li
+          key={label}
+          className={cn(
+            "inline-flex h-6 items-center rounded-full px-2.5 text-xs font-medium",
+            label === "bilingual" ? "bg-rust-soft text-rust-ink" : "bg-sage-soft text-sage-ink",
+          )}
+        >
+          {t(`caps.label.${label}`)}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 export function CapCard({ cap }: { cap: CapSummary }) {
@@ -57,7 +95,10 @@ export function CapCard({ cap }: { cap: CapSummary }) {
           {cap.driving_question ?? t("caps.card.noQuestion")}
         </p>
       </div>
-      <TopicList topics={cap.topics} />
+      <div className="grid gap-2">
+        <BlockChips blocks={cap.blocks} />
+        <CapLabels labels={cap.labels} />
+      </div>
       <div className="mt-auto grid gap-2 border-t border-stone pt-3 text-xs text-smoke">
         <div className="flex items-center gap-2">
           <Users className="size-3.5 shrink-0" aria-hidden="true" />
@@ -68,7 +109,7 @@ export function CapCard({ cap }: { cap: CapSummary }) {
         </div>
         <div className="flex items-center gap-2">
           <UserRound className="size-3.5 shrink-0" aria-hidden="true" />
-          <span>{cap.owner_name ? t("caps.card.owner", { name: cap.owner_name }) : t("caps.card.noOwner")}</span>
+          <span>{cap.teacher || (cap.owner_name ? t("caps.card.owner", { name: cap.owner_name }) : t("caps.card.noOwner"))}</span>
         </div>
       </div>
     </Sheet>

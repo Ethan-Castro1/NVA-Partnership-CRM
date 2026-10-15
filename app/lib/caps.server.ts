@@ -1,5 +1,6 @@
 /** Community Action Projects and the partners attached to them. */
 import { z } from "zod";
+import { CAP_BLOCKS, CAP_LABELS, type CapBlock, type CapLabel } from "./cap-catalog";
 import { CAP_PARTNER_STATUSES, CAP_STATUSES, normalizeTags, type CapPartnerStatus, type CapStatus } from "./constants";
 import { newId, query, queryOne } from "./db.server";
 import { findConnectorsForNeed, type IntroPath, type MiniPerson, type SearchHit } from "./people.server";
@@ -13,6 +14,10 @@ export type CapSummary = {
   needs: string | null;
   term: string | null;
   status: CapStatus;
+  teacher: string | null;
+  blocks: CapBlock[];
+  labels: CapLabel[];
+  impact: string | null;
   owner_id: string | null;
   owner_name: string | null;
   partner_count: number;
@@ -30,6 +35,7 @@ export type CapPartnerView = {
 
 const CAP_COLUMNS = `
   c.id, c.title, c.driving_question, c.description, c.topics, c.needs, c.term, c.status, c.owner_id,
+  c.teacher, c.blocks, c.labels, c.impact,
   u.name AS owner_name, c.updated_at,
   (SELECT count(*)::int FROM cap_partners cp WHERE cp.cap_id = c.id AND cp.status <> 'declined') AS partner_count,
   (SELECT count(*)::int FROM cap_partners cp WHERE cp.cap_id = c.id AND cp.status = 'confirmed') AS confirmed_count`;
@@ -65,6 +71,10 @@ export type CapInput = {
   needs?: string | null;
   term?: string | null;
   status?: CapStatus;
+  teacher?: string | null;
+  blocks?: CapBlock[];
+  labels?: CapLabel[];
+  impact?: string | null;
 };
 
 const blank = (v: string | null | undefined) => (v && v.trim() ? v.trim() : null);
@@ -72,8 +82,9 @@ const blank = (v: string | null | undefined) => (v && v.trim() ? v.trim() : null
 export async function createCap(input: CapInput, ownerId: string): Promise<string> {
   const id = newId();
   await query(
-    `INSERT INTO caps (id, title, driving_question, description, topics, needs, term, status, owner_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    `INSERT INTO caps (id, title, driving_question, description, topics, needs, term, status, owner_id,
+                       teacher, blocks, labels, impact)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
     [
       id,
       input.title.trim(),
@@ -84,6 +95,10 @@ export async function createCap(input: CapInput, ownerId: string): Promise<strin
       blank(input.term),
       input.status ?? "planning",
       ownerId,
+      blank(input.teacher),
+      input.blocks ?? [],
+      input.labels ?? [],
+      blank(input.impact),
     ],
   );
   return id;
@@ -92,7 +107,7 @@ export async function createCap(input: CapInput, ownerId: string): Promise<strin
 export async function updateCap(id: string, input: CapInput): Promise<void> {
   await query(
     `UPDATE caps SET title = $2, driving_question = $3, description = $4, topics = $5, needs = $6, term = $7,
-                     status = $8, updated_at = now()
+                     status = $8, teacher = $9, blocks = $10, labels = $11, impact = $12, updated_at = now()
       WHERE id = $1`,
     [
       id,
@@ -103,6 +118,10 @@ export async function updateCap(id: string, input: CapInput): Promise<void> {
       blank(input.needs),
       blank(input.term),
       input.status ?? "planning",
+      blank(input.teacher),
+      input.blocks ?? [],
+      input.labels ?? [],
+      blank(input.impact),
     ],
   );
 }
@@ -225,7 +244,7 @@ export async function getCapSuggestions(
 
 export const MAX_CAP_TOPICS = 12;
 
-export type CapFormField = "title" | "driving_question" | "description" | "topics" | "needs" | "term";
+export type CapFormField = "title" | "driving_question" | "description" | "topics" | "needs" | "term" | "teacher" | "impact";
 export type CapFormErrorKey = "caps.form.error.titleRequired" | "caps.form.error.tooLong" | "caps.form.error.tooManyTopics";
 
 const optionalText = (max: number) =>
@@ -241,6 +260,8 @@ const capFormSchema = z.object({
   description: optionalText(4000),
   needs: optionalText(1000),
   term: optionalText(60),
+  teacher: optionalText(120),
+  impact: optionalText(1000),
   topics: z.array(z.string()).max(MAX_CAP_TOPICS, "caps.form.error.tooManyTopics"),
   // Unknown values fall back to 'planning' rather than failing the whole form.
   status: z.enum(CAP_STATUSES).catch("planning"),
@@ -267,10 +288,15 @@ export function parseCapForm(
     description: str("description"),
     needs: str("needs"),
     term: str("term"),
+    teacher: str("teacher"),
+    impact: str("impact"),
     topics,
     status: str("status"),
   });
-  if (parsed.success) return { ok: true, value: parsed.data };
+  const pick = <T extends string>(name: string, vocab: readonly T[]) =>
+    vocab.filter((v) => form.getAll(name).includes(v));
+  if (parsed.success)
+    return { ok: true, value: { ...parsed.data, blocks: pick("blocks", CAP_BLOCKS), labels: pick("labels", CAP_LABELS) } };
   const errors: Partial<Record<CapFormField, CapFormErrorKey>> = {};
   for (const issue of parsed.error.issues) {
     const field = issue.path[0] as CapFormField;

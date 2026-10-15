@@ -211,12 +211,16 @@ const PLACE = "Annapolis, Anne Arundel County, Maryland";
  * (the "who does our board member's world reach?" search).
  */
 export function buildLeadQueries(need: string, viaOrganization: string | null): { query: string; category: ExaCategory }[] {
+  // Exa works best with the entity first, then the traits that qualify it, then the source type.
   const queries: { query: string; category: ExaCategory }[] = [
-    { query: `${need} in ${PLACE}`, category: "people" },
-    { query: `Organizations in ${PLACE} that could help with: ${need}`, category: "company" },
+    { query: `professional profiles of people in ${PLACE} with experience in ${need}`, category: "people" },
+    { query: `organizations and businesses in ${PLACE} that work on ${need}`, category: "company" },
   ];
+  if (/\b(fund|funding|funders?|grants?|donors?|donations?|sponsors?)\b/i.test(need)) {
+    queries.push({ query: `foundations and funders that give grants in ${PLACE} for ${need}`, category: "company" });
+  }
   if (viaOrganization) {
-    queries.push({ query: `People at ${viaOrganization} in ${PLACE} working on ${need}`, category: "people" });
+    queries.push({ query: `professional profiles of people who work at ${viaOrganization} near Annapolis on ${need}`, category: "people" });
   }
   return queries;
 }

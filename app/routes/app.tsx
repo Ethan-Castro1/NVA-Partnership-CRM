@@ -3,12 +3,15 @@ import { Form, Outlet, data, useLoaderData, useLocation } from "react-router";
 import { Search } from "lucide-react";
 import type { Route } from "./+types/app";
 import { AppSidebar } from "~/components/app-sidebar";
+import { AssistantPanel, AssistantToggle, PANEL_WIDTH_CLASS, usePanelVisible } from "~/components/assistant/assistant-panel";
+import { AssistantProvider } from "~/components/assistant/assistant-provider";
 import { LanguageToggle } from "~/components/nva";
 import { Separator } from "~/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "~/components/ui/sidebar";
 import { useT } from "~/i18n";
 import { requireUser } from "~/lib/auth.server";
 import { queryOne } from "~/lib/db.server";
+import { cn } from "~/lib/utils";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
@@ -21,8 +24,17 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export default function AppLayout() {
+  return (
+    <AssistantProvider>
+      <AppShell />
+    </AssistantProvider>
+  );
+}
+
+function AppShell() {
   const { user, newSignups, sidebarOpen } = useLoaderData<typeof loader>();
   const { t } = useT();
+  const panelVisible = usePanelVisible();
   const location = useLocation();
   const q = location.pathname === "/app/people" ? new URLSearchParams(location.search).get("q") ?? "" : "";
 
@@ -35,7 +47,7 @@ export default function AppLayout() {
         {t("common.skipToContent")}
       </a>
       <AppSidebar user={user} newSignups={newSignups} />
-      <SidebarInset className="bg-canvas">
+      <SidebarInset className={cn("bg-canvas transition-[padding]", panelVisible && PANEL_WIDTH_CLASS)}>
         <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-3 border-b border-stone bg-canvas/90 px-4 backdrop-blur transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-14 md:px-6">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="h-5" />
@@ -55,6 +67,7 @@ export default function AppLayout() {
           </Form>
           <div className="ml-auto flex items-center gap-2">
             <LanguageToggle />
+            <AssistantToggle />
           </div>
         </header>
         <main id="main" className="mx-auto w-full max-w-[1280px] flex-1 px-4 py-6 md:px-8 md:py-8">
@@ -62,6 +75,7 @@ export default function AppLayout() {
         </main>
         <footer className="mx-auto w-full max-w-[1280px] px-4 pb-6 text-xs text-smoke md:px-8">{t("common.footer.privacy")}</footer>
       </SidebarInset>
+      <AssistantPanel />
     </SidebarProvider>
   );
 }

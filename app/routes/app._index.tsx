@@ -1,5 +1,6 @@
 /** The staff home: a greeting, the "Ask the village" box, village numbers, my CAPs and what's new. */
-import { useLoaderData } from "react-router";
+import { Link, useLoaderData } from "react-router";
+import { UserPlus } from "lucide-react";
 import type { Route } from "./+types/app._index";
 import { AskCard } from "~/components/dashboard/ask-card";
 import { longToday } from "~/components/dashboard/format";
@@ -8,6 +9,7 @@ import { PeopleDataTable } from "~/components/dashboard/people-table/data-table"
 import type { DashboardPerson } from "~/components/dashboard/people-table/features";
 import type { DashboardCap, RecentEngagement } from "~/components/dashboard/types";
 import { PageHeader } from "~/components/nva";
+import { Button } from "~/components/ui/button";
 import { makeT, useT } from "~/i18n";
 import { getLocale } from "~/i18n/locale.server";
 import { requireUser } from "~/lib/auth.server";
@@ -78,7 +80,21 @@ export default function Dashboard() {
 
   return (
     <div className="grid gap-6 md:gap-8">
-      <PageHeader eyebrow={today} title={t("dashboard.greeting", { name: firstName })} description={t("dashboard.subtitle")} />
+      <PageHeader
+        eyebrow={today}
+        title={t("dashboard.greeting", { name: firstName })}
+        description={t("dashboard.subtitle")}
+        actions={
+          isAdmin && (
+            <Button asChild variant="brand">
+              <Link to="/app/people/new">
+                <UserPlus aria-hidden="true" />
+                {t("people.new.title")}
+              </Link>
+            </Button>
+          )
+        }
+      />
 
       {isAdmin && counts.newSignups > 0 && <SignupsCallout count={counts.newSignups} />}
 

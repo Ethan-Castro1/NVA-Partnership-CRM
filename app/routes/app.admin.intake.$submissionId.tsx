@@ -1,4 +1,5 @@
 /** One sign-up, shown in full, with the review actions. */
+import { TopicList } from "~/components/caps/cap-bits";
 import { data, Link, useFetcher, useLoaderData } from "react-router";
 import type { ReactNode } from "react";
 import { Archive, ArrowLeft, CheckCircle2, ExternalLink, Pencil, RotateCcw, UserRound } from "lucide-react";
@@ -113,7 +114,7 @@ export default function IntakeDetailPage() {
                   )}
                 </Item>
                 <Item label={t("common.field.skills")}>{p.skills.length ? <TagList tags={p.skills} /> : <NotGiven />}</Item>
-                <Item label={t("common.field.capTopics")}>{p.cap_topics.length ? <TagList tags={p.cap_topics} /> : <NotGiven />}</Item>
+                <Item label={t("common.field.capTopics")}>{p.cap_topics.length ? <TopicList topics={p.cap_topics} /> : <NotGiven />}</Item>
                 <Item label={t("common.field.availability")} wide>
                   {p.availability ? <p className="whitespace-pre-wrap">{p.availability}</p> : <NotGiven />}
                 </Item>

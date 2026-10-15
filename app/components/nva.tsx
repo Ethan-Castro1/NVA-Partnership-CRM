@@ -234,7 +234,10 @@ const STATUS_STYLE: Record<PersonStatus, string> = {
 export function StatusBadge({ status }: { status: PersonStatus }) {
   const { t } = useT();
   return (
-    <span className={cn("inline-flex h-5 items-center rounded-full px-2 text-[0.7rem] font-medium", STATUS_STYLE[status])}>
+    <span
+      title={t(`common.statusHelp.${status}`)}
+      className={cn("inline-flex h-5 cursor-help items-center rounded-full px-2 text-[0.7rem] font-medium", STATUS_STYLE[status])}
+    >
       {t(`common.status.${status}`)}
     </span>
   );

@@ -1,3 +1,5 @@
+import { CAP_TOPIC_KEYS } from "./cap-catalog";
+
 /**
  * Shared vocabularies. Keys are stored in the database; labels live in the
  * i18n dictionaries (app/i18n/common.ts) under `contribution.<key>` etc.
@@ -84,21 +86,8 @@ export type Role = (typeof ROLES)[number];
 export const LANGUAGES = ["en", "es", "both"] as const;
 export type PreferredLanguage = (typeof LANGUAGES)[number];
 
-/** Suggested CAP themes for pickers; people can type their own too. */
-export const SUGGESTED_CAP_TOPICS = [
-  "environment",
-  "housing",
-  "food access",
-  "public health",
-  "transportation",
-  "arts & culture",
-  "local history",
-  "small business",
-  "civic engagement",
-  "immigration",
-  "youth voice",
-  "the bay",
-] as const;
+/** CAP topics for pickers: this semester's CAPs (app/lib/cap-catalog.ts). People can type their own too. */
+export const SUGGESTED_CAP_TOPICS: readonly string[] = CAP_TOPIC_KEYS;
 
 /** Lowercase, trim, dedupe and drop empties: how tags are stored. */
 export function normalizeTags(input: Iterable<string> | string | null | undefined): string[] {

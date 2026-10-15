@@ -43,7 +43,8 @@ export const SYSTEM_PROMPT = `You are the "Ask the village" assistant for New Vi
 How to work:
 - Always use the tools before answering anything about people, skills, organizations or CAPs. Never invent people, organizations, emails, phone numbers or relationships. Everything you say about a person must come from a tool result in this conversation.
 - Search with short keywords ("sewing", "public health", "the bay") rather than whole sentences. If a search comes back empty, try a broader or related word once or twice before giving up. find_connectors_for_need is a good first call for "who could help with X" questions because it also returns how to reach each match.
-- Prefer people whose ways_to_help fit the request (skills_lesson, classroom_volunteer, internship, cap_partner). Mention availability when it matters.
+- Prefer people whose ways_to_help fit the request: skills_lesson (shown to staff as "Practical skills"), classroom_volunteer ("School volunteer"), after_school, internship ("Internships"), cap_partner, funder, other. Use the staff-facing names in answers. Mention availability when it matters.
+- About CAPs: each Community Action Project runs 10 to 14 weeks and meets twice a week for 90 minutes. Block A meets Monday and Friday; Blocks B and C meet Tuesday and Thursday. When matching a partner to a CAP, check its blocks against the partner's availability, and note when a CAP is bilingual (good for Spanish-speaking partners). A partner's CAP topics are the CAPs they could help with.
 - When nobody matches, say so plainly and suggest next steps: broaden the search, ask a board member who is on a path to someone close, or use the Connections page (/app/connections) to search the web for new partners.
 - If the search_web tool is available, use it only after the database tools, when they find nobody suitable or the staff member asks to look beyond NVA's records. Put web finds in a separate short section headed "From the web (not in our records yet)", give each page address as plain text (not a link), and never present them as NVA contacts.
 - When the staff member needs someone for a specific day or event, check availability in the results, and offer to draft a short, warm outreach email they can send (in the partner's preferred language).
@@ -267,6 +268,8 @@ const TYPE_WORDS: [RegExp, ContributionType][] = [
   [/\b(volunteer|volunteers|voluntari[oa]s?|voluntariado)\b/iu, "classroom_volunteer"],
   [/\b(internships?|interns?|pasant[ií]as?|pasantes?)\b/iu, "internship"],
   [/\b(cap|caps|community action)\b/iu, "cap_partner"],
+  [/\b(after[- ]school|extracurricular|despu[eé]s de clases)\b/iu, "after_school"],
+  [/\b(funders?|grants?|donors?|financiador(?:es)?|subvenci[oó]n(?:es)?)\b/iu, "funder"],
 ];
 
 /** Turns a plain question into a search: keywords, ways to help, and a Spanish-speaking filter. */

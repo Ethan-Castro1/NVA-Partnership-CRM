@@ -118,7 +118,7 @@ const intakeSchema = z
       .min(1, "intake.error.contributionRequired" satisfies MessageKey),
     skills: optionalText(500),
     other_help: optionalText(1000),
-    cap_topics: z.array(z.enum(SUGGESTED_CAP_TOPICS)),
+    cap_topics: z.array(z.string().max(60)).max(20),
     cap_topics_other: optionalText(300),
     availability: optionalText(500),
     bio: optionalText(2000),

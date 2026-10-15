@@ -11,7 +11,8 @@ import { Field } from "~/components/nva";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { useT } from "~/i18n";
-import { AFFILIATIONS, CONTRIBUTION_COLOR, CONTRIBUTION_TYPES, PERSON_STATUSES } from "~/lib/constants";
+import { useTopicLabel } from "~/components/caps/cap-bits";
+import { AFFILIATIONS, CONTRIBUTION_COLOR, CONTRIBUTION_TYPES, PERSON_STATUSES, SUGGESTED_CAP_TOPICS } from "~/lib/constants";
 import { cn } from "~/lib/utils";
 import type { DirectoryParams } from "~/lib/people-form.server";
 import { NamedSelect } from "./named-select";
@@ -33,6 +34,7 @@ const pill =
   "inline-flex h-9 cursor-pointer items-center gap-2 rounded-full border border-stone bg-canvas px-3.5 text-sm text-graphite transition-colors select-none hover:bg-taupe has-checked:border-ink has-checked:bg-gold-soft has-checked:text-ink has-focus-visible:ring-3 has-focus-visible:ring-ring/50";
 
 export function DirectoryFilters({ params, topics }: { params: DirectoryParams; topics: string[] }) {
+  const topicLabel = useTopicLabel();
   const { t } = useT();
   const navigate = useNavigate();
   const location = useLocation();
@@ -65,7 +67,9 @@ export function DirectoryFilters({ params, topics }: { params: DirectoryParams; 
 
   const filtered =
     params.q || params.types.length || params.aff || params.status || params.spanish || params.topic;
-  const topicOptions = params.topic && !topics.includes(params.topic) ? [params.topic, ...topics] : topics;
+  // This semester's CAPs first, in the guide's order, then any older topics people still have.
+  const known = [...SUGGESTED_CAP_TOPICS, ...topics.filter((topic) => !SUGGESTED_CAP_TOPICS.includes(topic))];
+  const topicOptions = params.topic && !known.includes(params.topic) ? [params.topic, ...known] : known;
 
   return (
     <section aria-labelledby="people-filters" className="rounded-card bg-taupe p-4 md:p-5">
@@ -156,7 +160,7 @@ export function DirectoryFilters({ params, topics }: { params: DirectoryParams; 
               defaultValue={params.topic || "any"}
               options={[
                 { value: "any", label: t("people.dir.anyTopic") },
-                ...topicOptions.map((topic) => ({ value: topic, label: topic })),
+                ...topicOptions.map((topic) => ({ value: topic, label: topicLabel(topic) })),
               ]}
             />
           </Field>

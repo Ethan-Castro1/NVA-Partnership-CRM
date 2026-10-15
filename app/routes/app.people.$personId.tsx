@@ -3,6 +3,7 @@
  * connections, CAPs and activity. Teachers and admins can add to the record;
  * only admins can edit, delete or remove things (checked in the action too).
  */
+import { TopicList } from "~/components/caps/cap-bits";
 import type { ReactNode } from "react";
 import { Link, data, redirect, useLoaderData } from "react-router";
 import { ArrowLeft, FileText, Globe, Mail, Pencil, Phone } from "lucide-react";
@@ -259,7 +260,7 @@ export default function PersonProfile() {
               {person.skills.length ? <TagList tags={person.skills} /> : notAdded}
             </DetailBlock>
             <DetailBlock label={t("common.field.capTopics")}>
-              {person.cap_topics.length ? <TagList tags={person.cap_topics} /> : notAdded}
+              {person.cap_topics.length ? <TopicList topics={person.cap_topics} /> : notAdded}
             </DetailBlock>
           </div>
           {(person.funding_focus || person.contribution_types.includes("funder")) && (

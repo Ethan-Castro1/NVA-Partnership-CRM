@@ -29,6 +29,7 @@ import {
 } from "~/lib/constants";
 import type { PersonFormErrors } from "~/lib/people-form.server";
 import { cn } from "~/lib/utils";
+import { useTopicLabel } from "~/components/caps/cap-bits";
 import { NamedSelect } from "./named-select";
 
 export type PersonFormValues = {
@@ -89,6 +90,7 @@ export function PersonForm({
   const navigation = useNavigation();
   const busy = navigation.state === "submitting";
   const [topics, setTopics] = useState(defaults.cap_topics.join(", "));
+  const topicLabel = useTopicLabel();
   // Each detail field shows when it fits a chosen way to help, or already has something in it.
   const [types, setTypes] = useState<ContributionType[]>(defaults.contribution_types);
   const picked = (...wanted: ContributionType[]) => wanted.some((type) => types.includes(type));
@@ -281,11 +283,11 @@ export function PersonForm({
                     type="button"
                     variant="outline"
                     size="xs"
-                    aria-label={t("people.form.addTopic", { topic })}
+                    aria-label={t("people.form.addTopic", { topic: topicLabel(topic) })}
                     onClick={() => setTopics([...current, topic].join(", "))}
                   >
                     <Plus aria-hidden="true" />
-                    {topic}
+                    {topicLabel(topic)}
                   </Button>
                 </li>
               ))}
@@ -325,7 +327,11 @@ export function PersonForm({
       </Panel>
 
       <Panel title={t("people.form.sectionStatus")} bodyClassName="grid gap-4 md:grid-cols-[240px_minmax(0,1fr)]">
-        <Field label={t("common.field.status")} htmlFor="pf-status">
+        <Field
+          label={t("common.field.status")}
+          htmlFor="pf-status"
+          hint={PERSON_STATUSES.map((s) => `${t(`common.status.${s}`)}: ${t(`common.statusHelp.${s}`)}`).join(" ")}
+        >
           <NamedSelect
             id="pf-status"
             name="status"

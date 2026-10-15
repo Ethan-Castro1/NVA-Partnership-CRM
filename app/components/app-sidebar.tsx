@@ -5,6 +5,7 @@ import {
   ClipboardList,
   FolderKanban,
   LayoutDashboard,
+  MessagesSquare,
   Network,
   UserCog,
   Users,
@@ -32,12 +33,13 @@ export function AppSidebar({
 }: React.ComponentProps<typeof Sidebar> & { user: SessionUser; newSignups?: number }) {
   const { t } = useT();
 
-  // Record types and the daily inbox. The assistant lives in the top bar, setup in the user menu.
+  // Record types, the full-screen assistant chat, and the daily inbox. Connector setup is in the user menu.
   const main: NavItem[] = [
     { title: t("common.nav.dashboard"), url: "/app", icon: <LayoutDashboard />, end: true },
     { title: t("common.nav.people"), url: "/app/people", icon: <Users /> },
     { title: t("common.nav.caps"), url: "/app/caps", icon: <FolderKanban /> },
     { title: t("common.nav.connections"), url: "/app/connections", icon: <Network /> },
+    { title: t("common.nav.ask"), url: "/app/ask", icon: <MessagesSquare /> },
     ...(user.role === "admin"
       ? [{ title: t("common.nav.intake"), url: "/app/admin/intake", icon: <ClipboardList />, badge: newSignups || undefined }]
       : []),

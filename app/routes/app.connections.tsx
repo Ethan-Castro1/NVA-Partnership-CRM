@@ -1,10 +1,10 @@
 /**
  * The connection finder: "who can get us to...?" Need search with intro paths
- * from the board and staff, the village map, and a web search for leads
- * beyond the network.
+ * from the board and staff, the village map, saved web leads, and an opt-in
+ * web search for when no one in the village fits.
  */
 import { Form, Link, data, useActionData, useLoaderData, useNavigation } from "react-router";
-import { Loader2, Search } from "lucide-react";
+import { ArrowLeft, ChevronRight, Loader2, Search } from "lucide-react";
 import { z } from "zod";
 import type { Route } from "./+types/app.connections";
 import { ConnectorCard } from "~/components/connections/connector-card";
@@ -19,6 +19,8 @@ import { getLocale } from "~/i18n/locale.server";
 import { isWebSearchConfigured } from "~/lib/ai/exa.server";
 import { dismissWebLead, findWebLeads, listWebLeads, saveWebLeadAsContact } from "~/lib/ai/web-leads.server";
 import { requireUser } from "~/lib/auth.server";
+import { getCap } from "~/lib/caps.server";
+import { query } from "~/lib/db.server";
 import { getVillageMap, highlightFor, sortConnectorResults } from "~/lib/connections.server";
 import { CONTRIBUTION_COLOR, CONTRIBUTION_TYPES, INNER_CIRCLE } from "~/lib/constants";
 import { findConnectorsForNeed, searchPeople, searchTerms } from "~/lib/people.server";
@@ -31,20 +33,26 @@ export const meta: Route.MetaFunction = ({ matches }) => {
 };
 
 export async function loader({ request }: Route.LoaderArgs) {
-  await requireUser(request);
+  const user = await requireUser(request);
   const url = new URL(request.url);
+  const capId = (url.searchParams.get("cap") ?? "").trim().slice(0, 100);
   const q = (url.searchParams.get("q") ?? "").trim().slice(0, 200);
   const typeParam = url.searchParams.get("type");
   const type = CONTRIBUTION_TYPES.find((value) => value === typeParam) ?? null;
   // A query of only stopwords ("someone") would match everyone, so treat it as empty.
   const searching = searchTerms(q).length > 0;
 
-  const [results, map, inner, leads] = await Promise.all([
+  const [results, map, inner, leads, capRow] = await Promise.all([
     searching ? findConnectorsForNeed({ q, contributionTypes: type ? [type] : undefined, limit: 25 }) : Promise.resolve([]),
     getVillageMap(),
     searchPeople({ affiliations: [...INNER_CIRCLE], limit: 100 }),
     listWebLeads(),
+    capId ? getCap(capId) : Promise.resolve(null),
   ]);
+  // People already on the CAP get a note instead of an Add button.
+  const partnerIds = capRow
+    ? (await query<{ person_id: string }>("SELECT person_id FROM cap_partners WHERE cap_id = $1", [capRow.id])).map((r) => r.person_id)
+    : [];
   const sorted = sortConnectorResults(results);
   return {
     q,
@@ -58,6 +66,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       .sort((a, b) => a.full_name.localeCompare(b.full_name)),
     leads,
     aiConfigured: isWebSearchConfigured(),
+    isAdmin: user.role === "admin",
+    cap: capRow ? { id: capRow.id, title: capRow.title, partnerIds } : null,
   };
 }
 
@@ -119,19 +129,31 @@ const EXAMPLES = [
 ] as const;
 
 export default function Connections() {
-  const { q, type, searching, results, highlight, map, innerCircle, leads, aiConfigured } = useLoaderData<typeof loader>();
+  const { q, type, searching, results, highlight, map, innerCircle, leads, aiConfigured, isAdmin, cap } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>() as WebActionResult | { intent: string } | undefined;
   const webResult = actionData?.intent === "web" ? (actionData as WebActionResult) : undefined;
   const { t } = useT();
   const navigation = useNavigation();
   const searchingNow = navigation.state === "loading" && navigation.location?.pathname === "/app/connections" && !navigation.formMethod?.match(/post/i);
+  const showWeb = aiConfigured || isAdmin;
+  const capParam = cap ? `&cap=${encodeURIComponent(cap.id)}` : "";
 
   return (
     <div className="grid gap-8">
+      {cap && (
+        <Link
+          to={`/app/caps/${cap.id}`}
+          className="-mb-4 inline-flex w-fit items-center gap-1.5 rounded-full text-sm text-smoke hover:text-ink focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+        >
+          <ArrowLeft className="size-4" aria-hidden="true" />
+          {t("connections.backToCap", { title: cap.title })}
+        </Link>
+      )}
       <PageHeader eyebrow={t("connections.eyebrow")} title={t("connections.title")} description={t("connections.description")} />
 
       <Panel>
         <Form method="get" role="search" className="grid gap-4 md:grid-cols-[minmax(0,1fr)_15rem_auto] md:items-end">
+          {cap && <input type="hidden" name="cap" value={cap.id} />}
           <Field label={t("connections.search.label")} htmlFor="need-q">
             <div className="relative">
               <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-smoke" aria-hidden="true" />
@@ -172,7 +194,7 @@ export default function Connections() {
           {EXAMPLES.map((example) => (
             <Link
               key={example.q}
-              to={`?q=${encodeURIComponent(example.q)}`}
+              to={`?q=${encodeURIComponent(example.q)}${capParam}`}
               className="rounded-full border border-stone bg-canvas px-3 py-1 text-graphite transition-colors hover:border-gold focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
             >
               {t(example.label)}
@@ -197,11 +219,11 @@ export default function Connections() {
           {results.length ? (
             <div className="grid gap-4">
               {results.map((result) => (
-                <ConnectorCard key={result.person.id} result={result} />
+                <ConnectorCard key={result.person.id} result={result} cap={cap} />
               ))}
             </div>
           ) : (
-            <EmptyState title={t("connections.results.none")} body={t("connections.results.noneBody")} />
+            <EmptyState title={t("connections.results.none")} body={t(showWeb ? "connections.results.noneBody" : "connections.results.noneBodyNoWeb")} />
           )}
         </section>
       )}
@@ -220,28 +242,27 @@ export default function Connections() {
         </div>
       </Panel>
 
-      <Panel title={t("connections.web.title")}>
-        <p className="-mt-2 mb-4 max-w-3xl text-sm text-smoke">{t("connections.web.description")}</p>
-        <WebSearchForm aiConfigured={aiConfigured} innerCircle={innerCircle} defaultNeed={q} result={webResult} />
+      {showWeb && (
+        <details open={(aiConfigured && searching && results.length === 0) || !!webResult} className="group rounded-card bg-taupe p-5 md:p-6">
+          <summary className="flex w-fit cursor-pointer list-none items-center gap-2 rounded-full text-section focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none [&::-webkit-details-marker]:hidden">
+            <ChevronRight className="size-5 shrink-0 text-smoke transition-transform group-open:rotate-90" aria-hidden="true" />
+            {t("connections.web.summary")}
+          </summary>
+          <p className="mt-4 mb-4 max-w-3xl text-sm text-smoke">{t("connections.web.description")}</p>
+          <WebSearchForm aiConfigured={aiConfigured} innerCircle={innerCircle} defaultNeed={q} result={webResult} />
+        </details>
+      )}
 
-        <section aria-labelledby="leads-heading" className="mt-8 grid gap-4">
-          <div className="space-y-1">
-            <h3 id="leads-heading" className="text-section">
-              {t("connections.leads.title")}
-            </h3>
-            <p className="text-sm text-smoke">{t("connections.leads.unverifiedHelp")}</p>
+      {leads.length > 0 && (
+        <Panel title={t("connections.leads.titleCount", { count: leads.length })}>
+          <p className="-mt-2 mb-4 max-w-3xl text-sm text-smoke">{t("connections.leads.unverifiedHelp")}</p>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {leads.map((lead) => (
+              <WebLeadCard key={lead.id} lead={lead} />
+            ))}
           </div>
-          {leads.length ? (
-            <div className="grid gap-4 lg:grid-cols-2">
-              {leads.map((lead) => (
-                <WebLeadCard key={lead.id} lead={lead} />
-              ))}
-            </div>
-          ) : (
-            <EmptyState title={t("connections.leads.empty")} />
-          )}
-        </section>
-      </Panel>
+        </Panel>
+      )}
     </div>
   );
 }

@@ -11,8 +11,8 @@ import {
   LANGUAGES,
   RELATIONSHIP_KINDS,
   type Affiliation,
+  type CapStatus,
   type ContributionType,
-  type EngagementKind,
   type PersonSource,
   type PersonStatus,
   type PreferredLanguage,
@@ -50,14 +50,21 @@ export type SignupRow = {
   person_status: PersonStatus | null;
 };
 
-export type ActivityRow = {
+export type LeadRow = {
   id: string;
-  kind: EngagementKind;
-  happened_on: string;
-  notes: string | null;
-  person_id: string;
-  person_name: string;
-  user_name: string | null;
+  full_name: string;
+  title: string | null;
+  organization_name: string | null;
+  created_at: string;
+  last_contact: string | null;
+};
+
+export type CapNeedingPartnerRow = {
+  id: string;
+  title: string;
+  status: CapStatus;
+  term: string | null;
+  owner_name: string | null;
 };
 
 export type RecentPersonRow = {
@@ -92,18 +99,27 @@ function toSignupRow(row: SignupRow): SignupRow {
 }
 
 export async function getAdminOverview() {
-  const [counts, caps, signups, activity, recent] = await Promise.all([
+  const [counts, caps, signups, leads, capsWithoutPartner, recent] = await Promise.all([
     getCounts(),
     queryOne<{ n: number }>("SELECT count(*)::int AS n FROM caps WHERE status = 'active'"),
     query<SignupRow>(
       `SELECT ${SIGNUP_COLUMNS} FROM intake_submissions s LEFT JOIN people p ON p.id = s.person_id
         WHERE s.status = 'new' ORDER BY s.submitted_at DESC LIMIT 5`,
     ),
-    query<ActivityRow>(
-      `SELECT e.id, e.kind, e.happened_on::text AS happened_on, e.notes, p.id AS person_id,
-              p.full_name AS person_name, u.name AS user_name
-         FROM engagements e JOIN people p ON p.id = e.person_id LEFT JOIN users u ON u.id = e.user_id
-        ORDER BY e.happened_on DESC, e.created_at DESC LIMIT 6`,
+    // Leads waiting longest come first.
+    query<LeadRow>(
+      `SELECT p.id, p.full_name, p.title, o.name AS organization_name, p.created_at,
+              (SELECT max(e.happened_on)::text FROM engagements e WHERE e.person_id = p.id) AS last_contact
+         FROM people p LEFT JOIN organizations o ON o.id = p.organization_id
+        WHERE p.status = 'lead'
+        ORDER BY p.created_at ASC, p.full_name LIMIT 10`,
+    ),
+    query<CapNeedingPartnerRow>(
+      `SELECT c.id, c.title, c.status, c.term, u.name AS owner_name
+         FROM caps c LEFT JOIN users u ON u.id = c.owner_id
+        WHERE c.status IN ('planning', 'active')
+          AND NOT EXISTS (SELECT 1 FROM cap_partners cp WHERE cp.cap_id = c.id AND cp.status = 'confirmed')
+        ORDER BY c.status = 'active' DESC, c.created_at ASC LIMIT 10`,
     ),
     query<RecentPersonRow>(
       `SELECT p.id, p.full_name, p.title, o.name AS organization_name, p.contribution_types, p.source, p.status, p.created_at
@@ -114,7 +130,8 @@ export async function getAdminOverview() {
   return {
     counts: { ...counts, activeCaps: caps?.n ?? 0 },
     signups: signups.map(toSignupRow),
-    activity,
+    leads: leads.map((row) => ({ ...row, created_at: iso(row.created_at) })),
+    capsWithoutPartner,
     recent: recent.map((row) => ({ ...row, created_at: iso(row.created_at) })),
   };
 }
@@ -325,6 +342,15 @@ export async function setIntakeStatus(
     }
     return true;
   });
+}
+
+/** The next sign-up still waiting for review, in the list's order (newest first). */
+export async function nextNewIntake(excludeId: string): Promise<string | null> {
+  const row = await queryOne<{ id: string }>(
+    "SELECT id FROM intake_submissions WHERE status = 'new' AND id <> $1 ORDER BY submitted_at DESC LIMIT 1",
+    [excludeId],
+  );
+  return row?.id ?? null;
 }
 
 // ---------- staff accounts ----------

@@ -2,6 +2,7 @@
 import { data, redirect, useActionData, useLoaderData } from "react-router";
 import type { Route } from "./+types/app.people.$personId.edit";
 import { PersonForm } from "~/components/people/person-form";
+import { DeletePersonDialog } from "~/components/people/profile-sections";
 import { PageHeader } from "~/components/nva";
 import { makeT, useT } from "~/i18n";
 import { requireAdmin } from "~/lib/auth.server";
@@ -66,6 +67,9 @@ export default function EditPerson() {
         submitLabel={t("common.action.saveChanges")}
         cancelTo={`/app/people/${person.id}`}
       />
+      <div className="flex justify-end border-t border-stone pt-4">
+        <DeletePersonDialog name={person.full_name} action={`/app/people/${person.id}`} />
+      </div>
     </div>
   );
 }

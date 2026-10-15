@@ -1,18 +1,27 @@
 /** One need-search match: who they are, why they matched, and how to reach them. */
-import { Link } from "react-router";
-import { CircleDashed, MessageCircle } from "lucide-react";
+import { Link, useFetcher } from "react-router";
+import { Check, CircleDashed, Loader2, Mail, MessageCircle, Plus } from "lucide-react";
 import { ContributionChips, PersonAvatar, Sheet, StatusBadge, TagList } from "~/components/nva";
-import { useT } from "~/i18n";
+import { Button } from "~/components/ui/button";
+import { useT, type MessageKey } from "~/i18n";
 import type { ConnectorResult } from "~/lib/connections.server";
+import { useTopicLabel } from "~/components/caps/cap-bits";
 import { PathChain } from "./path-chain";
 
 const VISIBLE_PATHS = 2;
 
-export function ConnectorCard({ result }: { result: ConnectorResult }) {
-  const { t, tx } = useT();
+export function ConnectorCard({
+  result,
+  cap,
+}: {
+  result: ConnectorResult;
+  cap?: { id: string; title: string; partnerIds: string[] } | null;
+}) {
+  const { t } = useT();
+  const topicLabel = useTopicLabel();
   const { person, direct, paths } = result;
-  // Matched CAP topics are stored as English keys; suggested ones have translated labels.
-  const matched = person.matched.map((tag) => tx(`caps.topic.${tag}`, tag));
+  const matched = person.matched.map(topicLabel);
+  const onCap = !!cap && cap.partnerIds.includes(person.id);
   const subtitle = [person.title, person.organization_name].filter(Boolean).join(", ");
   const shown = paths.slice(0, VISIBLE_PATHS);
   const more = paths.slice(VISIBLE_PATHS);
@@ -38,6 +47,30 @@ export function ConnectorCard({ result }: { result: ConnectorResult }) {
             <MessageCircle className="size-3.5" aria-hidden="true" />
             {t("connections.results.askDirectly")}
           </span>
+        )}
+        {(person.email || cap) && (
+          <div className="flex items-center gap-1">
+            {person.email && (
+              <Button asChild variant="ghost" size="icon-sm">
+                <a
+                  href={`mailto:${person.email}`}
+                  aria-label={t("caps.partners.emailFor", { name: person.full_name })}
+                  title={t("caps.partners.emailFor", { name: person.full_name })}
+                >
+                  <Mail aria-hidden="true" />
+                </a>
+              </Button>
+            )}
+            {cap &&
+              (onCap ? (
+                <span className="inline-flex items-center gap-1 text-xs text-sage-ink">
+                  <Check className="size-3.5" aria-hidden="true" />
+                  {t("connections.results.onCap")}
+                </span>
+              ) : (
+                <AddToCap capId={cap.id} personId={person.id} name={person.full_name} />
+              ))}
+          </div>
         )}
       </div>
 
@@ -82,6 +115,38 @@ export function ConnectorCard({ result }: { result: ConnectorResult }) {
         </div>
       )}
     </Sheet>
+  );
+}
+
+function AddToCap({ capId, personId, name }: { capId: string; personId: string; name: string }) {
+  const { t } = useT();
+  const fetcher = useFetcher<{ ok: boolean; error?: MessageKey }>();
+  const busy = fetcher.state !== "idle";
+  const done = fetcher.state === "idle" && fetcher.data?.ok;
+  const error = fetcher.state === "idle" && fetcher.data && !fetcher.data.ok ? fetcher.data.error : undefined;
+
+  if (done) {
+    return (
+      <p role="status" className="inline-flex items-center gap-1.5 text-sm text-sage-ink">
+        <Check className="size-4" aria-hidden="true" />
+        {t("connections.results.addedToCap")}
+      </p>
+    );
+  }
+  return (
+    <fetcher.Form method="post" action={`/app/caps/${capId}`} className="flex flex-col items-end gap-1">
+      <input type="hidden" name="intent" value="add-partner" />
+      <input type="hidden" name="personId" value={personId} />
+      <Button type="submit" variant="outline" size="sm" disabled={busy} aria-label={`${t("caps.suggest.add")}: ${name}`}>
+        {busy ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Plus aria-hidden="true" />}
+        {t("caps.suggest.add")}
+      </Button>
+      {error && (
+        <p role="alert" className="text-xs text-rust-ink">
+          {t(error)}
+        </p>
+      )}
+    </fetcher.Form>
   );
 }
 

@@ -100,6 +100,22 @@ export function DirectoryFilters({ params, topics }: { params: DirectoryParams; 
               className="h-11 rounded-full pl-10"
             />
           </div>
+          <div className="sm:w-48">
+            <label htmlFor="people-status" className="sr-only">
+              {t("people.dir.statusLabel")}
+            </label>
+            <NamedSelect
+              id="people-status"
+              name="status"
+              defaultValue={params.status || "current"}
+              className="h-11 rounded-full data-[size=default]:h-11"
+              options={[
+                { value: "current", label: t("people.dir.statusCurrent") },
+                ...PERSON_STATUSES.map((s) => ({ value: s, label: t(`common.status.${s}`) })),
+                { value: "all", label: t("people.dir.statusAll") },
+              ]}
+            />
+          </div>
           <Button type="submit" size="lg" className="shrink-0">
             {t("common.action.search")}
           </Button>
@@ -121,50 +137,43 @@ export function DirectoryFilters({ params, topics }: { params: DirectoryParams; 
                 {t(`common.contribution.${type}`)}
               </label>
             ))}
-            <label className={pill}>
+          </div>
+        </fieldset>
+
+        <details open={!!(params.aff || params.topic || params.spanish)} className="group">
+          <summary className="w-fit cursor-pointer rounded-full text-sm font-medium text-graphite hover:text-ink focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+            {t("people.dir.moreFilters")}
+          </summary>
+          <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+            <Field label={t("people.dir.affiliationLabel")} htmlFor="people-aff">
+              <NamedSelect
+                id="people-aff"
+                name="aff"
+                defaultValue={params.aff || "any"}
+                options={[
+                  { value: "any", label: t("people.dir.anyAffiliation") },
+                  ...AFFILIATIONS.map((a) => ({ value: a, label: t(`common.affiliation.${a}`) })),
+                ]}
+              />
+            </Field>
+            <Field label={t("people.dir.topicLabel")} htmlFor="people-topic">
+              <NamedSelect
+                id="people-topic"
+                name="topic"
+                defaultValue={params.topic || "any"}
+                options={[
+                  { value: "any", label: t("people.dir.anyTopic") },
+                  ...topicOptions.map((topic) => ({ value: topic, label: topicLabel(topic) })),
+                ]}
+              />
+            </Field>
+            <label className={cn(pill, "w-fit")}>
               <input type="checkbox" name="lang" value="es" defaultChecked={params.spanish} className="sr-only" />
               <Languages className="size-4" aria-hidden="true" />
               {t("people.dir.spanish")}
             </label>
           </div>
-        </fieldset>
-
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Field label={t("people.dir.affiliationLabel")} htmlFor="people-aff">
-            <NamedSelect
-              id="people-aff"
-              name="aff"
-              defaultValue={params.aff || "any"}
-              options={[
-                { value: "any", label: t("people.dir.anyAffiliation") },
-                ...AFFILIATIONS.map((a) => ({ value: a, label: t(`common.affiliation.${a}`) })),
-              ]}
-            />
-          </Field>
-          <Field label={t("people.dir.statusLabel")} htmlFor="people-status">
-            <NamedSelect
-              id="people-status"
-              name="status"
-              defaultValue={params.status || "current"}
-              options={[
-                { value: "current", label: t("people.dir.statusCurrent") },
-                ...PERSON_STATUSES.map((s) => ({ value: s, label: t(`common.status.${s}`) })),
-                { value: "all", label: t("people.dir.statusAll") },
-              ]}
-            />
-          </Field>
-          <Field label={t("people.dir.topicLabel")} htmlFor="people-topic">
-            <NamedSelect
-              id="people-topic"
-              name="topic"
-              defaultValue={params.topic || "any"}
-              options={[
-                { value: "any", label: t("people.dir.anyTopic") },
-                ...topicOptions.map((topic) => ({ value: topic, label: topicLabel(topic) })),
-              ]}
-            />
-          </Field>
-        </div>
+        </details>
 
         <div className="flex flex-wrap items-center gap-2">
           <noscript>

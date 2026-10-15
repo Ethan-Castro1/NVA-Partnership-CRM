@@ -1,7 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { createUser } from "./auth.server";
-import { addCapPartner, canEditCap, capSearchText, createCap, getCap, getCapSuggestions, parseCapForm, parsePartnerUpdate } from "./caps.server";
-import { addRelationship, createPerson } from "./people.server";
+import {
+  addCapPartner,
+  canEditCap,
+  capSearchText,
+  createCap,
+  getCap,
+  getCapActivity,
+  getCapPartnerOptions,
+  getCapSuggestions,
+  listCaps,
+  parseCapForm,
+  parsePartnerUpdate,
+} from "./caps.server";
+import { addRelationship, createPerson, logEngagement } from "./people.server";
 
 function form(entries: [string, string][]): FormData {
   const fd = new FormData();
@@ -86,5 +98,39 @@ describe("getCapSuggestions", () => {
     expect(suggestions[0].paths[0].chain[0].full_name).toBe("Bea Board");
 
     expect(await getCapSuggestions({ id: capId, needs: null, topics: [] })).toEqual([]);
+  });
+});
+
+describe("listCaps", () => {
+  it("hides finished CAPs when asked", async () => {
+    const owner = await createUser({ email: "lister@test", name: "Lister", password: "long-enough-pw", role: "teacher" });
+    await createCap({ title: "Current CAP", status: "active" }, owner);
+    await createCap({ title: "Done CAP", status: "complete" }, owner);
+
+    const current = (await listCaps({ ownerId: owner, excludeComplete: true })).map((c) => c.title);
+    expect(current).toEqual(["Current CAP"]);
+    const finished = (await listCaps({ ownerId: owner, status: "complete" })).map((c) => c.title);
+    expect(finished).toEqual(["Done CAP"]);
+  });
+});
+
+describe("CAP partners and activity", () => {
+  it("offers only people who are not partners yet, and lists activity logged for the CAP", async () => {
+    const owner = await createUser({ email: "act@test", name: "Act Owner", password: "long-enough-pw", role: "teacher" });
+    const partner = await createPerson({ full_name: "Pat Partner" }, null);
+    const other = await createPerson({ full_name: "Oscar Other" }, null);
+    const capId = await createCap({ title: "Activity CAP" }, owner);
+    const otherCap = await createCap({ title: "Other CAP" }, owner);
+    await addCapPartner({ capId, personId: partner }, owner);
+
+    const options = (await getCapPartnerOptions(capId)).map((p) => p.id);
+    expect(options).toContain(other);
+    expect(options).not.toContain(partner);
+
+    await logEngagement({ personId: partner, kind: "call", happenedOn: "2026-09-01", notes: "Said yes", capId }, owner);
+    await logEngagement({ personId: other, kind: "email", capId: otherCap }, owner);
+    const activity = await getCapActivity(capId);
+    expect(activity).toHaveLength(1);
+    expect(activity[0]).toMatchObject({ kind: "call", happened_on: "2026-09-01", notes: "Said yes", person_id: partner, person_name: "Pat Partner", user_name: "Act Owner" });
   });
 });

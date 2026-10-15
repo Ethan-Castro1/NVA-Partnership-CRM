@@ -1,7 +1,6 @@
 /** The dashboard's sections: stat row, my CAPs, recently added people and recent activity. */
 import { Link } from "react-router";
-import { ArrowRight, BookOpen, Briefcase, CircleEllipsis, HandCoins, HandHeart, Plus, School, Sprout, UserCheck, Users } from "lucide-react";
-import type { ReactNode } from "react";
+import { ArrowRight, ClipboardList, FolderKanban, Plus, UserCheck, UserPlus, Users } from "lucide-react";
 import {
   ContributionChips,
   EmptyState,
@@ -13,20 +12,10 @@ import {
 import { Button } from "~/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "~/components/ui/table";
 import { useT } from "~/i18n";
-import { CONTRIBUTION_TYPES, type CapStatus, type ContributionType } from "~/lib/constants";
+import type { CapStatus } from "~/lib/constants";
 import { cn } from "~/lib/utils";
 import { shortDate } from "./format";
 import type { DashboardCap, RecentEngagement, RecentPerson } from "./types";
-
-const TYPE_ICON: Record<ContributionType, ReactNode> = {
-  skills_lesson: <BookOpen aria-hidden="true" />,
-  classroom_volunteer: <HandHeart aria-hidden="true" />,
-  internship: <Briefcase aria-hidden="true" />,
-  cap_partner: <Sprout aria-hidden="true" />,
-  after_school: <School aria-hidden="true" />,
-  funder: <HandCoins aria-hidden="true" />,
-  other: <CircleEllipsis aria-hidden="true" />,
-};
 
 const linkClass =
   "rounded-sm font-medium text-ink hover:underline hover:decoration-gold hover:decoration-2 hover:underline-offset-4 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none";
@@ -50,14 +39,18 @@ const roleLine = (p: { title: string | null; organization_name: string | null })
 
 export function StatRow({
   people,
-  active,
   leads,
-  byContribution,
+  active,
+  isAdmin,
+  newSignups,
+  myCaps,
 }: {
   people: number;
-  active: number;
   leads: number;
-  byContribution: Record<string, number>;
+  active: number;
+  isAdmin: boolean;
+  newSignups: number;
+  myCaps: number;
 }) {
   const { t } = useT();
   return (
@@ -67,35 +60,41 @@ export function StatRow({
       </h2>
       <ul className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <li>
+          <StatTile label={t("dashboard.statPeople")} value={people} icon={<Users aria-hidden="true" />} to="/app/people" />
+        </li>
+        <li>
           <StatTile
-            label={t("dashboard.statPeople")}
-            value={people}
-            hint={t("dashboard.statPeopleHint", { count: leads })}
-            icon={<Users aria-hidden="true" />}
-            to="/app/people"
+            label={t("dashboard.statLeads")}
+            value={leads}
+            icon={<UserPlus aria-hidden="true" />}
+            to="/app/people?status=lead"
           />
         </li>
         <li>
           <StatTile
             label={t("dashboard.statActive")}
             value={active}
-            hint={t("dashboard.statActiveHint")}
             icon={<UserCheck aria-hidden="true" />}
             to="/app/people?status=active"
           />
         </li>
-        {CONTRIBUTION_TYPES.filter((type) => type !== "other").map((type) => (
-          <li key={type}>
+        <li>
+          {isAdmin ? (
             <StatTile
-              label={t(`common.contribution.${type}`)}
-              value={byContribution[type] ?? 0}
-              hint={t("dashboard.statTypeHint")}
-              icon={TYPE_ICON[type]}
-              accent={type}
-              to={`/app/people?type=${type}`}
+              label={t("dashboard.statSignups")}
+              value={newSignups}
+              icon={<ClipboardList aria-hidden="true" />}
+              to="/app/admin/intake"
             />
-          </li>
-        ))}
+          ) : (
+            <StatTile
+              label={t("dashboard.statMyCaps")}
+              value={myCaps}
+              icon={<FolderKanban aria-hidden="true" />}
+              to="/app/caps?show=mine"
+            />
+          )}
+        </li>
       </ul>
     </section>
   );
@@ -115,11 +114,10 @@ export function SignupsCallout({ count }: { count: number }) {
       </span>
       <div className="flex-1">
         <h2 id="signups-heading" className="font-semibold text-ink">
-          {t("dashboard.signupsTitle")}
+          {count === 1 ? t("dashboard.signupsTitleOne") : t("dashboard.signupsTitle", { count })}
         </h2>
-        <p className="text-sm text-graphite">{t("dashboard.signupsBody", { count })}</p>
       </div>
-      <Button asChild>
+      <Button asChild variant="outline">
         <Link to="/app/admin/intake">
           {t("dashboard.signupsAction")}
           <ArrowRight aria-hidden="true" />
@@ -158,7 +156,7 @@ export function MyCaps({ caps }: { caps: DashboardCap[] }) {
             <Button asChild>
               <Link to="/app/caps/new">
                 <Plus aria-hidden="true" />
-                {t("dashboard.newCap")}
+                {t("caps.list.new")}
               </Link>
             </Button>
           }

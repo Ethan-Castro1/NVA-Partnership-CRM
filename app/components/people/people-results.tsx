@@ -36,6 +36,28 @@ function LanguagePill({ language }: { language: SearchHit["preferred_language"] 
   );
 }
 
+/** Email and phone, above the row's full-width link so they stay clickable. */
+function ContactLinks({ person }: { person: SearchHit }) {
+  if (!person.email && !person.phone) return null;
+  return (
+    <div className="grid gap-0.5">
+      {person.email && (
+        <a
+          href={`mailto:${person.email}`}
+          className="relative z-10 block max-w-[220px] truncate text-ink underline decoration-stone underline-offset-4 hover:decoration-gold"
+        >
+          {person.email}
+        </a>
+      )}
+      {person.phone && (
+        <a href={`tel:${person.phone.replace(/[^\d+]/g, "")}`} className="relative z-10 w-fit text-xs text-smoke hover:text-ink">
+          {person.phone}
+        </a>
+      )}
+    </div>
+  );
+}
+
 export function PeopleResults({ people }: { people: SearchHit[] }) {
   const { t, locale } = useT();
 
@@ -47,8 +69,9 @@ export function PeopleResults({ people }: { people: SearchHit[] }) {
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead className="pl-5 text-xs font-medium text-smoke">{t("people.dir.colPerson")}</TableHead>
+              <TableHead className="text-xs font-medium text-smoke">{t("people.dir.colContact")}</TableHead>
               <TableHead className="text-xs font-medium text-smoke">{t("people.dir.colWays")}</TableHead>
-              <TableHead className="text-xs font-medium text-smoke">{t("people.dir.colSkills")}</TableHead>
+              <TableHead className="hidden text-xs font-medium text-smoke xl:table-cell">{t("people.dir.colSkills")}</TableHead>
               <TableHead className="text-xs font-medium text-smoke">{t("people.dir.colStatus")}</TableHead>
               <TableHead className="text-xs font-medium text-smoke">{t("people.dir.colLanguage")}</TableHead>
               <TableHead className="pr-5 text-right text-xs font-medium text-smoke">{t("people.dir.colUpdated")}</TableHead>
@@ -56,7 +79,7 @@ export function PeopleResults({ people }: { people: SearchHit[] }) {
           </TableHeader>
           <TableBody>
             {people.map((person) => (
-              <TableRow key={person.id} className="border-stone hover:bg-taupe/60">
+              <TableRow key={person.id} className="relative border-stone hover:bg-taupe/60">
                 <TableCell className="max-w-[260px] py-3 pl-5">
                   <div className="flex items-center gap-3">
                     <PersonAvatar name={person.full_name} />
@@ -64,7 +87,7 @@ export function PeopleResults({ people }: { people: SearchHit[] }) {
                       <Link
                         to={`/app/people/${person.id}`}
                         prefetch="intent"
-                        className="block truncate font-medium text-ink hover:underline focus-visible:rounded focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+                        className="block truncate font-medium text-ink after:absolute after:inset-0 hover:underline focus-visible:rounded focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
                       >
                         {person.full_name}
                       </Link>
@@ -72,11 +95,14 @@ export function PeopleResults({ people }: { people: SearchHit[] }) {
                     </div>
                   </div>
                 </TableCell>
+                <TableCell className="text-sm">
+                  <ContactLinks person={person} />
+                </TableCell>
                 <TableCell className="whitespace-normal">
                   <ContributionChips types={person.contribution_types} className="max-w-[260px]" />
                 </TableCell>
-                <TableCell className="whitespace-normal">
-                  <TagList tags={skillsForRow(person)} highlight={person.matched} max={4} className="max-w-[260px]" />
+                <TableCell className="hidden whitespace-normal xl:table-cell">
+                  <TagList tags={skillsForRow(person)} highlight={person.matched} max={2} className="max-w-[260px]" />
                 </TableCell>
                 <TableCell>
                   <StatusBadge status={person.status} />
@@ -109,6 +135,7 @@ export function PeopleResults({ people }: { people: SearchHit[] }) {
                     {person.full_name}
                   </Link>
                   <Subtitle person={person} />
+                  <ContactLinks person={person} />
                 </div>
                 <StatusBadge status={person.status} />
               </div>

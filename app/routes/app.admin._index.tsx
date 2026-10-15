@@ -1,7 +1,8 @@
-/** Admin overview: the CRM-style dashboard of who's joining and what's happening. */
+/** Admin "Needs attention": new sign-ups, leads to contact and CAPs still looking for a partner. */
 import { Link, useLoaderData } from "react-router";
-import { ArrowRight, ClipboardList, Download, FolderKanban, HeartHandshake, UserCog, UserPlus, Users } from "lucide-react";
+import { ArrowRight, ClipboardList, Download, FolderKanban, HeartHandshake, UserPlus, Users } from "lucide-react";
 import type { Route } from "./+types/app.admin._index";
+import { CapStatusBadge } from "~/components/caps/cap-bits";
 import { RelativeTime, formatDate, formatDay } from "~/components/admin/format";
 import {
   ContributionChips,
@@ -32,7 +33,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export default function AdminOverview() {
-  const { counts, signups, activity, recent } = useLoaderData<typeof loader>();
+  const { counts, signups, leads, capsWithoutPartner, recent } = useLoaderData<typeof loader>();
   const { t, locale } = useT();
 
   return (
@@ -42,21 +43,13 @@ export default function AdminOverview() {
         title={t("admin.title")}
         description={t("admin.description")}
         actions={
-          <>
-            <Button variant="outline" asChild>
-              <Link to="/app/admin/users">
-                <UserCog aria-hidden="true" />
-                {t("common.nav.users")}
-              </Link>
-            </Button>
-            <Button variant="outline" asChild>
-              {/* reloadDocument: a file download, not a client-side navigation. */}
-              <Link to="/app/admin/export.csv" reloadDocument>
-                <Download aria-hidden="true" />
-                {t("common.action.export")}
-              </Link>
-            </Button>
-          </>
+          <Button variant="outline" asChild>
+            {/* reloadDocument: a file download, not a client-side navigation. */}
+            <Link to="/app/admin/export.csv" reloadDocument>
+              <Download aria-hidden="true" />
+              {t("common.action.export")}
+            </Link>
+          </Button>
         }
       />
 
@@ -68,6 +61,7 @@ export default function AdminOverview() {
           hint={t("admin.stat.activeHint")}
           icon={<HeartHandshake />}
           accent="cap_partner"
+          to="/app/people?status=active"
         />
         <StatTile
           label={t("admin.stat.newSignups")}
@@ -76,7 +70,14 @@ export default function AdminOverview() {
           icon={<ClipboardList />}
           to="/app/admin/intake"
         />
-        <StatTile label={t("admin.stat.leads")} value={counts.leads} hint={t("admin.stat.leadsHint")} icon={<UserPlus />} accent="internship" />
+        <StatTile
+          label={t("admin.stat.leads")}
+          value={counts.leads}
+          hint={t("admin.stat.leadsHint")}
+          icon={<UserPlus />}
+          accent="internship"
+          to="/app/people?status=lead"
+        />
         <StatTile
           label={t("admin.stat.activeCaps")}
           value={counts.activeCaps}
@@ -87,9 +88,7 @@ export default function AdminOverview() {
         />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
-        <WaysToHelp byContribution={counts.byContribution} />
-
+      <div className="grid gap-6 lg:grid-cols-2">
         <Panel
           title={t("admin.signups.title")}
           action={
@@ -127,89 +126,119 @@ export default function AdminOverview() {
             <EmptyState title={t("admin.signups.empty")} />
           )}
         </Panel>
-      </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-        <Panel title={t("admin.recent.title")}>
-          {recent.length ? (
-            <Sheet className="p-0">
-              {/* Wide screens: a table. Phones: stacked cards. */}
-              <div className="hidden md:block">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="pl-5">{t("admin.col.name")}</TableHead>
-                      <TableHead>{t("common.field.contributions")}</TableHead>
-                      <TableHead>{t("common.field.source")}</TableHead>
-                      <TableHead>{t("common.field.status")}</TableHead>
-                      <TableHead className="pr-5 text-right">{t("admin.col.added")}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {recent.map((p) => (
-                      <TableRow key={p.id}>
-                        <TableCell className="pl-5">
-                          <PersonCell id={p.id} name={p.full_name} subtitle={[p.title, p.organization_name].filter(Boolean).join(", ")} />
-                        </TableCell>
-                        <TableCell>
-                          <ContributionChips types={p.contribution_types} />
-                        </TableCell>
-                        <TableCell className="text-smoke">{t(`common.source.${p.source}`)}</TableCell>
-                        <TableCell>
-                          <StatusBadge status={p.status} />
-                        </TableCell>
-                        <TableCell className="pr-5 text-right whitespace-nowrap text-smoke">{formatDate(p.created_at, locale)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              <ul className="divide-y divide-stone md:hidden">
-                {recent.map((p) => (
-                  <li key={p.id} className="grid gap-2 p-4">
-                    <PersonCell id={p.id} name={p.full_name} subtitle={[p.title, p.organization_name].filter(Boolean).join(", ")} />
-                    <ContributionChips types={p.contribution_types} />
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-smoke">
-                      <StatusBadge status={p.status} />
-                      <span>{t(`common.source.${p.source}`)}</span>
-                      <span aria-hidden="true">·</span>
-                      <span>{formatDate(p.created_at, locale)}</span>
-                    </div>
+        <Panel
+          title={t("admin.leads.title")}
+          action={
+            <Button asChild variant="ghost" size="sm">
+              <Link to="/app/people?status=lead">
+                {t("common.action.viewAll")}
+                <ArrowRight aria-hidden="true" />
+              </Link>
+            </Button>
+          }
+        >
+          {leads.length ? (
+            <Sheet className="p-2">
+              <ul className="divide-y divide-stone">
+                {leads.map((l) => (
+                  <li key={l.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-3">
+                    <PersonCell id={l.id} name={l.full_name} subtitle={[l.title, l.organization_name].filter(Boolean).join(", ")} />
+                    <span className="text-xs text-smoke">
+                      {l.last_contact ? t("admin.leads.lastContact", { date: formatDay(l.last_contact, locale) }) : t("admin.leads.never")}
+                    </span>
                   </li>
                 ))}
               </ul>
             </Sheet>
           ) : (
-            <EmptyState title={t("admin.recent.empty")} />
+            <EmptyState title={t("admin.leads.empty")} />
           )}
         </Panel>
 
-        <Panel title={t("admin.activity.title")}>
-          {activity.length ? (
-            <ol className="relative grid gap-4 border-l border-stone pl-5">
-              {activity.map((a) => (
-                <li key={a.id} className="relative">
-                  <span className="absolute top-1.5 -left-[25px] size-2.5 rounded-full bg-gold ring-4 ring-taupe" aria-hidden="true" />
-                  <p className="text-sm">
-                    <span className="font-medium">{t(`common.engagement.${a.kind}`)}</span>
-                    {": "}
-                    <Link to={`/app/people/${a.person_id}`} className="underline decoration-stone decoration-2 underline-offset-4 hover:decoration-gold">
-                      {a.person_name}
+        <Panel title={t("admin.capsNoPartner.title")}>
+          {capsWithoutPartner.length ? (
+            <Sheet className="p-2">
+              <ul className="divide-y divide-stone">
+                {capsWithoutPartner.map((c) => (
+                  <li key={c.id}>
+                    <Link
+                      to={`/app/caps/${c.id}`}
+                      className="flex items-center justify-between gap-3 rounded-xl px-3 py-3 hover:bg-taupe focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+                    >
+                      <span className="grid min-w-0">
+                        <span className="truncate font-medium">{c.title}</span>
+                        {(c.owner_name || c.term) && (
+                          <span className="truncate text-xs text-smoke">{[c.owner_name, c.term].filter(Boolean).join(" · ")}</span>
+                        )}
+                      </span>
+                      <CapStatusBadge status={c.status} />
                     </Link>
-                  </p>
-                  {a.notes && <p className="mt-0.5 line-clamp-2 text-sm text-smoke">{a.notes}</p>}
-                  <p className="mt-1 text-xs text-smoke">
-                    {formatDay(a.happened_on, locale)}
-                    {a.user_name && <> · {t("admin.activity.by", { name: a.user_name })}</>}
-                  </p>
-                </li>
-              ))}
-            </ol>
+                  </li>
+                ))}
+              </ul>
+            </Sheet>
           ) : (
-            <EmptyState title={t("admin.activity.empty")} />
+            <EmptyState title={t("admin.capsNoPartner.empty")} />
           )}
         </Panel>
+
+        <WaysToHelp byContribution={counts.byContribution} />
       </div>
+
+      <Panel title={t("admin.recent.title")}>
+        {recent.length ? (
+          <Sheet className="p-0">
+            {/* Wide screens: a table. Phones: stacked cards. */}
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-5">{t("admin.col.name")}</TableHead>
+                    <TableHead>{t("common.field.contributions")}</TableHead>
+                    <TableHead>{t("common.field.source")}</TableHead>
+                    <TableHead>{t("common.field.status")}</TableHead>
+                    <TableHead className="pr-5 text-right">{t("admin.col.added")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {recent.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="pl-5">
+                        <PersonCell id={p.id} name={p.full_name} subtitle={[p.title, p.organization_name].filter(Boolean).join(", ")} />
+                      </TableCell>
+                      <TableCell>
+                        <ContributionChips types={p.contribution_types} />
+                      </TableCell>
+                      <TableCell className="text-smoke">{t(`common.source.${p.source}`)}</TableCell>
+                      <TableCell>
+                        <StatusBadge status={p.status} />
+                      </TableCell>
+                      <TableCell className="pr-5 text-right whitespace-nowrap text-smoke">{formatDate(p.created_at, locale)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <ul className="divide-y divide-stone md:hidden">
+              {recent.map((p) => (
+                <li key={p.id} className="grid gap-2 p-4">
+                  <PersonCell id={p.id} name={p.full_name} subtitle={[p.title, p.organization_name].filter(Boolean).join(", ")} />
+                  <ContributionChips types={p.contribution_types} />
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-smoke">
+                    <StatusBadge status={p.status} />
+                    <span>{t(`common.source.${p.source}`)}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{formatDate(p.created_at, locale)}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Sheet>
+        ) : (
+          <EmptyState title={t("admin.recent.empty")} />
+        )}
+      </Panel>
     </div>
   );
 }

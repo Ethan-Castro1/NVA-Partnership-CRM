@@ -1,4 +1,4 @@
-/** All Community Action Projects, or just mine, as a grid of cards. */
+/** Current (or finished) Community Action Projects, all or just mine, as a grid of cards. */
 import { Link, useLoaderData } from "react-router";
 import { Plus } from "lucide-react";
 import type { Route } from "./+types/app.caps._index";
@@ -18,17 +18,32 @@ export const meta: Route.MetaFunction = ({ matches }) => {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
-  const mine = new URL(request.url).searchParams.get("show") === "mine";
-  const caps = await listCaps(mine ? { ownerId: user.id } : {});
-  return { caps, mine };
+  const params = new URL(request.url).searchParams;
+  const mine = params.get("show") === "mine";
+  const finished = params.get("state") === "finished";
+  const ownerId = mine ? user.id : undefined;
+  const caps = await listCaps(finished ? { ownerId, status: "complete" } : { ownerId, excludeComplete: true });
+  return { caps, mine, finished };
+}
+
+function capsUrl(mine: boolean, finished: boolean): string {
+  const params = new URLSearchParams();
+  if (mine) params.set("show", "mine");
+  if (finished) params.set("state", "finished");
+  const qs = params.toString();
+  return qs ? `/app/caps?${qs}` : "/app/caps";
 }
 
 export default function Caps() {
-  const { caps, mine } = useLoaderData<typeof loader>();
+  const { caps, mine, finished } = useLoaderData<typeof loader>();
   const { t } = useT();
-  const tabs = [
-    { to: "/app/caps", label: t("caps.list.all"), current: !mine },
-    { to: "/app/caps?show=mine", label: t("caps.list.mine"), current: mine },
+  const whose = [
+    { to: capsUrl(false, finished), label: t("caps.list.all"), current: !mine },
+    { to: capsUrl(true, finished), label: t("caps.list.mine"), current: mine },
+  ];
+  const state = [
+    { to: capsUrl(mine, false), label: t("caps.list.current"), current: !finished },
+    { to: capsUrl(mine, true), label: t("caps.list.finished"), current: finished },
   ];
 
   return (
@@ -47,24 +62,10 @@ export default function Caps() {
         }
       />
 
-      <nav aria-label={t("caps.list.tabsLabel")}>
-        <ul className="inline-flex rounded-full border border-stone bg-taupe p-1">
-          {tabs.map((tab) => (
-            <li key={tab.to}>
-              <Link
-                to={tab.to}
-                aria-current={tab.current ? "page" : undefined}
-                className={cn(
-                  "inline-flex h-8 items-center rounded-full px-4 text-sm transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
-                  tab.current ? "bg-canvas font-medium text-ink shadow-whisper" : "text-graphite hover:text-ink",
-                )}
-              >
-                {tab.label}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </nav>
+      <div className="flex flex-wrap gap-3">
+        <Segmented label={t("caps.list.tabsLabel")} tabs={whose} />
+        <Segmented label={t("caps.list.stateLabel")} tabs={state} />
+      </div>
 
       {caps.length ? (
         <ul className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
@@ -74,6 +75,8 @@ export default function Caps() {
             </li>
           ))}
         </ul>
+      ) : finished ? (
+        <EmptyState title={t("caps.list.emptyFinished")} />
       ) : (
         <EmptyState
           title={mine ? t("caps.list.emptyMine") : t("caps.list.empty")}
@@ -89,5 +92,28 @@ export default function Caps() {
         />
       )}
     </div>
+  );
+}
+
+function Segmented({ label, tabs }: { label: string; tabs: { to: string; label: string; current: boolean }[] }) {
+  return (
+    <nav aria-label={label}>
+      <ul className="inline-flex rounded-full border border-stone bg-taupe p-1">
+        {tabs.map((tab) => (
+          <li key={tab.to}>
+            <Link
+              to={tab.to}
+              aria-current={tab.current ? "page" : undefined}
+              className={cn(
+                "inline-flex h-8 items-center rounded-full px-4 text-sm transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+                tab.current ? "bg-canvas font-medium text-ink shadow-whisper" : "text-graphite hover:text-ink",
+              )}
+            >
+              {tab.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }

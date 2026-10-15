@@ -168,7 +168,7 @@ export default defineMessages(
     "field.password": "Password",
     "field.fundingFocus": "What they fund",
 
-    "ai.notConfigured": "AI answers need an OpenRouter API key (OPENROUTER_API_KEY). Search still works without it.",
+    "ai.notConfigured": "AI answers are turned off. Search still works.",
     "footer.privacy": "This tool holds information about adult partners and volunteers only. Never enter student information.",
   },
   {
@@ -187,7 +187,7 @@ export default defineMessages(
     "nav.connections": "Conexiones",
     "nav.caps": "CAPs",
     "nav.admin": "Administración",
-    "nav.adminOverview": "Pendientes",
+    "nav.adminOverview": "Por atender",
     "nav.intake": "Nuevas inscripciones",
     "nav.users": "Cuentas del personal",
     "nav.account": "Mi cuenta",
@@ -333,7 +333,7 @@ export default defineMessages(
     "field.password": "Contraseña",
     "field.fundingFocus": "Qué financian",
 
-    "ai.notConfigured": "Las respuestas con IA necesitan una clave de OpenRouter (OPENROUTER_API_KEY). La búsqueda funciona sin ella.",
+    "ai.notConfigured": "Las respuestas con IA están desactivadas. La búsqueda sigue funcionando.",
     "footer.privacy": "Esta herramienta solo guarda información de socios y voluntarios adultos. Nunca ingreses información de estudiantes.",
   },
 );

@@ -1,7 +1,7 @@
 /** My account: any signed-in staff member's name, language and password. */
 import { useEffect, useRef, useState } from "react";
-import { data, useFetcher, useLoaderData } from "react-router";
-import { KeyRound, Save } from "lucide-react";
+import { data, Link, useFetcher, useLoaderData } from "react-router";
+import { KeyRound, Plug, Save } from "lucide-react";
 import { z } from "zod";
 import type { Route } from "./+types/app.account";
 import { Field, PageHeader, Panel, PersonAvatar, Sheet } from "~/components/nva";
@@ -94,6 +94,14 @@ export default function Account() {
         <ProfileForm name={user.name} locale={user.locale} />
         <PasswordForm minLength={minLength} />
       </div>
+      <Panel title={t("account.connect.title")} className="h-fit">
+        <Button asChild variant="outline" size="sm">
+          <Link to="/app/connect">
+            <Plug aria-hidden="true" />
+            {t("account.connect.setUp")}
+          </Link>
+        </Button>
+      </Panel>
     </div>
   );
 }

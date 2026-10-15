@@ -157,14 +157,15 @@ export function ActivityTimeline({ engagements, isAdmin }: { engagements: Engage
   );
 }
 
-export function DeletePersonDialog({ name }: { name: string }) {
+/** Admin-only. Posts to the profile route's deletePerson intent, so `action` lets it live on the edit page. */
+export function DeletePersonDialog({ name, action }: { name: string; action?: string }) {
   const { t } = useT();
   const navigation = useNavigation();
   const busy = navigation.state === "submitting" && navigation.formData?.get("intent") === "deletePerson";
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="destructive">
+        <Button variant="ghost" className="text-rust-ink">
           <Trash2 aria-hidden="true" />
           {t("people.profile.deletePerson")}
         </Button>
@@ -174,7 +175,7 @@ export function DeletePersonDialog({ name }: { name: string }) {
           <DialogTitle className="text-lg">{t("people.profile.deleteTitle", { name })}</DialogTitle>
           <DialogDescription>{t("people.profile.deleteBody")}</DialogDescription>
         </DialogHeader>
-        <Form method="post">
+        <Form method="post" action={action}>
           <input type="hidden" name="intent" value="deletePerson" />
           <DialogFooter className="rounded-b-card">
             <DialogClose asChild>

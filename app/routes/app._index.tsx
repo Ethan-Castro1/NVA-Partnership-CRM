@@ -1,6 +1,6 @@
-/** The staff home: a greeting, the "Ask the village" box, village numbers, my CAPs and what's new. */
+/** The staff home: sign-ups to review, pipeline numbers, the people table, my CAPs and recent activity. */
 import { Link, useLoaderData } from "react-router";
-import { UserPlus } from "lucide-react";
+import { Plus, UserPlus } from "lucide-react";
 import type { Route } from "./+types/app._index";
 import { longToday } from "~/components/dashboard/format";
 import { MyCaps, RecentActivity, SignupsCallout, StatRow } from "~/components/dashboard/panels";
@@ -30,7 +30,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const [counts, caps, people, recentActivity] = await Promise.all([
     getCounts(),
-    listCaps({ ownerId: user.id }),
+    listCaps({ ownerId: user.id, excludeComplete: true }),
     // The table filters, sorts and pages in the browser; 1000 rows is plenty for one school.
     query<Omit<DashboardPerson, "updated_at"> & { updated_at: unknown }>(
       `SELECT p.id, p.full_name, p.title, o.name AS organization_name, p.email, p.contribution_types, p.skills,
@@ -68,13 +68,14 @@ export async function loader({ request }: Route.LoaderArgs) {
     today: longToday(locale),
     counts,
     myCaps,
+    myCapsCount: caps.length,
     people: people.map((p) => ({ ...p, updated_at: iso(p.updated_at) })) as DashboardPerson[],
     recentActivity,
   };
 }
 
 export default function Dashboard() {
-  const { firstName, isAdmin, today, counts, myCaps, people, recentActivity } = useLoaderData<typeof loader>();
+  const { firstName, isAdmin, today, counts, myCaps, myCapsCount, people, recentActivity } = useLoaderData<typeof loader>();
   const { t } = useT();
 
   return (
@@ -82,22 +83,36 @@ export default function Dashboard() {
       <PageHeader
         eyebrow={today}
         title={t("dashboard.greeting", { name: firstName })}
-        description={t("dashboard.subtitle")}
         actions={
-          isAdmin && (
-            <Button asChild variant="brand">
-              <Link to="/app/people/new">
-                <UserPlus aria-hidden="true" />
-                {t("people.new.title")}
+          <>
+            <Button asChild variant="outline">
+              <Link to="/app/caps/new">
+                <Plus aria-hidden="true" />
+                {t("caps.list.new")}
               </Link>
             </Button>
-          )
+            {isAdmin && (
+              <Button asChild variant="brand">
+                <Link to="/app/people/new">
+                  <UserPlus aria-hidden="true" />
+                  {t("people.new.title")}
+                </Link>
+              </Button>
+            )}
+          </>
         }
       />
 
       {isAdmin && counts.newSignups > 0 && <SignupsCallout count={counts.newSignups} />}
 
-      <StatRow people={counts.people} active={counts.active} leads={counts.leads} byContribution={counts.byContribution} />
+      <StatRow
+        people={counts.people}
+        leads={counts.leads}
+        active={counts.active}
+        isAdmin={isAdmin}
+        newSignups={counts.newSignups}
+        myCaps={myCapsCount}
+      />
 
       <PeopleDataTable data={people} />
 

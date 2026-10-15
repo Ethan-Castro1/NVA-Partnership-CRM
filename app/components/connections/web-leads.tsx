@@ -82,7 +82,7 @@ export function WebSearchForm({
             </SelectContent>
           </Select>
         </Field>
-        <Button type="submit" variant="default" className="h-10" disabled={disabled}>
+        <Button type="submit" variant="outline" className="h-10" disabled={disabled}>
           {busy ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Globe aria-hidden="true" />}
           {t("connections.web.submit")}
         </Button>

@@ -1,8 +1,8 @@
-/** One sign-up, shown in full, with the review actions. */
+/** One sign-up, shown in full. Decide at the top, then move on to the next one. */
 import { TopicList } from "~/components/caps/cap-bits";
-import { data, Link, useFetcher, useLoaderData } from "react-router";
+import { data, Link, redirect, useFetcher, useLoaderData, useSearchParams } from "react-router";
 import type { ReactNode } from "react";
-import { Archive, ArrowLeft, CheckCircle2, ExternalLink, Pencil, RotateCcw, UserRound } from "lucide-react";
+import { Archive, ArrowLeft, Check, CheckCircle2, ExternalLink, Pencil, RotateCcw, UserRound } from "lucide-react";
 import { z } from "zod";
 import type { Route } from "./+types/app.admin.intake.$submissionId";
 import { IntakeStatusBadge, formatDate, formatDateTime } from "~/components/admin/format";
@@ -18,10 +18,8 @@ import {
   TagList,
 } from "~/components/nva";
 import { Button } from "~/components/ui/button";
-import { Checkbox } from "~/components/ui/checkbox";
-import { Label } from "~/components/ui/label";
 import { makeT, useT } from "~/i18n";
-import { getIntakeSubmission, setIntakeStatus, type IntakeDetail, type MatchedPerson } from "~/lib/admin.server";
+import { getIntakeSubmission, nextNewIntake, setIntakeStatus, type IntakeDetail, type MatchedPerson } from "~/lib/admin.server";
 import { requireAdmin } from "~/lib/auth.server";
 
 export const meta: Route.MetaFunction = ({ matches, data: loaderData }) => {
@@ -51,12 +49,23 @@ export async function action({ request, params }: Route.ActionArgs) {
     activatePerson: parsed.data.activate === "on",
   });
   if (!found) return data({ ok: false as const, error: "admin.error.signupNotFound" as const }, { status: 404 });
+  // Reviewing or archiving is only offered on new sign-ups: go straight to the next one.
+  if (parsed.data.intent !== "new") {
+    const next = await nextNewIntake(params.submissionId);
+    return redirect(next ? `/app/admin/intake/${next}?done=1` : "/app/admin/intake?done=1");
+  }
   return { ok: true as const, done: parsed.data.intent };
 }
 
 export default function IntakeDetailPage() {
   const { submission: s } = useLoaderData<typeof loader>();
   const { t, locale } = useT();
+  const [searchParams] = useSearchParams();
+  const fetcher = useFetcher<typeof action>();
+  const busy = fetcher.state !== "idle";
+  const pending = busy ? fetcher.formData : undefined;
+  const result = fetcher.state === "idle" ? fetcher.data : undefined;
+  const canActivate = !!s.person && (s.person.status === "new" || s.person.status === "lead");
   const p = s.payload;
 
   return (
@@ -76,9 +85,81 @@ export default function IntakeDetailPage() {
             <IntakeStatusBadge status={s.status} />
             <span>{t("admin.detail.submittedOn", { date: formatDateTime(s.submitted_at, locale) })}</span>
             <span>{t("admin.detail.formLanguage", { language: t(s.locale === "es" ? "common.lang.es" : "common.lang.en") })}</span>
+            {s.reviewed_at && (
+              <span>
+                {s.reviewed_by_name
+                  ? t("admin.detail.reviewedBy", { name: s.reviewed_by_name, date: formatDate(s.reviewed_at, locale) })
+                  : t("admin.detail.reviewedOn", { date: formatDate(s.reviewed_at, locale) })}
+              </span>
+            )}
           </span>
         }
+        actions={
+          s.status === "new" ? (
+            <>
+              {canActivate && (
+                <fetcher.Form method="post">
+                  <input type="hidden" name="intent" value="reviewed" />
+                  <input type="hidden" name="activate" value="on" />
+                  <Button type="submit" variant="brand" disabled={busy}>
+                    <CheckCircle2 aria-hidden="true" />
+                    {pending?.get("activate") ? t("common.state.saving") : t("admin.detail.accept")}
+                  </Button>
+                </fetcher.Form>
+              )}
+              <fetcher.Form method="post">
+                <input type="hidden" name="intent" value="reviewed" />
+                <Button type="submit" variant={canActivate ? "outline" : "brand"} disabled={busy}>
+                  <Check aria-hidden="true" />
+                  {pending?.get("intent") === "reviewed" && !pending.get("activate") ? t("common.state.saving") : t("admin.detail.markReviewed")}
+                </Button>
+              </fetcher.Form>
+              <fetcher.Form method="post">
+                <input type="hidden" name="intent" value="archived" />
+                <Button type="submit" variant="ghost" disabled={busy}>
+                  <Archive aria-hidden="true" />
+                  {pending?.get("intent") === "archived" ? t("common.state.saving") : t("admin.detail.archive")}
+                </Button>
+              </fetcher.Form>
+            </>
+          ) : (
+            <>
+              <fetcher.Form method="post">
+                <input type="hidden" name="intent" value="new" />
+                <Button type="submit" variant="ghost" disabled={busy}>
+                  <RotateCcw aria-hidden="true" />
+                  {pending?.get("intent") === "new" ? t("common.state.saving") : t("admin.detail.moveToNew")}
+                </Button>
+              </fetcher.Form>
+              {s.status === "reviewed" && (
+                <fetcher.Form method="post">
+                  <input type="hidden" name="intent" value="archived" />
+                  <Button type="submit" variant="ghost" disabled={busy}>
+                    <Archive aria-hidden="true" />
+                    {pending?.get("intent") === "archived" ? t("common.state.saving") : t("admin.detail.archive")}
+                  </Button>
+                </fetcher.Form>
+              )}
+            </>
+          )
+        }
       />
+
+      {searchParams.get("done") === "1" && !result && (
+        <p role="status" className="rounded-xl bg-sage-soft px-3.5 py-2.5 text-sm text-sage-ink">
+          {t("admin.detail.doneNext")}
+        </p>
+      )}
+      {result?.ok && (
+        <p role="status" className="rounded-xl bg-sage-soft px-3.5 py-2.5 text-sm text-sage-ink">
+          {t(`admin.detail.done.${result.done}`)}
+        </p>
+      )}
+      {result && !result.ok && (
+        <p role="alert" className="rounded-xl bg-rust-soft px-3.5 py-2.5 text-sm text-rust-ink">
+          {t(result.error)}
+        </p>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-6">
@@ -163,8 +244,6 @@ export default function IntakeDetailPage() {
         </div>
 
         <div className="min-w-0 space-y-6">
-          <ReviewPanel submission={s} />
-
           <Panel title={t("admin.detail.profile")}>
             {s.person ? (
               <Sheet className="grid gap-4">
@@ -222,82 +301,6 @@ export default function IntakeDetailPage() {
         </div>
       </div>
     </div>
-  );
-}
-
-function ReviewPanel({ submission: s }: { submission: IntakeDetail }) {
-  const { t, locale } = useT();
-  const fetcher = useFetcher<typeof action>();
-  const busy = fetcher.state !== "idle";
-  const pendingIntent = busy ? fetcher.formData?.get("intent") : null;
-  const result = fetcher.state === "idle" ? fetcher.data : undefined;
-  const canActivate = !!s.person && (s.person.status === "new" || s.person.status === "lead");
-
-  return (
-    <Panel title={t("admin.detail.review")}>
-      <Sheet className="grid gap-4">
-        <p className="flex flex-wrap items-center gap-2 text-sm text-graphite">
-          <IntakeStatusBadge status={s.status} />
-          {s.reviewed_at && (
-            <span className="text-smoke">
-              {s.reviewed_by_name
-                ? t("admin.detail.reviewedBy", { name: s.reviewed_by_name, date: formatDate(s.reviewed_at, locale) })
-                : t("admin.detail.reviewedOn", { date: formatDate(s.reviewed_at, locale) })}
-            </span>
-          )}
-        </p>
-
-        {s.status !== "reviewed" && (
-          <fetcher.Form method="post" className="grid gap-3">
-            <input type="hidden" name="intent" value="reviewed" />
-            {canActivate && (
-              <div className="flex items-start gap-2.5">
-                <Checkbox id="activate" name="activate" defaultChecked className="mt-0.5" />
-                <Label htmlFor="activate" className="text-sm leading-snug font-normal text-graphite">
-                  {t("admin.detail.activate", { name: s.person!.full_name })}
-                </Label>
-              </div>
-            )}
-            <Button type="submit" variant="brand" disabled={busy} className="w-full sm:w-fit">
-              <CheckCircle2 aria-hidden="true" />
-              {pendingIntent === "reviewed" ? t("common.state.saving") : t("admin.detail.markReviewed")}
-            </Button>
-          </fetcher.Form>
-        )}
-
-        <div className="flex flex-wrap gap-2">
-          {s.status !== "archived" && (
-            <fetcher.Form method="post">
-              <input type="hidden" name="intent" value="archived" />
-              <Button type="submit" variant="outline" size="sm" disabled={busy}>
-                <Archive aria-hidden="true" />
-                {pendingIntent === "archived" ? t("common.state.saving") : t("admin.detail.archive")}
-              </Button>
-            </fetcher.Form>
-          )}
-          {s.status !== "new" && (
-            <fetcher.Form method="post">
-              <input type="hidden" name="intent" value="new" />
-              <Button type="submit" variant="ghost" size="sm" disabled={busy}>
-                <RotateCcw aria-hidden="true" />
-                {pendingIntent === "new" ? t("common.state.saving") : t("admin.detail.moveToNew")}
-              </Button>
-            </fetcher.Form>
-          )}
-        </div>
-
-        {result?.ok && (
-          <p role="status" className="rounded-xl bg-sage-soft px-3.5 py-2.5 text-sm text-sage-ink">
-            {t(`admin.detail.done.${result.done}`)}
-          </p>
-        )}
-        {result && !result.ok && (
-          <p role="alert" className="rounded-xl bg-rust-soft px-3.5 py-2.5 text-sm text-rust-ink">
-            {t(result.error)}
-          </p>
-        )}
-      </Sheet>
-    </Panel>
   );
 }
 

@@ -1,8 +1,8 @@
 /**
  * The three small forms on a profile that teachers and admins can use: log
- * activity, add a connection, add to a CAP. Each posts through its own fetcher
- * so the rest of the page stays put; on success the form clears and a short
- * confirmation is announced.
+ * activity, add a connection, add to a CAP. Each sits beside the list it adds
+ * to and posts through its own fetcher so the rest of the page stays put; on
+ * success the form clears and a short confirmation is announced.
  */
 import { useEffect, useState, type ReactNode } from "react";
 import { useFetcher } from "react-router";
@@ -10,7 +10,6 @@ import { CheckCircle2 } from "lucide-react";
 import { Field } from "~/components/nva";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { Textarea } from "~/components/ui/textarea";
 import { useT, type MessageKey } from "~/i18n";
 import { ENGAGEMENT_KINDS, RELATIONSHIP_KINDS } from "~/lib/constants";
@@ -61,7 +60,7 @@ function FormError({ errors }: { errors: Partial<Record<string, MessageKey>> }) 
   ) : null;
 }
 
-function LogActivityForm({ caps, today }: { caps: SelectOption[]; today: string }) {
+export function LogActivityForm({ caps, today, defaultCap }: { caps: SelectOption[]; today: string; defaultCap?: string }) {
   const { t } = useT();
   const { fetcher, formKey, saved, errors, busy } = useRecordFetcher("logEngagement");
   const err = (key: string) => (errors[key] ? t(errors[key]!) : undefined);
@@ -87,7 +86,7 @@ function LogActivityForm({ caps, today }: { caps: SelectOption[]; today: string 
           <NamedSelect
             id="log-cap"
             name="cap_id"
-            defaultValue="none"
+            defaultValue={defaultCap ?? "none"}
             options={[{ value: "none", label: t("people.profile.logNoCap") }, ...caps]}
           />
         </Field>
@@ -113,7 +112,7 @@ function LogActivityForm({ caps, today }: { caps: SelectOption[]; today: string 
   );
 }
 
-function ConnectionForm({ people, personName }: { people: SelectOption[]; personName: string }) {
+export function ConnectionForm({ people, personName }: { people: SelectOption[]; personName: string }) {
   const { t } = useT();
   const { fetcher, formKey, saved, errors, busy } = useRecordFetcher("addConnection");
   const err = (key: string) => (errors[key] ? t(errors[key]!) : undefined);
@@ -121,7 +120,7 @@ function ConnectionForm({ people, personName }: { people: SelectOption[]; person
   return (
     <fetcher.Form key={formKey} method="post" className="grid gap-4">
       <input type="hidden" name="intent" value="addConnection" />
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4">
         <Field label={t("people.profile.connPerson")} htmlFor="conn-person" error={err("related_person_id")}>
           <NamedSelect
             id="conn-person"
@@ -161,7 +160,7 @@ function ConnectionForm({ people, personName }: { people: SelectOption[]; person
   );
 }
 
-function CapForm({ caps }: { caps: SelectOption[] }) {
+export function CapForm({ caps }: { caps: SelectOption[] }) {
   const { t } = useT();
   const { fetcher, formKey, saved, errors, busy } = useRecordFetcher("addToCap");
   const err = (key: string) => (errors[key] ? t(errors[key]!) : undefined);
@@ -169,7 +168,7 @@ function CapForm({ caps }: { caps: SelectOption[] }) {
   return (
     <fetcher.Form key={formKey} method="post" className="grid gap-4">
       <input type="hidden" name="intent" value="addToCap" />
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4">
         <Field label={t("people.profile.capLabel")} htmlFor="cap-id" error={err("cap_id")}>
           <NamedSelect
             id="cap-id"
@@ -192,43 +191,5 @@ function CapForm({ caps }: { caps: SelectOption[] }) {
         <SavedNote show={saved}>{t("people.profile.capSaved")}</SavedNote>
       </div>
     </fetcher.Form>
-  );
-}
-
-export function RecordForms({
-  personName,
-  people,
-  caps,
-  today,
-}: {
-  personName: string;
-  people: SelectOption[];
-  caps: SelectOption[];
-  today: string;
-}) {
-  const { t } = useT();
-  return (
-    <Tabs defaultValue="activity" className="gap-4">
-      <TabsList className="h-auto w-full flex-wrap justify-start gap-1 rounded-2xl bg-canvas p-1 sm:w-fit">
-        <TabsTrigger value="activity" className="h-8 flex-none rounded-full px-3 data-active:bg-gold-soft">
-          {t("people.profile.tabActivity")}
-        </TabsTrigger>
-        <TabsTrigger value="connection" className="h-8 flex-none rounded-full px-3 data-active:bg-gold-soft">
-          {t("people.profile.tabConnection")}
-        </TabsTrigger>
-        <TabsTrigger value="cap" className="h-8 flex-none rounded-full px-3 data-active:bg-gold-soft">
-          {t("people.profile.tabCap")}
-        </TabsTrigger>
-      </TabsList>
-      <TabsContent value="activity">
-        <LogActivityForm caps={caps} today={today} />
-      </TabsContent>
-      <TabsContent value="connection">
-        <ConnectionForm people={people} personName={personName} />
-      </TabsContent>
-      <TabsContent value="cap">
-        <CapForm caps={caps} />
-      </TabsContent>
-    </Tabs>
   );
 }

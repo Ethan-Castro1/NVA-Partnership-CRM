@@ -1,6 +1,6 @@
 /** The people directory: search and filter everyone in the village. */
 import { Link, useLoaderData, useLocation, useNavigation } from "react-router";
-import { ChevronLeft, ChevronRight, Download, Plus, Sparkles } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Plus } from "lucide-react";
 import type { Route } from "./+types/app.people._index";
 import { DirectoryFilters } from "~/components/people/directory-filters";
 import { PeopleResults } from "~/components/people/people-results";
@@ -64,16 +64,11 @@ export default function PeopleDirectory() {
   return (
     <div className="grid gap-6">
       <PageHeader
-        eyebrow={t("people.dir.eyebrow")}
         title={t("people.title")}
         description={
-          <>
-            <span className="font-medium text-graphite">
-              {directorySize === 1 ? t("people.dir.countOne") : t("people.dir.countMany", { count: directorySize })}
-            </span>
-            {". "}
-            {t("people.dir.description")}
-          </>
+          <span className="font-medium text-graphite">
+            {directorySize === 1 ? t("people.dir.countOne") : t("people.dir.countMany", { count: directorySize })}
+          </span>
         }
         actions={
           isAdmin && (
@@ -87,7 +82,7 @@ export default function PeopleDirectory() {
               <Button asChild variant="brand">
                 <Link to="/app/people/new">
                   <Plus aria-hidden="true" />
-                  {t("people.dir.addPerson")}
+                  {t("people.new.title")}
                 </Link>
               </Button>
             </>
@@ -99,7 +94,7 @@ export default function PeopleDirectory() {
 
       <section aria-labelledby="people-results" aria-busy={loading} className={cn("grid gap-3 transition-opacity", loading && "opacity-60")}>
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 id="people-results" className="text-section">
+          <h2 id="people-results" className="sr-only">
             {t("people.dir.resultsHeading")}
           </h2>
           {total > 0 && (
@@ -118,12 +113,19 @@ export default function PeopleDirectory() {
             body={directorySize ? t("people.dir.emptyBody") : t("people.dir.emptyNoPeople")}
             action={
               directorySize ? (
-                <Button asChild variant="brand">
-                  <Link to={params.q ? `/app/ask?q=${encodeURIComponent(params.q)}` : "/app/ask"}>
-                    <Sparkles aria-hidden="true" />
-                    {t("people.dir.askAssistant")}
-                  </Link>
-                </Button>
+                <div className="flex flex-wrap justify-center gap-2">
+                  <Button asChild variant="outline">
+                    <Link to="/app/people">{t("people.dir.clear")}</Link>
+                  </Button>
+                  {isAdmin && (
+                    <Button asChild variant="outline">
+                      <Link to="/app/people/new">
+                        <Plus aria-hidden="true" />
+                        {t("people.new.title")}
+                      </Link>
+                    </Button>
+                  )}
+                </div>
               ) : undefined
             }
           />

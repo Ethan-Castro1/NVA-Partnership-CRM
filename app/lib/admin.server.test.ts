@@ -3,15 +3,18 @@ import {
   accountChangeProblem,
   changeStaffAccount,
   csvCell,
+  getAdminOverview,
   getIntakeSubmission,
   matchPerson,
+  nextNewIntake,
   readPayload,
   setIntakeStatus,
   toCsv,
 } from "./admin.server";
 import { createUser } from "./auth.server";
+import { addCapPartner, createCap } from "./caps.server";
 import { newId, query, queryOne } from "./db.server";
-import { addRelationship, createPerson } from "./people.server";
+import { addRelationship, createPerson, logEngagement } from "./people.server";
 
 describe("CSV export escaping", () => {
   it("quotes commas, quotes and line breaks", () => {
@@ -168,5 +171,51 @@ describe("sign-up review", () => {
     );
     expect(back).toEqual({ status: "new", reviewed_by: null });
     expect(await setIntakeStatus("missing", "archived", reviewer)).toBe(false);
+  });
+});
+
+describe("next sign-up to review", () => {
+  it("picks the newest other sign-up that is still new", async () => {
+    const reviewer = await createUser({ email: "next@test.local", name: "Next", password: "x".repeat(12), role: "admin" });
+    const [a, b] = [newId(), newId()];
+    await query(
+      `INSERT INTO intake_submissions (id, payload, locale, submitted_at) VALUES
+         ($1, '{}', 'en', '2099-01-02T00:00:00Z'), ($2, '{}', 'en', '2099-01-01T00:00:00Z')`,
+      [a, b],
+    );
+    expect(await nextNewIntake(a)).toBe(b);
+    expect(await nextNewIntake(b)).toBe(a);
+    await setIntakeStatus(a, "archived", reviewer);
+    expect(await nextNewIntake(b)).not.toBe(a);
+  });
+});
+
+describe("needs attention", () => {
+  it("lists leads with their last contact and CAPs without a confirmed partner", async () => {
+    const owner = await createUser({ email: "owner@test.local", name: "Owner", password: "x".repeat(12), role: "teacher" });
+    const quiet = await createPerson({ full_name: "Quiet Lead", status: "lead" }, null);
+    const called = await createPerson({ full_name: "Called Lead", status: "lead" }, null);
+    await logEngagement({ personId: called, kind: "call", happenedOn: "2026-09-01" }, owner);
+    const partner = await createPerson({ full_name: "Confirmed Partner", status: "active" }, null);
+
+    const open = await createCap({ title: "Open CAP", status: "planning" }, owner);
+    const suggestedOnly = await createCap({ title: "Suggested only", status: "active" }, owner);
+    const staffed = await createCap({ title: "Staffed CAP", status: "active" }, owner);
+    const done = await createCap({ title: "Done CAP", status: "complete" }, owner);
+    await addCapPartner({ capId: suggestedOnly, personId: partner }, owner);
+    await addCapPartner({ capId: staffed, personId: partner, status: "confirmed" }, owner);
+
+    const { leads, capsWithoutPartner } = await getAdminOverview();
+    const byId = new Map(leads.map((l) => [l.id, l]));
+    expect(byId.get(quiet)?.last_contact).toBeNull();
+    expect(byId.get(called)?.last_contact).toBe("2026-09-01");
+    expect(byId.has(partner)).toBe(false);
+
+    const capIds = capsWithoutPartner.map((c) => c.id);
+    expect(capIds).toContain(open);
+    expect(capIds).toContain(suggestedOnly);
+    expect(capIds).not.toContain(staffed);
+    expect(capIds).not.toContain(done);
+    expect(capsWithoutPartner.find((c) => c.id === open)?.owner_name).toBe("Owner");
   });
 });

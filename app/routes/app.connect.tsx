@@ -4,8 +4,8 @@
  * once; afterwards only its name and dates are listed, and it can be turned off.
  */
 import { useState } from "react";
-import { data, useFetcher, useLoaderData } from "react-router";
-import { Check, Copy, Plug, Trash2 } from "lucide-react";
+import { data, Link, useFetcher, useLoaderData } from "react-router";
+import { ArrowLeft, Check, Copy, Plug, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Route } from "./+types/app.connect";
 import { Field, PageHeader, Panel, Sheet } from "~/components/nva";
@@ -53,6 +53,12 @@ export default function Connect() {
 
   return (
     <div className="grid max-w-3xl gap-6">
+      <Button variant="ghost" size="sm" asChild className="-ml-2 justify-self-start">
+        <Link to="/app/account">
+          <ArrowLeft aria-hidden="true" />
+          {t("common.nav.account")}
+        </Link>
+      </Button>
       <PageHeader title={t("account.connect.title")} description={t("account.connect.description")} />
 
       {created ? (
@@ -82,7 +88,7 @@ export default function Connect() {
             <Field label={t("account.connect.labelField")} htmlFor="connect-label" className="flex-1">
               <Input id="connect-label" name="label" maxLength={80} placeholder={t("account.connect.labelPlaceholder")} className="bg-canvas" />
             </Field>
-            <Button type="submit" variant="brand" disabled={fetcher.state !== "idle"}>
+            <Button type="submit" disabled={fetcher.state !== "idle"}>
               <Plug aria-hidden="true" />
               {t("account.connect.create")}
             </Button>

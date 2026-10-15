@@ -1,23 +1,31 @@
 /**
  * One person's profile: who they are, how NVA can reach them, their
  * connections, CAPs and activity. Teachers and admins can add to the record;
- * only admins can edit, delete or remove things (checked in the action too).
+ * only admins can edit, change status or remove things (checked in the action
+ * too). Deleting a person happens from the edit page but posts here.
  */
 import { TopicList } from "~/components/caps/cap-bits";
-import type { ReactNode } from "react";
-import { Link, data, redirect, useLoaderData } from "react-router";
-import { ArrowLeft, FileText, Globe, Mail, Pencil, Phone } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Link, data, redirect, useFetcher, useLoaderData, useSearchParams } from "react-router";
+import { ArrowLeft, Globe, Mail, NotebookPen, Pencil, Phone, Plus } from "lucide-react";
 import type { Route } from "./+types/app.people.$personId";
 import { schoolToday } from "~/components/people/format";
 import { IntroPaths } from "~/components/people/intro-paths";
-import { ActivityTimeline, CapsList, ConnectionsList, DeletePersonDialog } from "~/components/people/profile-sections";
-import { RecordForms, type ProfileActionData } from "~/components/people/record-forms";
+import { ActivityTimeline, CapsList, ConnectionsList } from "~/components/people/profile-sections";
+import {
+  CapForm,
+  ConnectionForm,
+  LogActivityForm,
+  type ProfileActionData,
+} from "~/components/people/record-forms";
 import { ContributionChip, PageHeader, Panel, PersonAvatar, Sheet, StatusBadge, TagList } from "~/components/nva";
 import { Button } from "~/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "~/components/ui/collapsible";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { makeT, useT, type MessageKey } from "~/i18n";
 import { requireAdmin, requireUser } from "~/lib/auth.server";
 import { addCapPartner, getCap, getCapsForPerson, listCaps } from "~/lib/caps.server";
-import { CONTRIBUTION_TYPES } from "~/lib/constants";
+import { CONTRIBUTION_TYPES, PERSON_STATUSES, type PersonStatus } from "~/lib/constants";
 import { query, queryOne } from "~/lib/db.server";
 import {
   parseCapPartnerForm,
@@ -35,6 +43,7 @@ import {
   getRelationships,
   logEngagement,
   removeRelationship,
+  updatePerson,
 } from "~/lib/people.server";
 
 export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
@@ -154,6 +163,14 @@ export async function action({ request, params }: Route.ActionArgs) {
       return done(intent);
     }
 
+    case "setStatus": {
+      await requireAdmin(request);
+      const status = String(form.get("status") ?? "");
+      if (!(PERSON_STATUSES as readonly string[]).includes(status)) return fail(intent, { _form: "people.error.unknownAction" });
+      await updatePerson(personId, { status: status as PersonStatus });
+      return done(intent);
+    }
+
     case "deletePerson": {
       await requireAdmin(request);
       await deletePerson(personId);
@@ -174,16 +191,83 @@ function DetailBlock({ label, children }: { label: string; children: ReactNode }
   );
 }
 
+/** Admins change status right in the header; it saves as soon as it changes. */
+function StatusSelect({ status }: { status: PersonStatus }) {
+  const { t } = useT();
+  const fetcher = useFetcher<ProfileActionData>();
+  const current = (fetcher.formData?.get("status") as PersonStatus | null) ?? status;
+  const result = fetcher.state === "idle" && fetcher.data?.intent === "setStatus" ? fetcher.data : null;
+  // "Status updated" shows for a moment after each save.
+  const [showSaved, setShowSaved] = useState(false);
+  useEffect(() => {
+    if (!result?.ok) return;
+    setShowSaved(true);
+    const timer = window.setTimeout(() => setShowSaved(false), 2000);
+    return () => window.clearTimeout(timer);
+  }, [result]);
+  const error = result && !result.ok ? (result.errors._form ?? "common.state.error") : null;
+  return (
+    <span className="inline-flex items-center gap-2">
+      <Select value={current} onValueChange={(value) => fetcher.submit({ intent: "setStatus", status: value }, { method: "post" })}>
+        <SelectTrigger size="sm" aria-label={t("common.field.status")} className="rounded-full bg-canvas text-xs">
+          {/* Explicit text so the status shows before the page's JavaScript loads. */}
+          <SelectValue>{t(`common.status.${current}`)}</SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {PERSON_STATUSES.map((value) => (
+            <SelectItem key={value} value={value}>
+              {t(`common.status.${value}`)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <span role="status" className="text-xs text-sage-ink">
+        {showSaved ? t("people.profile.statusSaved") : ""}
+      </span>
+      {error && (
+        <span role="alert" className="text-xs text-rust-ink">
+          {t(error)}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** A quiet "+ Add ..." toggle that reveals a form under a list. */
+function AddToggle({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <Collapsible className="mt-4 grid gap-3">
+      <CollapsibleTrigger asChild>
+        <Button variant="ghost" size="sm" className="-ml-2 w-fit">
+          <Plus aria-hidden="true" />
+          {label}
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>{children}</CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 export default function PersonProfile() {
   const { person, paths, relationships, caps, engagements, capOptions, peopleOptions, intakeId, isAdmin, today } =
     useLoaderData<typeof loader>();
   const { t } = useT();
-  const notAdded = <p className="text-sm text-smoke">{t("people.profile.notAdded")}</p>;
+  const [searchParams] = useSearchParams();
+  const logCap = searchParams.get("logCap");
+  const defaultCap = logCap && capOptions.some((c) => c.value === logCap) ? logCap : undefined;
   const ways = CONTRIBUTION_TYPES.filter((type) => person.contribution_types.includes(type));
   const subtitle =
     person.title && person.organization_name
       ? t("people.profile.atOrg", { title: person.title, org: person.organization_name })
       : (person.title ?? person.organization_name);
+  const sourceLine = t("people.profile.sourceLine", { source: t(`common.source.${person.source}`) });
+  const hasDetails =
+    person.skills.length > 0 ||
+    person.cap_topics.length > 0 ||
+    !!person.funding_focus ||
+    !!person.availability ||
+    !!person.bio ||
+    !!person.notes;
 
   return (
     <div className="grid gap-6">
@@ -207,178 +291,207 @@ export default function PersonProfile() {
           <span className="grid gap-2.5">
             {subtitle && <span className="text-graphite">{subtitle}</span>}
             <span className="flex flex-wrap items-center gap-1.5">
-              <StatusBadge status={person.status} />
+              {isAdmin ? <StatusSelect status={person.status} /> : <StatusBadge status={person.status} />}
               {person.affiliations.map((a) => (
                 <span key={a} className="inline-flex h-5 items-center rounded-full border border-stone bg-canvas px-2 text-[0.7rem] text-graphite">
                   {t(`common.affiliation.${a}`)}
                 </span>
               ))}
-              <span className="text-xs text-smoke">
-                {t("people.profile.sourceLine", { source: t(`common.source.${person.source}`) })}
-              </span>
+              {isAdmin && intakeId ? (
+                <Link
+                  to={`/app/admin/intake/${intakeId}`}
+                  className="text-xs text-smoke underline decoration-stone underline-offset-4 hover:text-ink hover:decoration-gold"
+                >
+                  {sourceLine}
+                </Link>
+              ) : (
+                <span className="text-xs text-smoke">{sourceLine}</span>
+              )}
             </span>
           </span>
         }
         actions={
-          isAdmin && (
-            <>
-              {intakeId && (
-                <Button asChild variant="ghost">
-                  <Link to={`/app/admin/intake/${intakeId}`}>
-                    <FileText aria-hidden="true" />
-                    {t("people.profile.intakeLink")}
-                  </Link>
-                </Button>
-              )}
+          <>
+            {person.email && (
+              <Button asChild variant="outline">
+                <a href={`mailto:${person.email}`}>
+                  <Mail aria-hidden="true" />
+                  {t("people.profile.actionEmail")}
+                </a>
+              </Button>
+            )}
+            {person.phone && (
+              <Button asChild variant="outline">
+                <a href={`tel:${person.phone.replace(/[^\d+]/g, "")}`}>
+                  <Phone aria-hidden="true" />
+                  {t("people.profile.actionCall")}
+                </a>
+              </Button>
+            )}
+            <Button asChild variant="brand">
+              <a href="#log-activity">
+                <NotebookPen aria-hidden="true" />
+                {t("people.profile.logSubmit")}
+              </a>
+            </Button>
+            {isAdmin && (
               <Button asChild variant="outline">
                 <Link to={`/app/people/${person.id}/edit`}>
                   <Pencil aria-hidden="true" />
                   {t("common.action.edit")}
                 </Link>
               </Button>
-              <DeletePersonDialog name={person.full_name} />
-            </>
-          )
+            )}
+          </>
         }
       />
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <Panel title={t("people.profile.details")} bodyClassName="grid gap-5">
-          <DetailBlock label={t("common.field.contributions")}>
-            {ways.length ? (
-              <div className="flex flex-wrap gap-1.5">
-                {ways.map((type) => (
-                  <ContributionChip key={type} type={type} long className="h-7 text-sm" />
-                ))}
-              </div>
-            ) : (
-              notAdded
-            )}
-          </DetailBlock>
-          <div className="grid gap-5 sm:grid-cols-2">
-            <DetailBlock label={t("common.field.skills")}>
-              {person.skills.length ? <TagList tags={person.skills} /> : notAdded}
-            </DetailBlock>
-            <DetailBlock label={t("common.field.capTopics")}>
-              {person.cap_topics.length ? <TopicList topics={person.cap_topics} /> : notAdded}
-            </DetailBlock>
-          </div>
-          {(person.funding_focus || person.contribution_types.includes("funder")) && (
-            <DetailBlock label={t("common.field.fundingFocus")}>
-              {person.funding_focus ? (
-                <p className="text-sm leading-relaxed whitespace-pre-line text-graphite">{person.funding_focus}</p>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+        <div className="grid min-w-0 gap-6">
+          <Panel title={t("people.profile.details")} bodyClassName="grid gap-5">
+            <DetailBlock label={t("common.field.contributions")}>
+              {ways.length ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {ways.map((type) => (
+                    <ContributionChip key={type} type={type} long className="h-7 text-sm" />
+                  ))}
+                </div>
               ) : (
-                notAdded
+                <p className="text-sm text-smoke">{t("people.profile.notAdded")}</p>
               )}
             </DetailBlock>
-          )}
-          <DetailBlock label={t("common.field.availability")}>
-            {person.availability ? <p className="text-sm text-graphite">{person.availability}</p> : notAdded}
-          </DetailBlock>
-          <DetailBlock label={t("common.field.bio")}>
-            {person.bio ? <p className="text-sm leading-relaxed whitespace-pre-line text-graphite">{person.bio}</p> : notAdded}
-          </DetailBlock>
-          <DetailBlock label={t("common.field.notes")}>
-            {person.notes ? (
-              <div className="rounded-xl bg-canvas p-3">
-                <p className="text-sm leading-relaxed whitespace-pre-line text-graphite">{person.notes}</p>
-                <p className="mt-2 text-xs text-smoke">{t("people.profile.notesHint")}</p>
+            {!hasDetails && <p className="text-sm text-smoke">{t("people.profile.noDetails")}</p>}
+            {(person.skills.length > 0 || person.cap_topics.length > 0) && (
+              <div className="grid gap-5 sm:grid-cols-2">
+                {person.skills.length > 0 && (
+                  <DetailBlock label={t("common.field.skills")}>
+                    <TagList tags={person.skills} />
+                  </DetailBlock>
+                )}
+                {person.cap_topics.length > 0 && (
+                  <DetailBlock label={t("common.field.capTopics")}>
+                    <TopicList topics={person.cap_topics} />
+                  </DetailBlock>
+                )}
               </div>
-            ) : (
-              notAdded
             )}
-          </DetailBlock>
-        </Panel>
+            {person.funding_focus && (
+              <DetailBlock label={t("common.field.fundingFocus")}>
+                <p className="text-sm leading-relaxed whitespace-pre-line text-graphite">{person.funding_focus}</p>
+              </DetailBlock>
+            )}
+            {person.availability && (
+              <DetailBlock label={t("common.field.availability")}>
+                <p className="text-sm text-graphite">{person.availability}</p>
+              </DetailBlock>
+            )}
+            {person.bio && (
+              <DetailBlock label={t("common.field.bio")}>
+                <p className="text-sm leading-relaxed whitespace-pre-line text-graphite">{person.bio}</p>
+              </DetailBlock>
+            )}
+            {person.notes && (
+              <DetailBlock label={t("common.field.notes")}>
+                <p className="rounded-xl bg-canvas p-3 text-sm leading-relaxed whitespace-pre-line text-graphite">{person.notes}</p>
+              </DetailBlock>
+            )}
+          </Panel>
 
-        <Sheet className="grid h-fit gap-4">
-          <h2 className="text-section">{t("people.profile.contact")}</h2>
-          {person.email || person.phone ? (
-            <ul className="grid gap-2 text-sm">
-              {person.email && (
-                <li>
-                  <a
-                    href={`mailto:${person.email}`}
-                    aria-label={t("people.profile.emailThem", { name: person.full_name })}
-                    className="flex items-center gap-2 break-all text-ink underline decoration-stone underline-offset-4 hover:decoration-gold"
-                  >
-                    <Mail className="size-4 shrink-0 text-smoke" aria-hidden="true" />
-                    {person.email}
-                  </a>
-                </li>
-              )}
-              {person.phone && (
-                <li>
-                  <a
-                    href={`tel:${person.phone.replace(/[^\d+]/g, "")}`}
-                    aria-label={t("people.profile.callThem", { name: person.full_name })}
-                    className="flex items-center gap-2 text-ink underline decoration-stone underline-offset-4 hover:decoration-gold"
-                  >
-                    <Phone className="size-4 shrink-0 text-smoke" aria-hidden="true" />
-                    {person.phone}
-                  </a>
-                </li>
-              )}
-            </ul>
-          ) : (
-            <p className="text-sm text-smoke">{t("people.profile.noContact")}</p>
-          )}
-          <dl className="grid gap-3 border-t border-stone pt-4 text-sm">
-            <div>
-              <dt className="text-xs text-smoke">{t("common.field.language")}</dt>
-              <dd className="text-graphite">{t(`common.language.${person.preferred_language}`)}</dd>
+          <Panel title={t("people.profile.activityTitle")} bodyClassName="grid gap-6">
+            <div id="log-activity" className="scroll-mt-24 rounded-xl bg-canvas p-4">
+              <LogActivityForm caps={capOptions} today={today} defaultCap={defaultCap} />
             </div>
-            {person.organization_name && (
-              <div>
-                <dt className="text-xs text-smoke">{t("common.field.organization")}</dt>
-                <dd className="text-graphite">
-                  {person.organization_name}
-                  {person.organization_kind && (
-                    <span className="text-smoke"> ({t(`common.orgKind.${person.organization_kind}`)})</span>
-                  )}
-                </dd>
-              </div>
+            <ActivityTimeline engagements={engagements} isAdmin={isAdmin} />
+          </Panel>
+        </div>
+
+        <div className="grid min-w-0 gap-6">
+          <Sheet className="grid h-fit gap-4">
+            <h2 className="text-section">{t("people.profile.contact")}</h2>
+            {person.email || person.phone ? (
+              <ul className="grid gap-2 text-sm">
+                {person.email && (
+                  <li>
+                    <a
+                      href={`mailto:${person.email}`}
+                      aria-label={t("people.profile.emailThem", { name: person.full_name })}
+                      className="flex items-center gap-2 break-all text-ink underline decoration-stone underline-offset-4 hover:decoration-gold"
+                    >
+                      <Mail className="size-4 shrink-0 text-smoke" aria-hidden="true" />
+                      {person.email}
+                    </a>
+                  </li>
+                )}
+                {person.phone && (
+                  <li>
+                    <a
+                      href={`tel:${person.phone.replace(/[^\d+]/g, "")}`}
+                      aria-label={t("people.profile.callThem", { name: person.full_name })}
+                      className="flex items-center gap-2 text-ink underline decoration-stone underline-offset-4 hover:decoration-gold"
+                    >
+                      <Phone className="size-4 shrink-0 text-smoke" aria-hidden="true" />
+                      {person.phone}
+                    </a>
+                  </li>
+                )}
+              </ul>
+            ) : (
+              <p className="text-sm text-smoke">{t("people.profile.noContact")}</p>
             )}
-            {person.organization_website && /^https?:\/\//i.test(person.organization_website) && (
+            <dl className="grid gap-3 border-t border-stone pt-4 text-sm">
               <div>
-                <dt className="text-xs text-smoke">{t("common.field.website")}</dt>
-                <dd>
-                  <a
-                    href={person.organization_website}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="inline-flex items-center gap-1.5 break-all text-ink underline decoration-stone underline-offset-4 hover:decoration-gold"
-                  >
-                    <Globe className="size-4 shrink-0 text-smoke" aria-hidden="true" />
-                    {person.organization_website.replace(/^https?:\/\//i, "")}
-                  </a>
-                </dd>
+                <dt className="text-xs text-smoke">{t("common.field.language")}</dt>
+                <dd className="text-graphite">{t(`common.language.${person.preferred_language}`)}</dd>
               </div>
-            )}
-          </dl>
-        </Sheet>
-      </div>
+              {person.organization_name && (
+                <div>
+                  <dt className="text-xs text-smoke">{t("common.field.organization")}</dt>
+                  <dd className="text-graphite">
+                    {person.organization_name}
+                    {person.organization_kind && (
+                      <span className="text-smoke"> ({t(`common.orgKind.${person.organization_kind}`)})</span>
+                    )}
+                  </dd>
+                </div>
+              )}
+              {person.organization_website && /^https?:\/\//i.test(person.organization_website) && (
+                <div>
+                  <dt className="text-xs text-smoke">{t("common.field.website")}</dt>
+                  <dd>
+                    <a
+                      href={person.organization_website}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="inline-flex items-center gap-1.5 break-all text-ink underline decoration-stone underline-offset-4 hover:decoration-gold"
+                    >
+                      <Globe className="size-4 shrink-0 text-smoke" aria-hidden="true" />
+                      {person.organization_website.replace(/^https?:\/\//i, "")}
+                    </a>
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </Sheet>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Panel title={t("people.profile.reachTitle")}>
-          <p className="-mt-2 mb-4 text-sm text-smoke">{t("people.profile.reachDescription")}</p>
-          <IntroPaths paths={paths} person={person} />
-        </Panel>
-        <Panel title={t("people.profile.connectionsTitle")}>
-          <ConnectionsList relationships={relationships} isAdmin={isAdmin} />
-        </Panel>
-      </div>
+          <Panel title={t("people.profile.capsTitle")}>
+            <CapsList caps={caps} />
+            <AddToggle label={t("people.profile.addToCap")}>
+              <CapForm caps={capOptions} />
+            </AddToggle>
+          </Panel>
 
-      <Panel title={t("people.profile.recordTitle")}>
-        <RecordForms personName={person.full_name} people={peopleOptions} caps={capOptions} today={today} />
-      </Panel>
+          <Panel title={t("people.profile.connectionsTitle")}>
+            <ConnectionsList relationships={relationships} isAdmin={isAdmin} />
+            <AddToggle label={t("people.profile.addConnection")}>
+              <ConnectionForm people={peopleOptions} personName={person.full_name} />
+            </AddToggle>
+          </Panel>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <Panel title={t("people.profile.activityTitle")}>
-          <ActivityTimeline engagements={engagements} isAdmin={isAdmin} />
-        </Panel>
-        <Panel title={t("people.profile.capsTitle")} className="h-fit">
-          <CapsList caps={caps} />
-        </Panel>
+          <Panel title={t("people.profile.reachTitle")}>
+            <p className="-mt-2 mb-4 text-sm text-smoke">{t("people.profile.reachDescription")}</p>
+            <IntroPaths paths={paths} person={person} />
+          </Panel>
+        </div>
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 /** Sign-ups from the public form, in New / Reviewed / Archived tabs. */
-import { Link, useLoaderData } from "react-router";
+import { Link, useLoaderData, useSearchParams } from "react-router";
 import { ChevronRight } from "lucide-react";
 import type { Route } from "./+types/app.admin.intake._index";
 import { formatDate } from "~/components/admin/format";
@@ -28,10 +28,17 @@ export async function loader({ request }: Route.LoaderArgs) {
 export default function IntakeList() {
   const { status, rows, counts } = useLoaderData<typeof loader>();
   const { t } = useT();
+  const [searchParams] = useSearchParams();
 
   return (
     <div className="space-y-6">
       <PageHeader eyebrow={t("common.nav.adminSection")} title={t("admin.intake.title")} description={t("admin.intake.description")} />
+
+      {searchParams.get("done") === "1" && (
+        <p role="status" className="rounded-xl bg-sage-soft px-3.5 py-2.5 text-sm text-sage-ink">
+          {t("common.state.saved")}
+        </p>
+      )}
 
       <nav aria-label={t("admin.intake.tabsLabel")}>
         <ul className="inline-flex flex-wrap gap-1 rounded-full bg-taupe p-1">

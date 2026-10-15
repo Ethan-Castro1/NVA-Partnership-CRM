@@ -1,7 +1,7 @@
 /** Community Action Projects and the partners attached to them. */
 import { z } from "zod";
 import { CAP_BLOCKS, CAP_LABELS, type CapBlock, type CapLabel } from "./cap-catalog";
-import { CAP_PARTNER_STATUSES, CAP_STATUSES, normalizeTags, type CapPartnerStatus, type CapStatus } from "./constants";
+import { CAP_PARTNER_STATUSES, CAP_STATUSES, normalizeTags, type CapPartnerStatus, type CapStatus, type EngagementKind } from "./constants";
 import { newId, query, queryOne } from "./db.server";
 import { findConnectorsForNeed, type IntroPath, type MiniPerson, type SearchHit } from "./people.server";
 
@@ -40,7 +40,9 @@ const CAP_COLUMNS = `
   (SELECT count(*)::int FROM cap_partners cp WHERE cp.cap_id = c.id AND cp.status <> 'declined') AS partner_count,
   (SELECT count(*)::int FROM cap_partners cp WHERE cp.cap_id = c.id AND cp.status = 'confirmed') AS confirmed_count`;
 
-export async function listCaps(filter: { ownerId?: string; status?: CapStatus } = {}): Promise<CapSummary[]> {
+export async function listCaps(
+  filter: { ownerId?: string; status?: CapStatus; excludeComplete?: boolean } = {},
+): Promise<CapSummary[]> {
   const where: string[] = [];
   const params: unknown[] = [];
   if (filter.ownerId) {
@@ -51,6 +53,7 @@ export async function listCaps(filter: { ownerId?: string; status?: CapStatus } 
     params.push(filter.status);
     where.push(`c.status = $${params.length}`);
   }
+  if (filter.excludeComplete) where.push("c.status <> 'complete'");
   return query<CapSummary>(
     `SELECT ${CAP_COLUMNS} FROM caps c LEFT JOIN users u ON u.id = c.owner_id
       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
@@ -155,6 +158,37 @@ export async function getCapPartners(capId: string): Promise<CapPartnerView[]> {
     note: r.note,
     created_at: r.created_at,
   }));
+}
+
+/** People who are not yet partners on this CAP, for the "Add partner" picker. */
+export async function getCapPartnerOptions(capId: string): Promise<{ id: string; full_name: string; organization_name: string | null }[]> {
+  return query(
+    `SELECT p.id, p.full_name, o.name AS organization_name
+       FROM people p LEFT JOIN organizations o ON o.id = p.organization_id
+      WHERE p.id NOT IN (SELECT person_id FROM cap_partners WHERE cap_id = $1)
+      ORDER BY p.full_name LIMIT 2000`,
+    [capId],
+  );
+}
+
+export type CapActivity = {
+  id: string;
+  kind: EngagementKind;
+  happened_on: string;
+  notes: string | null;
+  person_id: string;
+  person_name: string;
+  user_name: string | null;
+};
+
+/** The latest calls, visits and notes logged against this CAP. */
+export async function getCapActivity(capId: string): Promise<CapActivity[]> {
+  return query<CapActivity>(
+    `SELECT e.id, e.kind, e.happened_on::text AS happened_on, e.notes, p.id AS person_id, p.full_name AS person_name, u.name AS user_name
+       FROM engagements e JOIN people p ON p.id = e.person_id LEFT JOIN users u ON u.id = e.user_id
+      WHERE e.cap_id = $1 ORDER BY e.happened_on DESC, e.created_at DESC LIMIT 20`,
+    [capId],
+  );
 }
 
 /** The CAPs one person is attached to (for their profile). */

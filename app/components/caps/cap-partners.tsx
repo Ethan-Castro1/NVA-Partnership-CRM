@@ -2,9 +2,9 @@
  * A CAP's partners (inline-editable rows) and the suggested partners to add.
  * Both use fetchers so a change saves in place without leaving the page.
  */
-import { useRef } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Link, useFetcher } from "react-router";
-import { Check, CircleDashed, Loader2, Plus, Route as RouteIcon, Trash2 } from "lucide-react";
+import { Check, CircleDashed, Loader2, Mail, NotebookPen, Plus, Route as RouteIcon, Trash2 } from "lucide-react";
 import { ContributionChips, PersonAvatar, StatusBadge, TagList } from "~/components/nva";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -25,34 +25,83 @@ const PARTNER_STATUS_DOT: Record<CapPartnerStatus, string> = {
 
 type FetcherResult = { ok: boolean; error?: string };
 
-export function PartnerRow({ partner }: { partner: CapPartnerView }) {
+const ICON_LINK =
+  "inline-flex size-7 items-center justify-center rounded-full text-graphite transition-colors hover:bg-stone hover:text-ink focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none [&_svg]:size-3.5";
+
+export function PartnerRow({ partner, capId }: { partner: CapPartnerView; capId: string }) {
   const { t } = useT();
   const save = useFetcher<FetcherResult>();
   const remove = useFetcher<FetcherResult>();
   const formRef = useRef<HTMLFormElement>(null);
+  const lastSaved = useRef({ role: partner.role ?? "", note: partner.note ?? "" });
+  const [showSaved, setShowSaved] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const id = partner.person.id;
+  const name = partner.person.full_name;
   const saving = save.state !== "idle";
   const saved = save.state === "idle" && save.data?.ok;
   const removing = remove.state !== "idle";
   const subtitle = [partner.person.title, partner.person.organization_name].filter(Boolean).join(", ");
   const status = (save.formData?.get("status") as CapPartnerStatus | null) ?? partner.status;
 
+  useEffect(() => {
+    if (!saved) return;
+    setShowSaved(true);
+    const timer = setTimeout(() => setShowSaved(false), 2000);
+    return () => clearTimeout(timer);
+  }, [saved, save.data]);
+
+  /** Role and note save when the field loses focus, only if the text changed. */
+  // Enter saves too (the row has no Save button; fields save when you leave them).
+  const blurOnEnter = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      event.currentTarget.blur();
+    }
+  };
+
+  function saveField(field: "role" | "note", value: string) {
+    if (!formRef.current || value === lastSaved.current[field]) return;
+    lastSaved.current[field] = value;
+    save.submit(formRef.current, { method: "post" });
+  }
+
   return (
     <li className={cn("grid gap-3 py-4 md:grid-cols-[minmax(0,1.3fr)_minmax(0,2.7fr)] md:items-start md:gap-5", removing && "opacity-50")}>
       <div className="flex min-w-0 items-start gap-3">
-        <PersonAvatar name={partner.person.full_name} />
+        <PersonAvatar name={name} />
         <div className="min-w-0">
           <Link
             to={`/app/people/${id}`}
             className="font-medium underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
           >
-            {partner.person.full_name}
+            {name}
           </Link>
           {subtitle && <p className="truncate text-xs text-smoke">{subtitle}</p>}
           <p className="mt-1 flex items-center gap-1.5 text-xs text-graphite">
             <span className={cn("size-2 rounded-full", PARTNER_STATUS_DOT[status])} aria-hidden="true" />
             {t(`common.capPartnerStatus.${status}`)}
           </p>
+          <div className="mt-1 -ml-1.5 flex items-center gap-0.5">
+            {partner.person.email && (
+              <a
+                href={`mailto:${partner.person.email}`}
+                className={ICON_LINK}
+                aria-label={t("caps.partners.emailFor", { name })}
+                title={t("caps.partners.emailFor", { name })}
+              >
+                <Mail aria-hidden="true" />
+              </a>
+            )}
+            <Link
+              to={`/app/people/${id}?logCap=${encodeURIComponent(capId)}#log-activity`}
+              className={ICON_LINK}
+              aria-label={t("caps.partners.logFor", { name })}
+              title={t("caps.partners.logFor", { name })}
+            >
+              <NotebookPen aria-hidden="true" />
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -97,6 +146,8 @@ export function PartnerRow({ partner }: { partner: CapPartnerView }) {
             defaultValue={partner.role ?? ""}
             placeholder={t("caps.partners.rolePlaceholder")}
             className="h-9"
+            onBlur={(event) => saveField("role", event.currentTarget.value)}
+            onKeyDown={blurOnEnter}
           />
         </div>
         <div className="grid gap-1">
@@ -110,31 +161,46 @@ export function PartnerRow({ partner }: { partner: CapPartnerView }) {
             defaultValue={partner.note ?? ""}
             placeholder={t("caps.partners.notePlaceholder")}
             className="h-9"
+            onBlur={(event) => saveField("note", event.currentTarget.value)}
+            onKeyDown={blurOnEnter}
           />
         </div>
-        <div className="flex items-center gap-1">
-          <Button
-            type="submit"
-            variant="outline"
-            size="sm"
-            className="h-9"
-            disabled={saving}
-            aria-label={t("caps.partners.saveFor", { name: partner.person.full_name })}
-          >
-            {saving ? <Loader2 className="animate-spin" aria-hidden="true" /> : saved ? <Check aria-hidden="true" /> : null}
-            {saved && !saving ? t("caps.partners.saved") : t("caps.partners.save")}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            disabled={removing}
-            onClick={() => remove.submit({ intent: "remove-partner", personId: id }, { method: "post" })}
-            aria-label={t("caps.partners.removeFor", { name: partner.person.full_name })}
-            title={t("caps.partners.remove")}
-          >
-            <Trash2 aria-hidden="true" />
-          </Button>
+        <div className="flex h-9 items-center justify-end gap-1">
+          {saving ? (
+            <Loader2 className="size-4 animate-spin text-smoke" aria-hidden="true" />
+          ) : showSaved ? (
+            <span className="inline-flex items-center gap-1 text-xs text-sage-ink" aria-hidden="true">
+              <Check className="size-3.5" />
+              {t("caps.partners.saved")}
+            </span>
+          ) : null}
+          {confirming ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-rust-ink"
+              autoFocus
+              disabled={removing}
+              onBlur={() => setConfirming(false)}
+              onClick={() => remove.submit({ intent: "remove-partner", personId: id }, { method: "post" })}
+              aria-label={t("caps.partners.removeFor", { name })}
+            >
+              {t("caps.partners.confirmRemove")}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              disabled={removing}
+              onClick={() => setConfirming(true)}
+              aria-label={t("caps.partners.removeFor", { name })}
+              title={t("caps.partners.remove")}
+            >
+              <Trash2 aria-hidden="true" />
+            </Button>
+          )}
         </div>
       </save.Form>
       <p className="sr-only" aria-live="polite">

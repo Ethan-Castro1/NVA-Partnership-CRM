@@ -56,3 +56,15 @@ describe("web lead queries", () => {
     expect(buildLeadQueries("sewing", null)[0].query).toMatch(/^professional profiles of/);
   });
 });
+
+describe("people in an answer", () => {
+  it("finds linked people first, then people named without a link", async () => {
+    const { createPerson } = await import("~/lib/people.server");
+    const { mentionedPeople } = await import("./assistant.server");
+    const a = await createPerson({ full_name: "Zora Linkton" }, null);
+    const b = await createPerson({ full_name: "Yusuf Plainname" }, null);
+    const c = await createPerson({ full_name: "Nobody Mentioned" }, null);
+    const answer = `Ask **Yusuf Plainname**, or [Zora Linkton](/app/people/${a}).`;
+    expect(await mentionedPeople(answer, new Set([a, b, c]))).toEqual([a, b]);
+  });
+});

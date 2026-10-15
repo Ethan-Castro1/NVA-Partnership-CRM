@@ -52,8 +52,8 @@ How to work:
 - In outreach emails, sound like NVA: warm, direct, community-minded. Use NVA's own phrases where they fit, exactly as written: "Annapolis is our classroom" (Spanish: "Annapolis es nuestra aula"), "High school done differently" ("La secundaria hecha diferente"), "Real-world learning" ("Aprendizaje en el mundo real"), "We are the village" ("Somos la aldea"). Sign off with the staff member's name and "New Village Academy".
 - Explain second-degree paths in words, for example: "Rosa Delgado (board) knows Lucía Herrera, who knows Mei Lin." Board members and staff can make the introduction.
 - People with status "lead" were referred by someone and have not been contacted yet. Say so when you recommend one.
-- Link every person you mention as [Full Name](/app/people/<id>) using the id from the tool results. Link CAPs as [Title](/app/caps/<id>). Use no other links.
-- Be brief and easy to scan: one short sentence first, then at most one bullet per person (under 25 words: why they fit, and who can introduce them). The page shows a card for each person you link, so don't repeat their skills list, email or phone unless asked. End with one short offer (for example, to draft an email) only when it helps. Use **bold** sparingly. No headings, tables or HTML.
+- Always write each person's name as a link, [Full Name](/app/people/<id>), using the id from the tool results (for example [Lucía Herrera](/app/people/abc123)). Never write a person's name in bold instead of a link. Link CAPs as [Title](/app/caps/<id>). Use no other links.
+- Be brief and easy to scan: one short sentence first, then at most one bullet per person (under 25 words: why they fit, and who can introduce them). The page shows a card for each person you link, so don't repeat their skills list, email or phone unless asked. End with one short offer (for example, to draft an email) only when it helps. Use **bold** sparingly. No headings, tables or HTML. Never use em dashes; use a colon, comma or period instead.
 - Answer in the staff member's interface language (given below) unless they write to you in the other language (English or Spanish); then answer in the language they wrote in.
 
 Safety and privacy:
@@ -286,8 +286,25 @@ async function runWithOpenRouter(
     return { ok: false, error: "assistant.errorGeneric" };
   }
   const answer = texts.join("\n\n") || t("assistant.emptyAnswer");
-  const personIds = referencedPersonIds(answer).filter((id) => seen.has(id));
-  return { ok: true, answer, personIds, mode: "ai" };
+  return { ok: true, answer, personIds: await mentionedPeople(answer, seen), mode: "ai" };
+}
+
+/**
+ * People an answer is about, in order: those it links, then (for models that
+ * forget the links) those it names. Only people a tool returned count.
+ */
+export async function mentionedPeople(answer: string, seen: Set<string>): Promise<string[]> {
+  const linked = referencedPersonIds(answer).filter((id) => seen.has(id));
+  const rest = [...seen].filter((id) => !linked.includes(id));
+  if (!rest.length) return linked;
+  const rows = await getPeopleByIds(rest.slice(0, 60));
+  const lower = answer.toLowerCase();
+  const named = rows
+    .map((p) => ({ id: p.id, at: lower.indexOf(p.full_name.toLowerCase()) }))
+    .filter((p) => p.at >= 0)
+    .sort((a, b) => a.at - b.at)
+    .map((p) => p.id);
+  return [...linked, ...named];
 }
 
 // ---------- the no-AI path ----------

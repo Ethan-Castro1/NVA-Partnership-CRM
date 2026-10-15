@@ -86,21 +86,41 @@ const schema = z.object({
 });
 ```
 
-## Getting Started
+## Project: NVA Village Partners
 
-If the user hasn't given clear guidance on what to build, ask clarifying questions before writing code. Good questions to consider:
+A bilingual (English/Spanish) partnership CRM for New Village Academy, Annapolis.
+Community members sign up at `/join` to teach a skills lesson, volunteer in a class,
+host an internship or partner on a Community Action Project (CAP). Staff sign in at
+`/login` (email + password; admins create accounts) to search people, ask the AI
+assistant, find second-degree connections, and manage CAPs.
 
-- What problem is this solving? Who will use it?
-- What are the 2-3 core features or screens needed?
-- Any specific UI style preferences (minimal, playful, dashboard-like)?
-- Will this need any add-ons like charts, AI integration, or markdown rendering?
+- **Data:** `app/lib/schema.server.ts` (runs at startup, idempotent; add columns with
+  `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`). Adults only: never store student data.
+- **Database:** `DATABASE_URL` (Postgres) when deployed; embedded PGlite in `.data/pglite`
+  locally. Only one process can open PGlite: stop `npm run dev` before `npm run seed`.
+- **Core logic:** `app/lib/people.server.ts` (search, profiles, relationships, intro paths),
+  `app/lib/caps.server.ts`, `app/lib/auth.server.ts`, `app/lib/ai/*` (Claude, `claude-opus-5-5`).
+- **Bilingual:** every string goes through `useT()`/`t("namespace.key")`; one dictionary
+  file per feature in `app/i18n/`, Spanish must have every English key (TypeScript checks).
+  No em dashes in user-facing copy.
+- **Design:** NVA brand kit over a calm editorial style. Tokens in `app/app.css`; shared
+  pieces in `app/components/nva.tsx`; shadcn/ui in `app/components/ui` (sidebar-07 shell).
+  Gold `#faad00` is the one spark (never as text colour; use `text-gold-ink`); the four
+  ways to help are rust, blue, purple and sage dots (`CONTRIBUTION_COLOR`).
 
-**Approach:**
-- Get something visible quickly - a basic layout with placeholder content
-- Build one feature at a time, validating direction as you go
-- Prefer simple implementations over clever abstractions
+### Local development
 
-Once the project has clear direction, feel free to delete or replace this section with project-specific context.
+```bash
+npm install
+npm run seed        # fictional demo data + logins (admin@nva.test / teacher@nva.test, password village-demo-2026)
+npm run dev         # http://localhost:5173
+npm test            # vitest, in-memory database
+npm run typecheck
+```
+
+Start the server with `ANTHROPIC_API_KEY` set (`ANTHROPIC_API_KEY=sk-ant-... npm run dev`) to turn on the AI
+assistant and web search for leads. Without it, search and the connection finder still work and the assistant
+falls back to plain search.
 
 ## Project Context
 

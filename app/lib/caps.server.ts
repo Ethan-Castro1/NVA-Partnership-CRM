@@ -1,7 +1,8 @@
 /** Community Action Projects and the partners attached to them. */
-import { normalizeTags, type CapPartnerStatus, type CapStatus } from "./constants";
+import { z } from "zod";
+import { CAP_PARTNER_STATUSES, CAP_STATUSES, normalizeTags, type CapPartnerStatus, type CapStatus } from "./constants";
 import { newId, query, queryOne } from "./db.server";
-import type { MiniPerson } from "./people.server";
+import { findConnectorsForNeed, type IntroPath, type MiniPerson, type SearchHit } from "./people.server";
 
 export type CapSummary = {
   id: string;
@@ -172,4 +173,126 @@ export async function updateCapPartner(
 
 export async function removeCapPartner(capId: string, personId: string): Promise<void> {
   await query("DELETE FROM cap_partners WHERE cap_id = $1 AND person_id = $2", [capId, personId]);
+}
+
+// ---------- permissions and suggestions ----------
+
+/** Only a CAP's owner or an admin may edit or delete it. Check on the server, not just in the UI. */
+export function canEditCap(cap: Pick<CapSummary, "owner_id">, user: { id: string; role: string }): boolean {
+  return user.role === "admin" || (!!cap.owner_id && cap.owner_id === user.id);
+}
+
+/** The words that describe what a CAP needs: its needs text plus its topics. */
+export function capSearchText(cap: Pick<CapSummary, "needs" | "topics">): string {
+  return [cap.needs ?? "", ...cap.topics].map((part) => part.trim()).filter(Boolean).join(", ");
+}
+
+export type CapSuggestion = { person: SearchHit; direct: boolean; paths: IntroPath[]; matched: string[] };
+
+/**
+ * People who could partner on a CAP: first those whose CAP topics overlap and
+ * who match its needs or topics, then (to fill up) anyone matching the words
+ * alone. People already on the CAP are left out.
+ */
+export async function getCapSuggestions(
+  cap: Pick<CapSummary, "id" | "needs" | "topics">,
+  limit = 8,
+): Promise<CapSuggestion[]> {
+  const q = capSearchText(cap);
+  if (!q) return [];
+  const taken = new Set(
+    (await query<{ person_id: string }>("SELECT person_id FROM cap_partners WHERE cap_id = $1", [cap.id])).map((r) => r.person_id),
+  );
+  const want = limit + taken.size;
+  const byTopic = cap.topics.length ? await findConnectorsForNeed({ q, capTopics: cap.topics, limit: want }) : [];
+  const byWords = byTopic.length - byTopic.filter((r) => taken.has(r.person.id)).length >= limit
+    ? []
+    : await findConnectorsForNeed({ q, limit: want });
+
+  const topics = new Set(normalizeTags(cap.topics));
+  const out: CapSuggestion[] = [];
+  for (const result of [...byTopic, ...byWords]) {
+    if (taken.has(result.person.id)) continue;
+    taken.add(result.person.id);
+    const matched = [...new Set([...result.person.matched, ...result.person.cap_topics.filter((t) => topics.has(t))])];
+    out.push({ ...result, matched });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+// ---------- form parsing ----------
+
+export const MAX_CAP_TOPICS = 12;
+
+export type CapFormField = "title" | "driving_question" | "description" | "topics" | "needs" | "term";
+export type CapFormErrorKey = "caps.form.error.titleRequired" | "caps.form.error.tooLong" | "caps.form.error.tooManyTopics";
+
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max, "caps.form.error.tooLong")
+    .transform((v) => v || null);
+
+const capFormSchema = z.object({
+  title: z.string().trim().min(1, "caps.form.error.titleRequired").max(160, "caps.form.error.tooLong"),
+  driving_question: optionalText(400),
+  description: optionalText(4000),
+  needs: optionalText(1000),
+  term: optionalText(60),
+  topics: z.array(z.string()).max(MAX_CAP_TOPICS, "caps.form.error.tooManyTopics"),
+  // Unknown values fall back to 'planning' rather than failing the whole form.
+  status: z.enum(CAP_STATUSES).catch("planning"),
+});
+
+/**
+ * Reads the CAP form: chosen topic pills (`topics`) plus typed ones
+ * (`topics_other`, comma-separated), lengths capped. Errors are i18n keys.
+ */
+export function parseCapForm(
+  form: FormData,
+): { ok: true; value: CapInput & { status: CapStatus } } | { ok: false; errors: Partial<Record<CapFormField, CapFormErrorKey>> } {
+  const str = (name: string) => {
+    const v = form.get(name);
+    return typeof v === "string" ? v : "";
+  };
+  const topics = normalizeTags([
+    ...form.getAll("topics").filter((v): v is string => typeof v === "string"),
+    ...str("topics_other").split(/[,;\n]/),
+  ]);
+  const parsed = capFormSchema.safeParse({
+    title: str("title"),
+    driving_question: str("driving_question"),
+    description: str("description"),
+    needs: str("needs"),
+    term: str("term"),
+    topics,
+    status: str("status"),
+  });
+  if (parsed.success) return { ok: true, value: parsed.data };
+  const errors: Partial<Record<CapFormField, CapFormErrorKey>> = {};
+  for (const issue of parsed.error.issues) {
+    const field = issue.path[0] as CapFormField;
+    errors[field] ??= issue.message as CapFormErrorKey;
+  }
+  return { ok: false, errors };
+}
+
+const partnerUpdateSchema = z.object({
+  personId: z.string().min(1).max(100),
+  status: z.enum(CAP_PARTNER_STATUSES),
+  role: z.string().trim().transform((v) => v.slice(0, 120)).catch(""),
+  note: z.string().trim().transform((v) => v.slice(0, 500)).catch(""),
+});
+
+/** Reads an inline partner update; null when the input is unusable. */
+export function parsePartnerUpdate(form: FormData): z.infer<typeof partnerUpdateSchema> | null {
+  const parsed = partnerUpdateSchema.safeParse({
+    personId: form.get("personId"),
+    status: form.get("status"),
+    role: form.get("role") ?? "",
+    note: form.get("note") ?? "",
+  });
+  return parsed.success ? parsed.data : null;
 }

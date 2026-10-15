@@ -1,6 +1,6 @@
-# Build and deploy to the template school's tenants in Duplo (see terraform/).
-#   dev  (exdtemplate): every push to main.
-#   prod (exttemplate): only when run by hand (Actions → Deploy → Run workflow),
+# Build and deploy to New Village Academy's (nva) tenants in Duplo (see terraform/).
+#   dev  (exdnva): every push to main.
+#   prod (extnva): only when run by hand (Actions → Deploy → Run workflow),
 #                     and only from main.
 # The tenants (GitHub environments) and ECR repo (named after this repo) come from
 # duplocloud-infrastructure modules/exttenant.
@@ -13,8 +13,8 @@ on:
       environment:
         description: Where to deploy
         type: choice
-        default: exdtemplate
-        options: [exdtemplate, exttemplate]
+        default: exdnva
+        options: [exdnva, extnva]
       cmd:
         description: plan to preview, apply to deploy
         type: choice
@@ -23,7 +23,7 @@ on:
 
 # One deploy per tenant at a time; never interrupt a Terraform apply.
 concurrency:
-  group: deploy-${{ inputs.environment || 'exdtemplate' }}
+  group: deploy-${{ inputs.environment || 'exdnva' }}
   cancel-in-progress: false
 
 jobs:
@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Prod deploys only from main
-        if: inputs.environment == 'exttemplate' && github.ref != 'refs/heads/main'
+        if: inputs.environment == 'extnva' && github.ref != 'refs/heads/main'
         run: |
           echo "::error::Deploy to prod from main (this run is on ${GITHUB_REF_NAME})."
           exit 1
@@ -40,7 +40,7 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-      - run: npm ci && npm run typecheck
+      - run: npm ci && npm run typecheck && npm test
 
   image:
     needs: ci
@@ -50,7 +50,7 @@ jobs:
     env:
       DUPLO_HOST: ${{ vars.DUPLO_HOST }}
       DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
-      DUPLO_TENANT: ${{ inputs.environment || 'exdtemplate' }}
+      DUPLO_TENANT: ${{ inputs.environment || 'exdnva' }}
     steps:
       - uses: actions/checkout@v4
       - uses: duplocloud/actions@main
@@ -70,7 +70,7 @@ jobs:
     with:
       extapp: true # terraform/ uses components/extapp; also sets its state key
       cmd: ${{ inputs.cmd || 'apply' }}
-      environment: ${{ inputs.environment || 'exdtemplate' }}
+      environment: ${{ inputs.environment || 'exdnva' }}
       tag: ${{ needs.image.outputs.tag }}
 
   # No curl check here: Bot Control (the WAF) blocks scripted requests. The

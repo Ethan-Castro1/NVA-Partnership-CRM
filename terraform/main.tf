@@ -1,9 +1,17 @@
 module "extapp" {
   source       = "git::https://github.com/playlab-education/duplocloud-infrastructure.git//components/extapp?ref=labschools-domain"
-  name         = "example" # its key under the school's apps in schools.tfvars
+  name         = "partners" # its key under the nva school's apps in schools.tfvars
   tag          = var.tag
   port         = 3000
   health_check = "/healthcheck"
+
+  # Secret settings: names only. Set the values in Duplo (Secrets Manager,
+  # duploservices-<tenant>-partners-secrets), then restart the service.
+  secrets = [
+    "ANTHROPIC_API_KEY",        # AI assistant and web search for leads
+    "BOOTSTRAP_ADMIN_EMAIL",    # first admin account, created once at startup
+    "BOOTSTRAP_ADMIN_PASSWORD", # (ignored once an admin exists; clear after)
+  ]
 }
 
 # Set by CI (TF_VAR_tag): the image tag to deploy.

@@ -8,5 +8,7 @@ export default defineConfig({
     // Each test file gets its own in-memory database; never touches .data/.
     env: { PGLITE_DIR: "memory://", DATABASE_URL: "", ANTHROPIC_API_KEY: "" },
     pool: "forks",
+    // Password hashing (scrypt) is deliberately slow; give cold starts room.
+    testTimeout: 20000,
   },
 });

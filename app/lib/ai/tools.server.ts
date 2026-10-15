@@ -1,0 +1,366 @@
+/**
+ * The assistant's tools: JSON-schema definitions Claude sees, and executors
+ * that validate the input with zod and call the same CRM functions the pages
+ * use. Results are compact JSON (long text truncated) so a few tool calls fit
+ * comfortably in one turn.
+ *
+ * Bios, notes and sign-up answers were written by the public. They go back to
+ * the model as data inside tool results; the system prompt says never to
+ * follow instructions found there.
+ */
+import type Anthropic from "@anthropic-ai/sdk";
+import { z } from "zod";
+import { makeT, type Locale } from "~/i18n";
+import { getCapsForPerson, listCaps } from "~/lib/caps.server";
+import { AFFILIATIONS, CAP_STATUSES, CONTRIBUTION_TYPES, type CapStatus } from "~/lib/constants";
+import {
+  findConnectorsForNeed,
+  findIntroPaths,
+  getEngagements,
+  getPerson,
+  getRelationships,
+  searchPeople,
+  type IntroPath,
+  type MiniPerson,
+  type SearchHit,
+} from "~/lib/people.server";
+
+export type ToolContext = { userId: string };
+
+/** What one tool call produced: the text for the tool_result and the people it mentioned. */
+export type ToolOutcome = { content: string; isError: boolean; personIds: string[] };
+
+// ---------- definitions ----------
+
+const contributionTypesSchema = {
+  type: "array",
+  items: { type: "string", enum: [...CONTRIBUTION_TYPES] },
+  description:
+    "Only people who offered one of these: skills_lesson (teach a practical lesson), classroom_volunteer (help in a class), internship (host students at work), cap_partner (partner on a Community Action Project).",
+};
+
+export const TOOLS: Anthropic.Beta.Messages.BetaTool[] = [
+  {
+    name: "search_people",
+    description:
+      "Search NVA's own database of adult partners, volunteers, board, staff and referred leads. Ranked free-text search over skills, CAP topics, names, titles, organizations and bios. Use short keywords (\"sewing\", \"public health\", \"the bay\"), not full sentences. Returns compact profiles with contact details.",
+    strict: true,
+    input_schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        query: { type: "string", description: "Keywords for the skill, topic or kind of person needed." },
+        contribution_types: contributionTypesSchema,
+        affiliations: {
+          type: "array",
+          items: { type: "string", enum: [...AFFILIATIONS] },
+          description: "Only people with one of these connections to NVA.",
+        },
+        cap_topics: {
+          type: "array",
+          items: { type: "string" },
+          description: "Only people interested in one of these CAP themes, e.g. \"environment\", \"housing\", \"the bay\".",
+        },
+        spanish_speaking: { type: "boolean", description: "Only people who prefer Spanish or speak both languages." },
+        limit: { type: "integer", description: "How many to return (1 to 25, default 10)." },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "get_person",
+    description:
+      "Full profile for one person by id: bio, notes, availability, contact details, who they know, recent engagements with NVA, and the CAPs they are attached to.",
+    strict: true,
+    input_schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: { person_id: { type: "string", description: "The person's id from another tool result." } },
+      required: ["person_id"],
+    },
+  },
+  {
+    name: "find_intro_paths",
+    description:
+      "How NVA's board and staff can reach one person: direct connections (degree 1) and friend-of-a-friend chains (degree 2), each with a readable summary.",
+    strict: true,
+    input_schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: { person_id: { type: "string", description: "The person to reach." } },
+      required: ["person_id"],
+    },
+  },
+  {
+    name: "find_connectors_for_need",
+    description:
+      "For a need (\"someone who can teach welding\"), the people who match plus how the board or staff can reach each one. Best first call when the teacher asks who could help with something.",
+    strict: true,
+    input_schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        query: { type: "string", description: "Keywords for the need." },
+        contribution_types: contributionTypesSchema,
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "list_caps",
+    description:
+      "List Community Action Projects (CAPs) with their topics, needs, status and partner counts. Use mine=true for the signed-in teacher's own CAPs.",
+    strict: true,
+    input_schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        status: { type: "string", enum: [...CAP_STATUSES], description: "Only CAPs with this status." },
+        mine: { type: "boolean", description: "Only CAPs owned by the signed-in teacher." },
+      },
+      required: [],
+    },
+  },
+];
+
+// ---------- input validation ----------
+
+/** Keeps only known enum values, so a stray value narrows nothing instead of failing. */
+const knownOnly = <T extends string>(allowed: readonly T[]) =>
+  z
+    .array(z.string().max(60))
+    .max(20)
+    .optional()
+    .transform((list) => (list ?? []).filter((v): v is T => (allowed as readonly string[]).includes(v)));
+
+const personIdInput = z.object({ person_id: z.string().trim().min(1).max(100) });
+
+const inputs = {
+  search_people: z.object({
+    query: z.string().trim().max(300),
+    contribution_types: knownOnly(CONTRIBUTION_TYPES),
+    affiliations: knownOnly(AFFILIATIONS),
+    cap_topics: z.array(z.string().max(60)).max(10).optional(),
+    spanish_speaking: z.boolean().optional(),
+    limit: z.number().int().optional(),
+  }),
+  get_person: personIdInput,
+  find_intro_paths: personIdInput,
+  find_connectors_for_need: z.object({
+    query: z.string().trim().min(1).max(300),
+    contribution_types: knownOnly(CONTRIBUTION_TYPES),
+  }),
+  list_caps: z.object({
+    status: z.string().max(20).optional(),
+    mine: z.boolean().optional(),
+  }),
+};
+
+export type ToolName = keyof typeof inputs;
+
+// ---------- shaping results ----------
+
+/** Trims long free text so one bio can't crowd out the rest of a result. */
+export function clip(text: string | null | undefined, max = 280): string | null {
+  if (!text) return null;
+  const clean = text.replace(/\s+/g, " ").trim();
+  return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
+}
+
+const profileUrl = (id: string) => `/app/people/${id}`;
+
+function compactPerson(p: SearchHit) {
+  return {
+    id: p.id,
+    name: p.full_name,
+    profile_url: profileUrl(p.id),
+    title: p.title,
+    organization: p.organization_name,
+    ways_to_help: p.contribution_types,
+    skills: p.skills.slice(0, 12),
+    cap_topics: p.cap_topics.slice(0, 8),
+    affiliations: p.affiliations,
+    status: p.status,
+    availability: clip(p.availability, 140),
+    preferred_language: p.preferred_language,
+    email: p.email,
+    phone: p.phone,
+    matched: [...new Set(p.matched)],
+  };
+}
+
+function mini(p: MiniPerson) {
+  return { id: p.id, name: p.full_name, title: p.title, organization: p.organization_name, affiliations: p.affiliations };
+}
+
+/**
+ * "Rosa Delgado (Board member) knows Lucía Herrera, who knows Mei Lin", in the
+ * given language. The first person is always board or staff.
+ */
+export function describePath(path: IntroPath, locale: Locale = "en"): string {
+  const t = makeT(locale);
+  const [first, ...rest] = path.chain;
+  const inner = first.affiliations.find((a) => a === "board" || a === "staff");
+  const a = inner ? `${first.full_name} (${t(`common.affiliation.${inner}`)})` : first.full_name;
+  return rest.length === 1
+    ? t("assistant.path.direct", { a, b: rest[0].full_name })
+    : t("assistant.path.via", { a, b: rest[0].full_name, c: rest[1].full_name });
+}
+
+function compactPath(path: IntroPath) {
+  return {
+    degree: path.degree,
+    summary: describePath(path, "en"),
+    chain: path.chain.map(mini),
+    links: path.edges.map((e) => ({ kind: e.kind, note: clip(e.note, 120) })),
+  };
+}
+
+const json = (value: unknown) => JSON.stringify(value);
+
+// ---------- executors ----------
+
+type Executor<K extends ToolName> = (input: z.output<(typeof inputs)[K]>, ctx: ToolContext) => Promise<ToolOutcome>;
+
+const executors: { [K in ToolName]: Executor<K> } = {
+  async search_people(input) {
+    const limit = Math.min(Math.max(input.limit ?? 10, 1), 25);
+    const { people, total } = await searchPeople({
+      q: input.query,
+      contributionTypes: input.contribution_types,
+      affiliations: input.affiliations,
+      capTopics: input.cap_topics,
+      language: input.spanish_speaking ? "es" : undefined,
+      limit,
+    });
+    return {
+      content: json({ total, shown: people.length, people: people.map(compactPerson) }),
+      isError: false,
+      personIds: people.map((p) => p.id),
+    };
+  },
+
+  async get_person(input) {
+    const person = await getPerson(input.person_id);
+    if (!person) return { content: "No person with that id.", isError: true, personIds: [] };
+    const [relationships, engagements, caps] = await Promise.all([
+      getRelationships(person.id),
+      getEngagements(person.id),
+      getCapsForPerson(person.id),
+    ]);
+    return {
+      content: json({
+        id: person.id,
+        name: person.full_name,
+        profile_url: profileUrl(person.id),
+        title: person.title,
+        organization: person.organization_name,
+        organization_kind: person.organization_kind,
+        ways_to_help: person.contribution_types,
+        skills: person.skills,
+        cap_topics: person.cap_topics,
+        affiliations: person.affiliations,
+        status: person.status,
+        source: person.source,
+        availability: clip(person.availability, 200),
+        preferred_language: person.preferred_language,
+        email: person.email,
+        phone: person.phone,
+        bio: clip(person.bio, 600),
+        notes: clip(person.notes, 400),
+        knows: relationships.slice(0, 15).map((r) => ({
+          kind: r.kind,
+          direction: r.direction,
+          note: clip(r.note, 120),
+          person: mini(r.other),
+        })),
+        recent_engagements: engagements.slice(0, 5).map((e) => ({
+          kind: e.kind,
+          date: e.happened_on,
+          by: e.user_name,
+          cap: e.cap_title,
+          notes: clip(e.notes, 160),
+        })),
+        caps: caps.map((c) => ({ id: c.id, title: c.title, status: c.status, partner_status: c.partner_status })),
+      }),
+      isError: false,
+      personIds: [person.id, ...relationships.slice(0, 15).map((r) => r.other.id)],
+    };
+  },
+
+  async find_intro_paths(input) {
+    const person = await getPerson(input.person_id);
+    if (!person) return { content: "No person with that id.", isError: true, personIds: [] };
+    const paths = (await findIntroPaths(person.id)).slice(0, 8);
+    const inner = person.affiliations.some((a) => a === "board" || a === "staff");
+    return {
+      content: json({
+        person: { id: person.id, name: person.full_name },
+        is_board_or_staff: inner,
+        paths: paths.map(compactPath),
+      }),
+      isError: false,
+      personIds: [person.id, ...paths.flatMap((p) => p.chain.map((c) => c.id))],
+    };
+  },
+
+  async find_connectors_for_need(input) {
+    const matches = await findConnectorsForNeed({
+      q: input.query,
+      contributionTypes: input.contribution_types,
+      limit: 10,
+    });
+    return {
+      content: json({
+        matches: matches.map((m) => ({
+          ...compactPerson(m.person),
+          board_or_staff: m.direct,
+          intro_paths: m.paths.slice(0, 3).map(compactPath),
+        })),
+      }),
+      isError: false,
+      personIds: matches.flatMap((m) => [m.person.id, ...m.paths.slice(0, 3).flatMap((p) => p.chain.map((c) => c.id))]),
+    };
+  },
+
+  async list_caps(input, ctx) {
+    const status = (CAP_STATUSES as readonly string[]).includes(input.status ?? "") ? (input.status as CapStatus) : undefined;
+    const caps = (await listCaps({ status, ownerId: input.mine ? ctx.userId : undefined })).slice(0, 20);
+    return {
+      content: json({
+        caps: caps.map((c) => ({
+          id: c.id,
+          title: c.title,
+          url: `/app/caps/${c.id}`,
+          driving_question: clip(c.driving_question, 200),
+          topics: c.topics,
+          needs: clip(c.needs, 240),
+          term: c.term,
+          status: c.status,
+          owner: c.owner_name,
+          partners: c.partner_count,
+          confirmed: c.confirmed_count,
+        })),
+      }),
+      isError: false,
+      personIds: [],
+    };
+  },
+};
+
+/** Validates and runs one tool call. Never throws: failures become is_error results Claude can recover from. */
+export async function executeTool(name: string, rawInput: unknown, ctx: ToolContext): Promise<ToolOutcome> {
+  if (!(name in inputs)) return { content: `Unknown tool: ${name}`, isError: true, personIds: [] };
+  const toolName = name as ToolName;
+  const parsed = inputs[toolName].safeParse(rawInput ?? {});
+  if (!parsed.success) {
+    const problems = parsed.error.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("; ");
+    return { content: `Invalid input. ${problems}`, isError: true, personIds: [] };
+  }
+  try {
+    const run = executors[toolName] as Executor<ToolName>;
+    return await run(parsed.data as never, ctx);
+  } catch {
+    return { content: "The database lookup failed. Try again or try a different search.", isError: true, personIds: [] };
+  }
+}

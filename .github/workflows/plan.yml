@@ -12,8 +12,8 @@ on:
       environment:
         description: Tenant to plan against
         type: choice
-        default: exdtemplate
-        options: [exdtemplate, exttemplate]
+        default: exdnva
+        options: [exdnva, extnva]
 permissions:
   contents: read
   pull-requests: write
@@ -24,5 +24,5 @@ jobs:
     with:
       extapp: true # terraform/ uses components/extapp; also sets its state key
       cmd: plan
-      environment: ${{ inputs.environment || 'exdtemplate' }}
+      environment: ${{ inputs.environment || 'exdnva' }}
       tag: main

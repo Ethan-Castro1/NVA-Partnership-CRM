@@ -160,7 +160,7 @@ export async function searchPeople(filter: PeopleFilter = {}): Promise<{ people:
       ...row,
       score: Number(row.score),
       matched: terms.length
-        ? [...row.skills, ...row.cap_topics].filter((tag) => terms.some((term) => tag.includes(term)))
+        ? [...new Set([...row.skills, ...row.cap_topics])].filter((tag) => terms.some((term) => tag.includes(term)))
         : [],
     })),
   };

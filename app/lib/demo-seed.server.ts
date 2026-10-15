@@ -167,7 +167,7 @@ export async function seedDemoData(): Promise<boolean> {
   const [{ n }] = await query<{ n: number }>("SELECT count(*)::int AS n FROM people");
   if (n > 0) return false;
 
-  const adminId = await createUser({ email: "admin@nva.test", name: "Avery Admin", password: PASSWORD, role: "admin" });
+  const adminId = await createUser({ email: "admin@nva.test", name: "Ashley", password: PASSWORD, role: "admin" });
   const teacherId = await createUser({ email: "teacher@nva.test", name: "Taylor Teacher", password: PASSWORD, role: "teacher" });
   await createUser({ email: "maestra@nva.test", name: "Marisol Maestra", password: PASSWORD, role: "teacher", locale: "es" });
 

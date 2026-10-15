@@ -1,19 +1,15 @@
-import { Link } from "react-router";
 import { Sparkles } from "lucide-react";
 import { useT } from "~/i18n";
 import { cn } from "~/lib/utils";
 import { EXAMPLE_PROMPTS } from "./types";
 
-/**
- * Suggested questions as pills. Each is a link to /app/ask?q=..., which asks it
- * straight away; on the chat page `onPick` can send it in place instead.
- */
+/** Suggested questions as pills in an empty chat; picking one asks it. */
 export function ExamplePrompts({
   onPick,
   label,
   className,
 }: {
-  onPick?: (text: string) => void;
+  onPick: (text: string) => void;
   label: string;
   className?: string;
 }) {
@@ -32,15 +28,9 @@ export function ExamplePrompts({
         );
         return (
           <li key={key}>
-            {onPick ? (
-              <button type="button" className={pill} onClick={() => onPick(text)}>
+            <button type="button" className={pill} onClick={() => onPick(text)}>
                 {body}
               </button>
-            ) : (
-              <Link to={`/app/ask?q=${encodeURIComponent(text)}`} className={pill}>
-                {body}
-              </Link>
-            )}
           </li>
         );
       })}

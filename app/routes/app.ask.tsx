@@ -5,14 +5,14 @@
  * /app/ask?q=... asks that question in a new chat.
  */
 import { useEffect, useRef } from "react";
-import { useLoaderData, useNavigate, useRouteLoaderData } from "react-router";
+import { Link, useLoaderData, useNavigate, useRouteLoaderData } from "react-router";
 import type { Route } from "./+types/app.ask";
 import { useAssistant } from "~/components/assistant/assistant-provider";
 import { ChatHistoryList } from "~/components/assistant/chat-history";
 import { AssistantConversation } from "~/components/assistant/conversation";
 import { MAX_MESSAGE_CHARS } from "~/components/assistant/types";
 import { AiNotice } from "~/components/nva";
-import { SquarePen } from "lucide-react";
+import { ArrowLeft, SquarePen } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { makeT, useT } from "~/i18n";
 import { requireUser } from "~/lib/auth.server";
@@ -48,7 +48,14 @@ export default function Ask() {
   return (
     <div className="grid gap-6">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="font-display text-2xl font-bold tracking-tight">{t("assistant.title")}</h1>
+        <div className="flex items-center gap-2">
+          <Button asChild variant="ghost" size="icon-sm" className="-ml-2">
+            <Link to="/app" aria-label={t("common.action.back")}>
+              <ArrowLeft aria-hidden="true" />
+            </Link>
+          </Button>
+          <h1 className="font-display text-2xl font-bold tracking-tight">{t("assistant.title")}</h1>
+        </div>
         <Button type="button" variant="outline" size="sm" onClick={newChat}>
           <SquarePen aria-hidden="true" />
           {t("assistant.newChat")}

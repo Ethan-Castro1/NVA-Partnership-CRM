@@ -6,10 +6,7 @@ import {
   FolderKanban,
   LayoutDashboard,
   Network,
-  Plug,
-  Sparkles,
   UserCog,
-  UserPlus,
   Users,
 } from "lucide-react";
 import { NavMain, type NavItem } from "~/components/nav-main";
@@ -35,18 +32,18 @@ export function AppSidebar({
 }: React.ComponentProps<typeof Sidebar> & { user: SessionUser; newSignups?: number }) {
   const { t } = useT();
 
-  const findHelp: NavItem[] = [
+  // Record types and the daily inbox. The assistant lives in the top bar, setup in the user menu.
+  const main: NavItem[] = [
     { title: t("common.nav.dashboard"), url: "/app", icon: <LayoutDashboard />, end: true },
-    { title: t("common.nav.ask"), url: "/app/ask", icon: <Sparkles /> },
     { title: t("common.nav.people"), url: "/app/people", icon: <Users /> },
-    { title: t("common.nav.connections"), url: "/app/connections", icon: <Network /> },
     { title: t("common.nav.caps"), url: "/app/caps", icon: <FolderKanban /> },
-    { title: t("account.connect.title"), url: "/app/connect", icon: <Plug /> },
+    { title: t("common.nav.connections"), url: "/app/connections", icon: <Network /> },
+    ...(user.role === "admin"
+      ? [{ title: t("common.nav.intake"), url: "/app/admin/intake", icon: <ClipboardList />, badge: newSignups || undefined }]
+      : []),
   ];
   const manage: NavItem[] = [
     { title: t("common.nav.adminOverview"), url: "/app/admin", icon: <Building2 />, end: true },
-    { title: t("people.new.title"), url: "/app/people/new", icon: <UserPlus /> },
-    { title: t("common.nav.intake"), url: "/app/admin/intake", icon: <ClipboardList />, badge: newSignups || undefined },
     { title: t("common.nav.users"), url: "/app/admin/users", icon: <UserCog /> },
   ];
 
@@ -70,7 +67,7 @@ export function AppSidebar({
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain label={t("common.nav.teacherSection")} items={findHelp} />
+        <NavMain label={t("common.nav.teacherSection")} items={main} />
         {user.role === "admin" && <NavMain label={t("common.nav.adminSection")} items={manage} />}
       </SidebarContent>
       <SidebarFooter>

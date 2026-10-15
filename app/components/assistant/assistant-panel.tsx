@@ -5,7 +5,7 @@
  */
 import { Link, useLocation } from "react-router";
 import { Maximize2, Sparkles, SquarePen, X } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { VillageMark } from "~/components/nva";
 import { Button } from "~/components/ui/button";
 import { useT } from "~/i18n";
@@ -27,19 +27,33 @@ export function AssistantPanel() {
   const { t } = useT();
   const { setPanelOpen, newChat } = useAssistant();
   const visible = usePanelVisible();
+  const asideRef = useRef<HTMLElement>(null);
+  const { pathname } = useLocation();
+  const firstPath = useRef(true);
 
+  // Escape closes the panel when focus is inside it (so a dialog on the page keeps its own Escape).
   useEffect(() => {
     if (!visible) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && window.innerWidth < 1024) setPanelOpen(false);
+      if (event.key === "Escape" && asideRef.current?.contains(document.activeElement)) setPanelOpen(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [visible, setPanelOpen]);
 
+  // On small screens the panel covers the page, so following a link in an answer closes it.
+  useEffect(() => {
+    if (firstPath.current) {
+      firstPath.current = false;
+      return;
+    }
+    if (window.innerWidth < 1024) setPanelOpen(false);
+  }, [pathname, setPanelOpen]);
+
   if (!visible) return null;
   return (
     <aside
+      ref={asideRef}
       aria-label={t("assistant.openPanel")}
       className="fixed inset-y-0 right-0 z-40 flex w-full flex-col border-l border-stone bg-canvas shadow-[0_0_40px_-12px_rgba(0,0,0,0.25)] sm:w-[420px] lg:shadow-none"
     >
@@ -73,12 +87,12 @@ export function AssistantToggle({ className }: { className?: string }) {
   return (
     <Button
       type="button"
-      variant={panelOpen ? "outline" : "brand"}
+      variant={panelOpen ? "secondary" : "ghost"}
       onClick={() => setPanelOpen(!panelOpen)}
       aria-pressed={panelOpen}
       className={cn("shrink-0", className)}
     >
-      <Sparkles aria-hidden="true" />
+      <Sparkles aria-hidden="true" className="text-gold-ink" />
       <span className="hidden sm:inline">{t("assistant.openPanel")}</span>
     </Button>
   );

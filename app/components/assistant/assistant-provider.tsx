@@ -12,8 +12,6 @@ import { toast } from "sonner";
 import { useT } from "~/i18n";
 import type { AskMessage, ChatSummary } from "./chat-types";
 
-const OPEN_KEY = "nva_assistant_open";
-
 type AssistantContextValue = {
   chat: Chat<AskMessage>;
   history: ChatSummary[];
@@ -56,24 +54,12 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   refreshRef.current = () => historyFetcher.load("/app/assistant/chats");
 
-  // Load the history once, and restore the panel as the person left it.
+  // Load the history once. The panel always starts closed: it opens only when someone asks for it.
   useEffect(() => {
     refreshRef.current();
-    try {
-      if (window.localStorage.getItem(OPEN_KEY) === "1") setPanelOpenState(true);
-    } catch {
-      // Storage can be blocked; the panel just starts closed.
-    }
   }, []);
 
-  const setPanelOpen = useCallback((open: boolean) => {
-    setPanelOpenState(open);
-    try {
-      window.localStorage.setItem(OPEN_KEY, open ? "1" : "0");
-    } catch {
-      // Not critical.
-    }
-  }, []);
+  const setPanelOpen = useCallback((open: boolean) => setPanelOpenState(open), []);
 
   const newChat = useCallback(() => {
     if (chat.messages.length === 0 && chat.status === "ready") return;

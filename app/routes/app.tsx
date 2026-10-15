@@ -66,8 +66,8 @@ function AppShell() {
             />
           </Form>
           <div className="ml-auto flex items-center gap-2">
-            <LanguageToggle />
             <AssistantToggle />
+            <LanguageToggle />
           </div>
         </header>
         <main id="main" className="mx-auto w-full max-w-[1280px] flex-1 px-4 py-6 md:px-8 md:py-8">

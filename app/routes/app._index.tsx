@@ -2,7 +2,6 @@
 import { Link, useLoaderData } from "react-router";
 import { UserPlus } from "lucide-react";
 import type { Route } from "./+types/app._index";
-import { AskCard } from "~/components/dashboard/ask-card";
 import { longToday } from "~/components/dashboard/format";
 import { MyCaps, RecentActivity, SignupsCallout, StatRow } from "~/components/dashboard/panels";
 import { PeopleDataTable } from "~/components/dashboard/people-table/data-table";
@@ -97,8 +96,6 @@ export default function Dashboard() {
       />
 
       {isAdmin && counts.newSignups > 0 && <SignupsCallout count={counts.newSignups} />}
-
-      <AskCard />
 
       <StatRow people={counts.people} active={counts.active} leads={counts.leads} byContribution={counts.byContribution} />
 

@@ -1,5 +1,5 @@
-import { Form, Link, useLocation } from "react-router";
-import { ChevronsUpDownIcon, Languages, LogOutIcon, UserRound } from "lucide-react";
+import { Form, Link } from "react-router";
+import { ChevronsUpDownIcon, LogOutIcon, Plug, UserRound } from "lucide-react";
 import { PersonAvatar } from "~/components/nva";
 import {
   DropdownMenu,
@@ -16,8 +16,7 @@ import type { SessionUser } from "~/lib/types";
 
 export function NavUser({ user }: { user: SessionUser }) {
   const { isMobile } = useSidebar();
-  const { t, locale } = useT();
-  const location = useLocation();
+  const { t } = useT();
 
   return (
     <SidebarMenu>
@@ -60,14 +59,10 @@ export function NavUser({ user }: { user: SessionUser }) {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Form method="post" action="/lang" className="w-full">
-                  <input type="hidden" name="locale" value={locale === "en" ? "es" : "en"} />
-                  <input type="hidden" name="redirectTo" value={location.pathname + location.search} />
-                  <button type="submit" className="flex w-full items-center gap-2" lang={locale === "en" ? "es" : "en"}>
-                    <Languages className="size-4" />
-                    {t("common.lang.switchTo")}
-                  </button>
-                </Form>
+                <Link to="/app/connect">
+                  <Plug />
+                  {t("account.connect.title")}
+                </Link>
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />

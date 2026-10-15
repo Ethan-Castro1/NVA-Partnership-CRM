@@ -165,4 +165,11 @@ CREATE TABLE IF NOT EXISTS app_meta (
   key TEXT PRIMARY KEY,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Funders: what they fund, typical amounts and deadlines, in staff's words.
+ALTER TABLE people ADD COLUMN IF NOT EXISTS funding_focus TEXT;
+
+-- Organization kinds are checked in the app (ORGANIZATION_KINDS), so new
+-- kinds such as 'foundation' need no migration.
+ALTER TABLE organizations DROP CONSTRAINT IF EXISTS organizations_kind_check;
 `;

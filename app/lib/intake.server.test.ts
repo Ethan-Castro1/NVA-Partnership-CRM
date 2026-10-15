@@ -184,6 +184,7 @@ describe("validateIntake", () => {
     expect(result.errors).toMatchObject({
       full_name: "intake.error.nameRequired",
       email: "intake.error.emailInvalid",
+      organization: "intake.error.organizationRequired",
       contribution_types: "intake.error.contributionRequired",
       consent: "intake.error.consentRequired",
       "referrals.1.name": "intake.error.referralNameRequired",
@@ -197,8 +198,11 @@ describe("validateIntake", () => {
         ["full_name", "  Ana Rivera "],
         ["email", "Ana@Example.test"],
         ["preferred_language", "both"],
-        ["contribution_types", "internship"],
+        ["organization", " Rivera Tailoring "],
+        ["contribution_types", "skills_lesson"],
+        ["contribution_types", "other"],
         ["contribution_types", "cap_partner"],
+        ["other_help", "Run a sewing club"],
         ["skills", "Sewing, quilting,, sewing"],
         ["cap_topics", "the bay"],
         ["cap_topics_other", "Oysters"],
@@ -216,13 +220,33 @@ describe("validateIntake", () => {
       full_name: "Ana Rivera",
       email: "ana@example.test",
       preferred_language: "both",
-      contribution_types: ["internship", "cap_partner"],
+      organization: "Rivera Tailoring",
+      // Staff add CAP partners; the public form can't.
+      contribution_types: ["skills_lesson", "other"],
       skills: ["sewing", "quilting"],
+      other_help: "Run a sewing club",
       cap_topics: ["the bay", "oysters"],
       affiliations: ["alumni"],
       referred_by: { name: "Rosa", email: null },
       referrals: [{ name: "Lucía", email: null, phone: "(410) 555-0199" }],
     });
+  });
+
+  it("asks what they have in mind when they pick Something else", () => {
+    const values = readIntakeForm(
+      formOf([
+        ["full_name", "Ana"],
+        ["email", "ana@example.test"],
+        ["organization", "Independent"],
+        ["contribution_types", "other"],
+        ["skills", "ignored when no lesson is chosen"],
+        ["consent", "on"],
+      ]),
+    );
+    const result = validateIntake(values, "en");
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors).toEqual({ other_help: "intake.error.otherRequired" });
   });
 });
 

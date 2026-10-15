@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { ArrowLeft } from "lucide-react";
+import { ArrowUpRight, UserPlus } from "lucide-react";
 import type { Route } from "./+types/join.thanks";
 import { PublicFooter, PublicTopBar, SkipLink } from "~/components/intake/public-shell";
 import { VillageOrbs } from "~/components/nva";
@@ -54,12 +54,20 @@ export default function JoinThanks() {
               <p className="mt-2 text-sm leading-relaxed text-smoke">{t("intake.thanks.meanwhile")}</p>
             </section>
 
-            <Button asChild variant="outline" size="lg">
-              <Link to="/">
-                <ArrowLeft aria-hidden="true" />
-                {t("intake.thanks.home")}
-              </Link>
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="brand" size="lg">
+                <a href="https://newvillageacademy.org/">
+                  {t("intake.thanks.home")}
+                  <ArrowUpRight aria-hidden="true" />
+                </a>
+              </Button>
+              <Button asChild variant="outline" size="lg">
+                <Link to="/join">
+                  <UserPlus aria-hidden="true" />
+                  {t("intake.thanks.another")}
+                </Link>
+              </Button>
+            </div>
           </div>
           <div className="hidden justify-center md:flex">
             <VillageOrbs className="max-w-[340px]" />

@@ -65,7 +65,15 @@ export function FormSection({
 const FOCUS_WITHIN = "has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50";
 
 /** Large checkbox card for one way to help: coloured dot, long label, help text. */
-export function ContributionCard({ type, defaultChecked }: { type: ContributionType; defaultChecked: boolean }) {
+export function ContributionCard({
+  type,
+  defaultChecked,
+  onChange,
+}: {
+  type: ContributionType;
+  defaultChecked: boolean;
+  onChange?: (checked: boolean) => void;
+}) {
   const { t } = useT();
   return (
     <label
@@ -80,6 +88,7 @@ export function ContributionCard({ type, defaultChecked }: { type: ContributionT
         name="contribution_types"
         value={type}
         defaultChecked={defaultChecked}
+        onChange={(event) => onChange?.(event.target.checked)}
         className="mt-0.5 size-4 shrink-0 accent-black"
       />
       <span className="grid gap-1">

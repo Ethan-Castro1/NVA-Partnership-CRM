@@ -1,12 +1,13 @@
 /**
  * "Ask the village": a chat assistant over NVA's own partner database.
  *
- * With ANTHROPIC_API_KEY set, Claude answers using the tools in tools.server.ts
+ * With an AI key set (see client.server.ts), Claude answers using the tools in tools.server.ts
  * (a manual tool loop, so every call is validated and we keep the people it
  * looked at). Without a key, a deterministic search answers instead, using
  * the same connection finder, so the page is still useful.
  *
- * The conversation lives in the browser; nothing here is stored.
+ * Runs report progress through AssistantEvents so the chat can stream text and
+ * show each lookup as a step. Saved chats live in assistant-chats.server.ts.
  */
 import Anthropic from "@anthropic-ai/sdk";
 import type { AssistantPerson, ChatTurn } from "~/components/assistant/types";
@@ -16,7 +17,7 @@ import { findConnectorsForNeed, getPeopleByIds, searchTerms } from "~/lib/people
 import type { SessionUser } from "~/lib/types";
 import { aiModel, getAnthropic, isAiConfigured, usesAnthropicDirectly } from "./client.server";
 import { isWebSearchConfigured } from "./exa.server";
-import { describePath, executeTool, toolsFor } from "./tools.server";
+import { describePath, executeTool, toolsFor, type ToolOutcome } from "./tools.server";
 
 type BetaMessageParam = Anthropic.Beta.Messages.BetaMessageParam;
 type BetaToolResultBlockParam = Anthropic.Beta.Messages.BetaToolResultBlockParam;
@@ -83,20 +84,52 @@ function errorKey(error: unknown): AssistantErrorKey {
   return "assistant.errorGeneric";
 }
 
-async function runWithClaude(messages: ChatTurn[], locale: Locale, user: SessionUser): Promise<AssistantResult> {
+/** A tool call as the chat shows it: what was looked up, and how many results came back. */
+export type ToolStep = { id: string; name: string; input: unknown };
+export type ToolStepResult = { found: number; isError: boolean };
+
+/** Hooks for watching a run as it happens (the streaming chat uses them; plain callers can ignore them). */
+export type AssistantEvents = {
+  textStart?: (id: string) => void;
+  textDelta?: (id: string, delta: string) => void;
+  textEnd?: (id: string) => void;
+  toolStart?: (step: ToolStep) => void;
+  toolEnd?: (step: ToolStep, result: ToolStepResult) => void;
+};
+
+/** How many things a tool found, for the step line under the question ("3 people"). */
+export function countFound(name: string, outcome: ToolOutcome): number {
+  if (outcome.isError) return 0;
+  if (outcome.personIds.length) return outcome.personIds.length;
+  try {
+    const value = JSON.parse(outcome.content) as unknown;
+    if (Array.isArray(value)) return value.length;
+    if (value && typeof value === "object") {
+      for (const key of ["results", "people", "caps", "paths", "matches"]) {
+        const list = (value as Record<string, unknown>)[key];
+        if (Array.isArray(list)) return list.length;
+      }
+    }
+  } catch {
+    // Plain-text results count as one.
+  }
+  return name === "get_person" ? 1 : 0;
+}
+
+async function runWithClaude(
+  messages: ChatTurn[],
+  locale: Locale,
+  user: SessionUser,
+  events: AssistantEvents = {},
+): Promise<AssistantResult> {
   const t = makeT(locale);
   const client = getAnthropic();
   const convo: BetaMessageParam[] = messages.map((m) => ({ role: m.role, content: m.content }));
   const seen = new Set<string>();
   const direct = usesAnthropicDirectly();
   const tools = toolsFor({ web: isWebSearchConfigured(), strict: direct });
-
-  const textOf = (content: Anthropic.Beta.Messages.BetaContentBlock[]) =>
-    content
-      .filter((b): b is Anthropic.Beta.Messages.BetaTextBlock => b.type === "text")
-      .map((b) => b.text.trim())
-      .filter(Boolean)
-      .join("\n\n");
+  const texts: string[] = [];
+  let textCount = 0;
 
   try {
     for (let i = 0; i < MAX_ITERATIONS; i++) {
@@ -112,15 +145,36 @@ async function runWithClaude(messages: ChatTurn[], locale: Locale, user: Session
         tools,
         messages: convo,
       };
-      const response = direct
+      const stream = direct
         ? // On a policy decline, Anthropic retries on its default fallback model.
-          await client.beta.messages.create({ ...params, betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" })
+          client.beta.messages.stream({ ...params, betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" })
         : // OpenRouter's Anthropic-compatible endpoint takes the plain Messages API.
-          ((await client.messages.create(params as unknown as Anthropic.MessageCreateParamsNonStreaming)) as unknown as Anthropic.Beta.Messages.BetaMessage);
+          (client.messages.stream(params as unknown as Anthropic.MessageCreateParamsStreaming) as unknown as ReturnType<
+            typeof client.beta.messages.stream
+          >);
+
+      // Stream text blocks out as they arrive; everything else waits for the final message.
+      const openText = new Map<number, string>();
+      for await (const event of stream) {
+        if (event.type === "content_block_start" && event.content_block.type === "text") {
+          const id = `text-${++textCount}`;
+          openText.set(event.index, id);
+          events.textStart?.(id);
+        } else if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+          const id = openText.get(event.index);
+          if (id) events.textDelta?.(id, event.delta.text);
+        } else if (event.type === "content_block_stop" && openText.has(event.index)) {
+          events.textEnd?.(openText.get(event.index)!);
+          openText.delete(event.index);
+        }
+      }
+      const response: Anthropic.Beta.Messages.BetaMessage = await stream.finalMessage();
 
       if (response.stop_reason === "refusal") {
         return { ok: true, answer: t("assistant.refusal"), personIds: [], mode: "ai" };
       }
+
+      for (const block of response.content) if (block.type === "text" && block.text.trim()) texts.push(block.text.trim());
 
       // Keep the full content (thinking and tool_use blocks included), not just the text.
       convo.push({ role: "assistant", content: response.content });
@@ -133,8 +187,11 @@ async function runWithClaude(messages: ChatTurn[], locale: Locale, user: Session
         );
         const results = await Promise.all(
           calls.map(async (call): Promise<BetaToolResultBlockParam> => {
+            const step: ToolStep = { id: call.id, name: call.name, input: call.input };
+            events.toolStart?.(step);
             const outcome = await executeTool(call.name, call.input, { userId: user.id });
             outcome.personIds.forEach((id) => seen.add(id));
+            events.toolEnd?.(step, { found: countFound(call.name, outcome), isError: outcome.isError });
             return { type: "tool_result", tool_use_id: call.id, content: outcome.content, is_error: outcome.isError };
           }),
         );
@@ -143,7 +200,7 @@ async function runWithClaude(messages: ChatTurn[], locale: Locale, user: Session
         continue;
       }
 
-      const answer = textOf(response.content) || t("assistant.emptyAnswer");
+      const answer = texts.join("\n\n") || t("assistant.emptyAnswer");
       // Only show cards for people a tool actually returned (so a made-up id never becomes a card).
       const personIds = referencedPersonIds(answer).filter((id) => seen.has(id));
       return { ok: true, answer, personIds, mode: "ai" };
@@ -293,10 +350,12 @@ export async function runAssistant({
   messages,
   locale,
   user,
+  events,
 }: {
   messages: ChatTurn[];
   locale: Locale;
   user: SessionUser;
+  events?: AssistantEvents;
 }): Promise<AssistantResult> {
   // The API needs the conversation to start with the user.
   const start = messages.findIndex((m) => m.role === "user");
@@ -308,7 +367,7 @@ export async function runAssistant({
     const { answer, personIds } = await fallbackAnswer(lastUser.content, locale);
     return { ok: true, answer, personIds, mode: "fallback" };
   }
-  return runWithClaude(history, locale, user);
+  return runWithClaude(history, locale, user, events);
 }
 
 /** Card data for the people an answer mentions, in the order mentioned. */

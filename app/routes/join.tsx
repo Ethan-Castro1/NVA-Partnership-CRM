@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Form, data, redirect, useActionData, useNavigation } from "react-router";
 import type { Route } from "./+types/join";
 import {
@@ -7,7 +7,6 @@ import {
   FILLED,
   FILLED_AREA,
   FormSection,
-  PillCheckbox,
   RadioPills,
   ReferralRows,
   Req,
@@ -21,7 +20,7 @@ import { Textarea } from "~/components/ui/textarea";
 import { makeT, useT, type Locale } from "~/i18n";
 import { getLocale } from "~/i18n/locale.server";
 import { clientIp } from "~/lib/auth.server";
-import { CONTRIBUTION_TYPES, LANGUAGES, SUGGESTED_CAP_TOPICS } from "~/lib/constants";
+import { LANGUAGES, PUBLIC_CONTRIBUTION_TYPES, type ContributionType } from "~/lib/constants";
 import { HONEYPOT_FIELD, PUBLIC_AFFILIATIONS } from "~/lib/intake-types";
 import {
   isHoneypotFilled,
@@ -87,6 +86,12 @@ export default function Join() {
   const v = actionData?.values;
   const err = (field: string) => (errors[field] ? t(errors[field]) : undefined);
   const hasErrors = Object.keys(errors).length > 0;
+
+  // "Tell us more" only asks what fits the ways to help they picked.
+  const [types, setTypes] = useState<string[]>(v?.contribution_types ?? []);
+  const toggle = (type: ContributionType, on: boolean) =>
+    setTypes((prev) => (on ? [...new Set([...prev, type])] : prev.filter((t) => t !== type)));
+  const picked = (...wanted: ContributionType[]) => wanted.some((type) => types.includes(type));
 
   // After a failed submit, move focus to the summary so screen readers and keyboards land on it.
   useEffect(() => {
@@ -164,13 +169,20 @@ export default function Join() {
                     className={FILLED}
                   />
                 </Field>
-                <Field label={t("common.field.organization")} htmlFor="organization" optional error={err("organization")}>
+                <Field
+                  label={<Req>{t("common.field.organization")}</Req>}
+                  htmlFor="organization"
+                  hint={t("intake.organizationHint")}
+                  error={err("organization")}
+                >
                   <Input
                     id="organization"
                     name="organization"
                     autoComplete="organization"
+                    required
                     maxLength={160}
                     defaultValue={v?.organization}
+                    aria-invalid={!!errors.organization || undefined}
                     className={FILLED}
                   />
                 </Field>
@@ -193,6 +205,17 @@ export default function Join() {
                   options={LANGUAGES.map((lang) => ({ value: lang, label: t(`common.language.${lang}`) }))}
                 />
               </fieldset>
+              <Field label={t("intake.bioLabel")} htmlFor="bio" optional error={err("bio")}>
+                <Textarea
+                  id="bio"
+                  name="bio"
+                  rows={3}
+                  maxLength={2000}
+                  placeholder={t("intake.bioPlaceholder")}
+                  defaultValue={v?.bio}
+                  className={FILLED_AREA}
+                />
+              </Field>
             </FormSection>
 
             {/* b. How would you like to help? */}
@@ -203,64 +226,55 @@ export default function Join() {
               errorId="contribution-error"
             >
               <div className="grid gap-3">
-                {CONTRIBUTION_TYPES.map((type) => (
-                  <ContributionCard key={type} type={type} defaultChecked={!!v?.contribution_types.includes(type)} />
+                {PUBLIC_CONTRIBUTION_TYPES.map((type) => (
+                  <ContributionCard
+                    key={type}
+                    type={type}
+                    defaultChecked={!!v?.contribution_types.includes(type)}
+                    onChange={(on) => toggle(type, on)}
+                  />
                 ))}
               </div>
             </FormSection>
 
-            {/* c. What can you share? */}
-            <FormSection legend={t("intake.section.share")}>
-              <Field label={t("intake.skillsLabel")} htmlFor="skills" hint={t("intake.skillsHint")} error={err("skills")}>
-                <Input id="skills" name="skills" maxLength={500} defaultValue={v?.skills} className={FILLED} />
-              </Field>
-              <fieldset className="grid gap-2">
-                <legend className="text-sm font-medium text-graphite">{t("intake.topicsLabel")}</legend>
-                <p className="text-xs text-smoke">{t("intake.topicsHint")}</p>
-                <div className="mt-1 flex flex-wrap gap-2">
-                  {SUGGESTED_CAP_TOPICS.map((topic) => (
-                    <PillCheckbox
-                      key={topic}
-                      name="cap_topics"
-                      value={topic}
-                      label={t(`intake.topic.${topic}`)}
-                      defaultChecked={!!v?.cap_topics.includes(topic)}
+            {/* c. Tell us more: only the questions that fit what they picked. */}
+            {types.length > 0 && (
+              <FormSection legend={t("intake.section.share")} hint={t("intake.section.shareHint")}>
+                {picked("skills_lesson", "after_school") && (
+                  <Field label={t("intake.skillsLabel")} htmlFor="skills" hint={t("intake.skillsHint")} error={err("skills")}>
+                    <Input id="skills" name="skills" maxLength={500} defaultValue={v?.skills} className={FILLED} />
+                  </Field>
+                )}
+                {picked("other") && (
+                  <Field label={<Req>{t("intake.otherHelpLabel")}</Req>} htmlFor="other_help" error={err("other_help")}>
+                    <Textarea
+                      id="other_help"
+                      name="other_help"
+                      rows={3}
+                      maxLength={1000}
+                      required
+                      placeholder={t("intake.otherHelpPlaceholder")}
+                      defaultValue={v?.other_help}
+                      aria-invalid={!!errors.other_help || undefined}
+                      className={FILLED_AREA}
                     />
-                  ))}
-                </div>
-              </fieldset>
-              <Field
-                label={t("intake.topicsOther")}
-                htmlFor="cap_topics_other"
-                optional
-                hint={t("intake.topicsOtherHint")}
-                error={err("cap_topics_other")}
-              >
-                <Input id="cap_topics_other" name="cap_topics_other" maxLength={300} defaultValue={v?.cap_topics_other} className={FILLED} />
-              </Field>
-              <Field label={t("intake.availabilityLabel")} htmlFor="availability" optional error={err("availability")}>
-                <Textarea
-                  id="availability"
-                  name="availability"
-                  rows={2}
-                  maxLength={500}
-                  placeholder={t("intake.availabilityPlaceholder")}
-                  defaultValue={v?.availability}
-                  className={FILLED_AREA}
-                />
-              </Field>
-              <Field label={t("intake.bioLabel")} htmlFor="bio" optional error={err("bio")}>
-                <Textarea
-                  id="bio"
-                  name="bio"
-                  rows={4}
-                  maxLength={2000}
-                  placeholder={t("intake.bioPlaceholder")}
-                  defaultValue={v?.bio}
-                  className={FILLED_AREA}
-                />
-              </Field>
-            </FormSection>
+                  </Field>
+                )}
+                {picked("skills_lesson", "classroom_volunteer", "after_school") && (
+                  <Field label={t("intake.availabilityLabel")} htmlFor="availability" optional error={err("availability")}>
+                    <Textarea
+                      id="availability"
+                      name="availability"
+                      rows={2}
+                      maxLength={500}
+                      placeholder={t("intake.availabilityPlaceholder")}
+                      defaultValue={v?.availability}
+                      className={FILLED_AREA}
+                    />
+                  </Field>
+                )}
+              </FormSection>
+            )}
 
             {/* d. Connection to NVA (never board or staff on the public form). */}
             <FormSection legend={t("intake.section.connection")} hint={t("intake.section.connectionHint")}>

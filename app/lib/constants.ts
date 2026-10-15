@@ -7,10 +7,25 @@
 export const CONTRIBUTION_TYPES = [
   "skills_lesson",
   "classroom_volunteer",
+  "after_school",
   "internship",
   "cap_partner",
+  "funder",
+  "other",
 ] as const;
 export type ContributionType = (typeof CONTRIBUTION_TYPES)[number];
+
+/**
+ * What the public sign-up form offers. Community members mostly teach or
+ * volunteer; NVA staff identify CAP partners, internship hosts and funders
+ * and add them with the staff form (/app/people/new).
+ */
+export const PUBLIC_CONTRIBUTION_TYPES = [
+  "skills_lesson",
+  "classroom_volunteer",
+  "after_school",
+  "other",
+] as const satisfies readonly ContributionType[];
 
 export const CONTRIBUTION_COLOR: Record<
   ContributionType,
@@ -20,6 +35,9 @@ export const CONTRIBUTION_COLOR: Record<
   classroom_volunteer: { dot: "bg-blue", soft: "bg-blue-soft", ink: "text-blue-ink", hex: "#277f93" },
   internship: { dot: "bg-purple", soft: "bg-purple-soft", ink: "text-purple-ink", hex: "#7e6f8f" },
   cap_partner: { dot: "bg-sage", soft: "bg-sage-soft", ink: "text-sage-ink", hex: "#9cb47d" },
+  after_school: { dot: "bg-gold", soft: "bg-gold-soft", ink: "text-gold-ink", hex: "#faad00" },
+  funder: { dot: "bg-ink", soft: "bg-stone", ink: "text-ink", hex: "#000000" },
+  other: { dot: "bg-ash", soft: "bg-taupe", ink: "text-graphite", hex: "#a59f97" },
 };
 
 /** How someone is connected to NVA. 'board' and 'staff' are the inner circle for the connection finder. */
@@ -38,6 +56,7 @@ export type RelationshipKind = (typeof RELATIONSHIP_KINDS)[number];
 
 export const ORGANIZATION_KINDS = [
   "business",
+  "foundation",
   "nonprofit",
   "government",
   "education",

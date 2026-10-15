@@ -24,6 +24,8 @@ export type IntakePayload = {
   title?: string | null;
   contribution_types: ContributionType[];
   skills: string[];
+  /** Their own words when they chose "Something else". */
+  other_help?: string | null;
   cap_topics: string[];
   availability?: string | null;
   bio?: string | null;

@@ -24,6 +24,8 @@ export type IntakeFormValues = {
   title: string;
   contribution_types: string[];
   skills: string;
+  /** What they have in mind when they pick "Something else". */
+  other_help: string;
   cap_topics: string[];
   cap_topics_other: string;
   availability: string;

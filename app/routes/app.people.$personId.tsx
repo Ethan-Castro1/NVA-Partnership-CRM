@@ -262,6 +262,15 @@ export default function PersonProfile() {
               {person.cap_topics.length ? <TagList tags={person.cap_topics} /> : notAdded}
             </DetailBlock>
           </div>
+          {(person.funding_focus || person.contribution_types.includes("funder")) && (
+            <DetailBlock label={t("common.field.fundingFocus")}>
+              {person.funding_focus ? (
+                <p className="text-sm leading-relaxed whitespace-pre-line text-graphite">{person.funding_focus}</p>
+              ) : (
+                notAdded
+              )}
+            </DetailBlock>
+          )}
           <DetailBlock label={t("common.field.availability")}>
             {person.availability ? <p className="text-sm text-graphite">{person.availability}</p> : notAdded}
           </DetailBlock>

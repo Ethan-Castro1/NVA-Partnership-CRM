@@ -13,6 +13,7 @@
     "dev:login": "react-router dev"
   },
   "dependencies": {
+    "@ai-sdk/react": "^4.0.146",
     "@anthropic-ai/sdk": "^0.135.0",
     "@electric-sql/pglite": "^0.5.10",
     "@floating-ui/react": "^0.27.17",
@@ -20,7 +21,9 @@
     "@react-router/node": "7.12.0",
     "@react-router/serve": "7.12.0",
     "@remix-run/node-fetch-server": "^0.14.2",
+    "@shadcn/helpers": "^0.2.0",
     "@tanstack/react-table": "^9.3.1",
+    "ai": "^7.0.142",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cn": "^0.4.0",

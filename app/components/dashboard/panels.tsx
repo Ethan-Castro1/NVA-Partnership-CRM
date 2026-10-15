@@ -1,6 +1,6 @@
 /** The dashboard's sections: stat row, my CAPs, recently added people and recent activity. */
 import { Link } from "react-router";
-import { ArrowRight, BookOpen, Briefcase, HandHeart, Plus, Sprout, UserCheck, Users } from "lucide-react";
+import { ArrowRight, BookOpen, Briefcase, CircleEllipsis, HandCoins, HandHeart, Plus, School, Sprout, UserCheck, Users } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   ContributionChips,
@@ -23,6 +23,9 @@ const TYPE_ICON: Record<ContributionType, ReactNode> = {
   classroom_volunteer: <HandHeart aria-hidden="true" />,
   internship: <Briefcase aria-hidden="true" />,
   cap_partner: <Sprout aria-hidden="true" />,
+  after_school: <School aria-hidden="true" />,
+  funder: <HandCoins aria-hidden="true" />,
+  other: <CircleEllipsis aria-hidden="true" />,
 };
 
 const linkClass =
@@ -62,7 +65,7 @@ export function StatRow({
       <h2 id="stats-heading" className="sr-only">
         {t("dashboard.statsHeading")}
       </h2>
-      <ul className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <ul className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <li>
           <StatTile
             label={t("dashboard.statPeople")}
@@ -81,7 +84,7 @@ export function StatRow({
             to="/app/people?status=active"
           />
         </li>
-        {CONTRIBUTION_TYPES.map((type) => (
+        {CONTRIBUTION_TYPES.filter((type) => type !== "other").map((type) => (
           <li key={type}>
             <StatTile
               label={t(`common.contribution.${type}`)}

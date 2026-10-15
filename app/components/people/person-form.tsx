@@ -47,6 +47,7 @@ export type PersonFormValues = {
   bio: string | null;
   status: PersonStatus;
   notes: string | null;
+  funding_focus: string | null;
 };
 
 export const EMPTY_PERSON: PersonFormValues = {
@@ -65,6 +66,7 @@ export const EMPTY_PERSON: PersonFormValues = {
   bio: null,
   status: "new",
   notes: null,
+  funding_focus: null,
 };
 
 const checkCard =
@@ -87,6 +89,14 @@ export function PersonForm({
   const navigation = useNavigation();
   const busy = navigation.state === "submitting";
   const [topics, setTopics] = useState(defaults.cap_topics.join(", "));
+  // Each detail field shows when it fits a chosen way to help, or already has something in it.
+  const [types, setTypes] = useState<ContributionType[]>(defaults.contribution_types);
+  const picked = (...wanted: ContributionType[]) => wanted.some((type) => types.includes(type));
+  const showSkills = picked("skills_lesson", "classroom_volunteer", "after_school", "internship") || defaults.skills.length > 0;
+  const showTopics = picked("cap_partner") || defaults.cap_topics.length > 0;
+  const showFunding = picked("funder") || !!defaults.funding_focus;
+  const showAvailability =
+    picked("skills_lesson", "classroom_volunteer", "after_school", "internship") || !!defaults.availability;
   const current = normalizeTags(topics);
   const suggestions = SUGGESTED_CAP_TOPICS.filter((topic) => !current.includes(topic));
   const err = (field: keyof PersonFormErrors) => (errors[field] ? t(errors[field]!) : undefined);
@@ -185,6 +195,9 @@ export function PersonForm({
                   name="contribution_types"
                   value={type}
                   defaultChecked={defaults.contribution_types.includes(type)}
+                  onCheckedChange={(on) =>
+                    setTypes((prev) => (on === true ? [...new Set([...prev, type])] : prev.filter((t) => t !== type)))
+                  }
                   className="mt-0.5 bg-canvas"
                 />
                 <span className="grid gap-1">
@@ -217,9 +230,35 @@ export function PersonForm({
       </Panel>
 
       <Panel title={t("people.form.sectionSkills")} bodyClassName="grid gap-4">
-        <Field label={t("common.field.skills")} htmlFor="pf-skills" optional hint={t("people.form.skillsHint")} error={err("skills")}>
-          <Input id="pf-skills" name="skills" maxLength={2000} defaultValue={defaults.skills.join(", ")} aria-invalid={invalid("skills")} />
-        </Field>
+        {showFunding && (
+          <Field
+            label={t("common.field.fundingFocus")}
+            htmlFor="pf-funding"
+            optional
+            hint={t("people.form.fundingHint")}
+            error={err("funding_focus")}
+          >
+            <Textarea
+              id="pf-funding"
+              name="funding_focus"
+              rows={3}
+              maxLength={2000}
+              placeholder={t("people.form.fundingPlaceholder")}
+              defaultValue={defaults.funding_focus ?? ""}
+              aria-invalid={invalid("funding_focus")}
+              className="bg-canvas"
+            />
+          </Field>
+        )}
+        {showSkills ? (
+          <Field label={t("common.field.skills")} htmlFor="pf-skills" optional hint={t("people.form.skillsHint")} error={err("skills")}>
+            <Input id="pf-skills" name="skills" maxLength={2000} defaultValue={defaults.skills.join(", ")} aria-invalid={invalid("skills")} />
+          </Field>
+        ) : (
+          <input type="hidden" name="skills" value={defaults.skills.join(", ")} />
+        )}
+        {showTopics ? (
+        <>
         <Field label={t("common.field.capTopics")} htmlFor="pf-topics" optional hint={t("people.form.capTopicsHint")} error={err("cap_topics")}>
           <Input
             id="pf-topics"
@@ -253,16 +292,24 @@ export function PersonForm({
             </ul>
           </div>
         )}
-        <Field label={t("common.field.availability")} htmlFor="pf-availability" optional error={err("availability")}>
-          <Input
-            id="pf-availability"
-            name="availability"
-            maxLength={500}
-            placeholder={t("people.form.availabilityPlaceholder")}
-            defaultValue={defaults.availability ?? ""}
-            aria-invalid={invalid("availability")}
-          />
-        </Field>
+        </>
+        ) : (
+          <input type="hidden" name="cap_topics" value={topics} />
+        )}
+        {showAvailability ? (
+          <Field label={t("common.field.availability")} htmlFor="pf-availability" optional error={err("availability")}>
+            <Input
+              id="pf-availability"
+              name="availability"
+              maxLength={500}
+              placeholder={t("people.form.availabilityPlaceholder")}
+              defaultValue={defaults.availability ?? ""}
+              aria-invalid={invalid("availability")}
+            />
+          </Field>
+        ) : (
+          <input type="hidden" name="availability" value={defaults.availability ?? ""} />
+        )}
         <Field label={t("common.field.bio")} htmlFor="pf-bio" optional error={err("bio")}>
           <Textarea
             id="pf-bio"

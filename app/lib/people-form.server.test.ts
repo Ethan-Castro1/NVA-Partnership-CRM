@@ -58,6 +58,7 @@ describe("parsePersonForm", () => {
       bio: "Loves teaching.",
       status: "active",
       notes: null,
+      funding_focus: null,
     });
     expect("source" in result.input).toBe(false);
   });

@@ -55,6 +55,7 @@ export const PERSON_FORM_FIELDS = [
   "availability",
   "bio",
   "notes",
+  "funding_focus",
 ] as const;
 export type PersonFormField = (typeof PERSON_FORM_FIELDS)[number];
 
@@ -96,6 +97,7 @@ const personSchema = z.object({
   availability: optionalText(500),
   bio: optionalText(4000),
   notes: optionalText(4000),
+  funding_focus: optionalText(2000),
 });
 
 export type PersonFormResult =

@@ -39,6 +39,8 @@ export type PersonSummary = {
 export type PersonDetail = PersonSummary & {
   bio: string | null;
   notes: string | null;
+  /** Funders only: what they fund, typical amounts, deadlines. */
+  funding_focus: string | null;
   created_at: string;
   organization_kind: OrganizationKind | null;
   organization_website: string | null;
@@ -116,7 +118,7 @@ export async function searchPeople(filter: PeopleFilter = {}): Promise<{ people:
       + CASE WHEN EXISTS (SELECT 1 FROM unnest(p.cap_topics) s WHERE s ILIKE ${like}) THEN 3 ELSE 0 END
       + CASE WHEN p.full_name ILIKE ${like} THEN 3 ELSE 0 END
       + CASE WHEN coalesce(p.title, '') ILIKE ${like} OR coalesce(o.name, '') ILIKE ${like} THEN 2 ELSE 0 END
-      + CASE WHEN coalesce(p.bio, '') || ' ' || coalesce(p.notes, '') || ' ' || coalesce(p.availability, '') ILIKE ${like} THEN 1 ELSE 0 END)`;
+      + CASE WHEN coalesce(p.bio, '') || ' ' || coalesce(p.notes, '') || ' ' || coalesce(p.availability, '') || ' ' || coalesce(p.funding_focus, '') ILIKE ${like} THEN 1 ELSE 0 END)`;
   });
   const score = scoreParts.length ? scoreParts.join(" + ") : "0";
 
@@ -170,7 +172,7 @@ export async function searchPeople(filter: PeopleFilter = {}): Promise<{ people:
 
 export async function getPerson(id: string): Promise<PersonDetail | null> {
   return queryOne<PersonDetail>(
-    `SELECT ${SUMMARY_COLUMNS}, p.bio, p.notes, p.created_at,
+    `SELECT ${SUMMARY_COLUMNS}, p.bio, p.notes, p.funding_focus, p.created_at,
             o.kind AS organization_kind, o.website AS organization_website
        FROM people p LEFT JOIN organizations o ON o.id = p.organization_id
       WHERE p.id = $1`,
@@ -211,6 +213,7 @@ export type PersonInput = {
   status?: PersonStatus;
   source?: PersonSource;
   notes?: string | null;
+  funding_focus?: string | null;
 };
 
 const blank = (v: string | null | undefined) => (v && v.trim() ? v.trim() : null);
@@ -239,8 +242,9 @@ export async function createPerson(input: PersonInput, createdBy: string | null,
   const orgId = await upsertOrganization(input.organization_name, input.organization_kind, db);
   await db.query(
     `INSERT INTO people (id, full_name, email, phone, preferred_language, organization_id, title, bio, skills,
-                         cap_topics, contribution_types, affiliations, availability, status, source, notes, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+                         cap_topics, contribution_types, affiliations, availability, status, source, notes, created_by,
+                         funding_focus)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
     [
       id,
       input.full_name.trim(),
@@ -259,6 +263,7 @@ export async function createPerson(input: PersonInput, createdBy: string | null,
       input.source ?? "admin",
       blank(input.notes),
       createdBy,
+      blank(input.funding_focus),
     ],
   );
   return id;
@@ -288,6 +293,7 @@ export async function updatePerson(id: string, input: Partial<PersonInput>, db: 
   if (input.status !== undefined) set("status", input.status);
   if (input.source !== undefined) set("source", input.source);
   if (input.notes !== undefined) set("notes", blank(input.notes));
+  if (input.funding_focus !== undefined) set("funding_focus", blank(input.funding_focus));
   if (!sets.length) return;
   await db.query(`UPDATE people SET ${sets.join(", ")}, updated_at = now() WHERE id = $1`, params);
 }

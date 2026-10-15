@@ -208,7 +208,8 @@ export function parseTargetId(form: FormData, key = "target_id"): string | null 
 
 // ---------- directory filters (URL search params) ----------
 
-export const PAGE_SIZE = 50;
+import { PAGE_SIZE } from "./constants";
+export { PAGE_SIZE };
 
 /** What the directory's filter bar shows, read back from the URL. */
 export type DirectoryParams = {

@@ -9,7 +9,8 @@ import { Button } from "~/components/ui/button";
 import { makeT, useT } from "~/i18n";
 import { requireUser } from "~/lib/auth.server";
 import { query } from "~/lib/db.server";
-import { PAGE_SIZE, parseDirectoryParams } from "~/lib/people-form.server";
+import { PAGE_SIZE } from "~/lib/constants";
+import { parseDirectoryParams } from "~/lib/people-form.server";
 import { searchPeople } from "~/lib/people.server";
 import { cn } from "~/lib/utils";
 

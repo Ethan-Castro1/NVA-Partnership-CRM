@@ -33,8 +33,8 @@ function isoOrNull(value: unknown): string | null {
 
 // ---------- overview ----------
 
-export type IntakeStatus = "new" | "reviewed" | "archived";
-export const INTAKE_STATUSES: readonly IntakeStatus[] = ["new", "reviewed", "archived"];
+import { INTAKE_STATUSES, type IntakeStatus } from "./constants";
+export { INTAKE_STATUSES, type IntakeStatus };
 
 export type SignupRow = {
   id: string;

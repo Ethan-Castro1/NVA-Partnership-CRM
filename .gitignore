@@ -10,3 +10,6 @@
 # Local embedded database
 /.data/
 .env.local
+.vercel
+
+.env*

@@ -12,7 +12,7 @@ import { promisify } from "node:util";
 import { createCookie, redirect } from "react-router";
 import type { Role } from "./constants";
 import type { SessionUser } from "./types";
-import { newId, query, queryOne } from "./db.server";
+import { newId, query, queryOne, whenReady } from "./db.server";
 
 const scrypt = promisify(scryptCb) as (pw: string, salt: Buffer, keylen: number, opts: object) => Promise<Buffer>;
 const SCRYPT = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
@@ -149,6 +149,7 @@ async function readToken(request: Request): Promise<string | null> {
 export const OPEN_ACCESS = process.env.OPEN_ACCESS === "true";
 
 export async function getUser(request: Request): Promise<SessionUser | null> {
+  await whenReady();
   if (OPEN_ACCESS) {
     return queryOne<SessionUser>(
       "SELECT id, email, name, role, locale FROM users WHERE active AND role = 'admin' ORDER BY created_at LIMIT 1",

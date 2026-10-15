@@ -76,7 +76,7 @@ async function createPgliteDriver(dir: string): Promise<Driver> {
 }
 
 // Survives dev-server hot reloads, so we never open the database twice.
-const globalForDb = globalThis as unknown as { __nvaDb?: Promise<Driver> };
+const globalForDb = globalThis as unknown as { __nvaDb?: Promise<Driver>; __nvaReady?: Promise<void> };
 
 async function init(): Promise<Driver> {
   const url = process.env.DATABASE_URL;
@@ -88,6 +88,7 @@ async function init(): Promise<Driver> {
   await bootstrapAdminFromEnv(driver);
   return driver;
 }
+
 
 function getDriver(): Promise<Driver> {
   if (!globalForDb.__nvaDb) {
@@ -110,6 +111,23 @@ export async function queryOne<T = Record<string, unknown>>(sql: string, params?
 
 export async function transaction<T>(fn: (tx: Queryable) => Promise<T>): Promise<T> {
   return (await getDriver()).transaction(fn);
+}
+
+/**
+ * Resolves once startup work that needs query() is done: today, loading the
+ * demo data when SEED_DEMO=true. Pages wait on it (via getUser) so the first
+ * visitor never sees a half-seeded database.
+ */
+export function whenReady(): Promise<void> {
+  globalForDb.__nvaReady ??= (async () => {
+    await getDriver();
+    const { seedDemoFromEnv } = await import("./demo-seed.server");
+    await seedDemoFromEnv();
+  })().catch((error) => {
+    globalForDb.__nvaReady = undefined;
+    throw error;
+  });
+  return globalForDb.__nvaReady;
 }
 
 /** For scripts: run the schema and return when the database is ready. */

@@ -24,11 +24,8 @@ import { newId, transaction, type Queryable } from "./db.server";
 import type { IntakePayload, IntakeReferral } from "./intake-types";
 import { addRelationship, createPerson, findPersonByEmail, updatePerson } from "./people.server";
 
-/** The public form never offers board or staff: those are set by NVA staff. */
-export const PUBLIC_AFFILIATIONS = ["parent", "alumni", "community"] as const satisfies readonly Affiliation[];
-
-/** Bots fill every field; people never see this one. */
-export const HONEYPOT_FIELD = "website";
+import { HONEYPOT_FIELD, PUBLIC_AFFILIATIONS } from "./intake-types";
+export { HONEYPOT_FIELD, PUBLIC_AFFILIATIONS };
 
 // ---------- reading the form ----------
 

@@ -159,4 +159,10 @@ CREATE TABLE IF NOT EXISTS web_leads (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS web_leads_status_idx ON web_leads (status, created_at DESC);
+
+-- Small app-wide flags (e.g. that the demo data was loaded).
+CREATE TABLE IF NOT EXISTS app_meta (
+  key TEXT PRIMARY KEY,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 `;

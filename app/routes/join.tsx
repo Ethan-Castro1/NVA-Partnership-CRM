@@ -22,9 +22,8 @@ import { makeT, useT, type Locale } from "~/i18n";
 import { getLocale } from "~/i18n/locale.server";
 import { clientIp } from "~/lib/auth.server";
 import { CONTRIBUTION_TYPES, LANGUAGES, SUGGESTED_CAP_TOPICS } from "~/lib/constants";
+import { HONEYPOT_FIELD, PUBLIC_AFFILIATIONS } from "~/lib/intake-types";
 import {
-  HONEYPOT_FIELD,
-  PUBLIC_AFFILIATIONS,
   isHoneypotFilled,
   isIntakeRateLimited,
   processIntake,

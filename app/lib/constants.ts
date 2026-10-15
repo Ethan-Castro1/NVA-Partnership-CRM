@@ -56,6 +56,9 @@ export type CapStatus = (typeof CAP_STATUSES)[number];
 export const CAP_PARTNER_STATUSES = ["suggested", "contacted", "confirmed", "declined"] as const;
 export type CapPartnerStatus = (typeof CAP_PARTNER_STATUSES)[number];
 
+export const INTAKE_STATUSES = ["new", "reviewed", "archived"] as const;
+export type IntakeStatus = (typeof INTAKE_STATUSES)[number];
+
 export const ROLES = ["admin", "teacher"] as const;
 export type Role = (typeof ROLES)[number];
 
@@ -88,3 +91,6 @@ export function normalizeTags(input: Iterable<string> | string | null | undefine
   }
   return [...out];
 }
+
+/** People per page in the directory. */
+export const PAGE_SIZE = 50;

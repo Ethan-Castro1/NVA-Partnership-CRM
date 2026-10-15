@@ -34,3 +34,9 @@ export type IntakePayload = {
   referrals: IntakeReferral[];
   consent: boolean;
 };
+
+/** The public form never offers board or staff: those are set by NVA staff. */
+export const PUBLIC_AFFILIATIONS = ["parent", "alumni", "community"] as const satisfies readonly Affiliation[];
+
+/** Bots fill every field; people never see this one. */
+export const HONEYPOT_FIELD = "website";

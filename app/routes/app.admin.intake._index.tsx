@@ -6,7 +6,8 @@ import { formatDate } from "~/components/admin/format";
 import { ContributionChips, EmptyState, PageHeader, Panel, PersonAvatar, Sheet, StatusBadge } from "~/components/nva";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "~/components/ui/table";
 import { makeT, useT } from "~/i18n";
-import { INTAKE_STATUSES, listIntake, type IntakeStatus, type SignupRow } from "~/lib/admin.server";
+import { listIntake, type SignupRow } from "~/lib/admin.server";
+import { INTAKE_STATUSES, type IntakeStatus } from "~/lib/constants";
 import { requireAdmin } from "~/lib/auth.server";
 import { cn } from "~/lib/utils";
 

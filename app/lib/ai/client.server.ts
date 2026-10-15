@@ -1,15 +1,16 @@
 /**
- * The one place the app talks to Claude.
+ * The one place the app chooses its AI model.
  *
- * - OPENROUTER_API_KEY (NVA's setup): Claude through OpenRouter's
- *   Anthropic-compatible endpoint, so the official Anthropic SDK and the same
- *   tool loops work unchanged. Model "anthropic/claude-opus-5.5".
- * - ANTHROPIC_API_KEY: Claude directly from Anthropic.
+ * - OPENROUTER_API_KEY (NVA's setup): GLM 5.3 Flash ("z-ai/glm-5.3-flash")
+ *   through OpenRouter, called with the AI SDK and the OpenRouter provider
+ *   (getOpenRouterModel). Fast and inexpensive, with tool calling.
+ * - ANTHROPIC_API_KEY: Claude directly from Anthropic, with the Anthropic SDK.
  * - Neither: AI features say so and plain search keeps working.
  *
  * AI_MODEL overrides the model for either provider.
  */
 import Anthropic from "@anthropic-ai/sdk";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 
 export type AiProvider = "openrouter" | "anthropic";
 
@@ -25,7 +26,21 @@ export function isAiConfigured(): boolean {
 
 export function aiModel(): string {
   if (process.env.AI_MODEL) return process.env.AI_MODEL;
-  return aiProvider() === "openrouter" ? "anthropic/claude-opus-5.5" : "claude-opus-5-5";
+  return aiProvider() === "openrouter" ? "z-ai/glm-5.3-flash" : "claude-opus-5-5";
+}
+
+let openRouter: ReturnType<typeof createOpenRouter> | undefined;
+
+/** The OpenRouter model for AI SDK calls (streamText, generateText). */
+export function getOpenRouterModel() {
+  openRouter ??= createOpenRouter({
+    apiKey: process.env.OPENROUTER_API_KEY,
+    headers: {
+      "HTTP-Referer": process.env.APP_URL || "https://nva-village-partners.vercel.app",
+      "X-Title": "NVA Village Partners",
+    },
+  });
+  return openRouter(aiModel());
 }
 
 /** Anthropic-only request features (beta headers such as refusal fallbacks, strict tools). */

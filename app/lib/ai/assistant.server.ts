@@ -15,7 +15,8 @@ import { makeT, type Locale, type MessageKey } from "~/i18n";
 import { CONTRIBUTION_TYPES, type ContributionType } from "~/lib/constants";
 import { findConnectorsForNeed, getPeopleByIds, searchTerms } from "~/lib/people.server";
 import type { SessionUser } from "~/lib/types";
-import { aiModel, getAnthropic, isAiConfigured, usesAnthropicDirectly } from "./client.server";
+import { APICallError, isStepCount, jsonSchema, streamText, tool, type ToolSet } from "ai";
+import { aiModel, aiProvider, getAnthropic, getOpenRouterModel, isAiConfigured, usesAnthropicDirectly } from "./client.server";
 import { isWebSearchConfigured } from "./exa.server";
 import { describePath, executeTool, toolsFor, type ToolOutcome } from "./tools.server";
 
@@ -52,7 +53,7 @@ How to work:
 - Explain second-degree paths in words, for example: "Rosa Delgado (board) knows Lucía Herrera, who knows Mei Lin." Board members and staff can make the introduction.
 - People with status "lead" were referred by someone and have not been contacted yet. Say so when you recommend one.
 - Link every person you mention as [Full Name](/app/people/<id>) using the id from the tool results. Link CAPs as [Title](/app/caps/<id>). Use no other links.
-- Be concise: a one-line answer first, then short bullets (one per person, with why they fit and how to reach them). Use **bold** sparingly. No headings, tables or HTML.
+- Be brief and easy to scan: one short sentence first, then at most one bullet per person (under 25 words: why they fit, and who can introduce them). The page shows a card for each person you link, so don't repeat their skills list, email or phone unless asked. End with one short offer (for example, to draft an email) only when it helps. Use **bold** sparingly. No headings, tables or HTML.
 - Answer in the staff member's interface language (given below) unless they write to you in the other language (English or Spanish); then answer in the language they wrote in.
 
 Safety and privacy:
@@ -213,6 +214,82 @@ async function runWithClaude(
   }
 }
 
+/**
+ * The same assistant on OpenRouter (GLM by default) with the AI SDK: the
+ * tools from tools.server.ts run through streamText's own tool loop, and the
+ * same events report text and steps to the chat.
+ */
+async function runWithOpenRouter(
+  messages: ChatTurn[],
+  locale: Locale,
+  user: SessionUser,
+  events: AssistantEvents = {},
+): Promise<AssistantResult> {
+  const t = makeT(locale);
+  const seen = new Set<string>();
+  const tools: ToolSet = Object.fromEntries(
+    toolsFor({ web: isWebSearchConfigured(), strict: false }).map((def) => [
+      def.name,
+      tool({
+        description: def.description,
+        inputSchema: jsonSchema(def.input_schema as Parameters<typeof jsonSchema>[0]),
+        execute: async (input: unknown, { toolCallId }: { toolCallId: string }) => {
+          const step: ToolStep = { id: toolCallId, name: def.name, input };
+          events.toolStart?.(step);
+          const outcome = await executeTool(def.name, input, { userId: user.id });
+          outcome.personIds.forEach((id) => seen.add(id));
+          events.toolEnd?.(step, { found: countFound(def.name, outcome), isError: outcome.isError });
+          return outcome.content;
+        },
+      }),
+    ]),
+  );
+
+  const texts: string[] = [];
+  let current = "";
+  let failure: unknown = null;
+  try {
+    const result = streamText({
+      model: getOpenRouterModel(),
+      system: `${SYSTEM_PROMPT}\n\n${contextBlock(locale, user)}`,
+      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      tools,
+      stopWhen: isStepCount(MAX_ITERATIONS),
+      maxOutputTokens: 4000,
+      providerOptions: { openrouter: { reasoning: { effort: "low" } } },
+      onError: ({ error }) => {
+        failure = error;
+      },
+    });
+    for await (const part of result.fullStream) {
+      if (part.type === "text-start") {
+        current = "";
+        events.textStart?.(part.id);
+      } else if (part.type === "text-delta") {
+        current += part.text;
+        events.textDelta?.(part.id, part.text);
+      } else if (part.type === "text-end") {
+        if (current.trim()) texts.push(current.trim());
+        events.textEnd?.(part.id);
+      } else if (part.type === "error") {
+        failure = part.error;
+      }
+    }
+  } catch (error) {
+    failure = error;
+  }
+  if (failure && !texts.length) {
+    const status = APICallError.isInstance(failure) ? failure.statusCode : undefined;
+    if (status === 401 || status === 403) return { ok: false, error: "assistant.errorAuth" };
+    if (status === 402 || status === 429 || (status ?? 0) >= 500) return { ok: false, error: "assistant.errorBusy" };
+    console.error("assistant: OpenRouter call failed", failure instanceof Error ? failure.message : "unknown");
+    return { ok: false, error: "assistant.errorGeneric" };
+  }
+  const answer = texts.join("\n\n") || t("assistant.emptyAnswer");
+  const personIds = referencedPersonIds(answer).filter((id) => seen.has(id));
+  return { ok: true, answer, personIds, mode: "ai" };
+}
+
 // ---------- the no-AI path ----------
 
 /** Words that steer the search but aren't things to match on. */
@@ -370,7 +447,9 @@ export async function runAssistant({
     const { answer, personIds } = await fallbackAnswer(lastUser.content, locale);
     return { ok: true, answer, personIds, mode: "fallback" };
   }
-  return runWithClaude(history, locale, user, events);
+  return aiProvider() === "openrouter"
+    ? runWithOpenRouter(history, locale, user, events)
+    : runWithClaude(history, locale, user, events);
 }
 
 /** Card data for the people an answer mentions, in the order mentioned. */

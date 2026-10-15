@@ -12,10 +12,12 @@ import { makeT, type Locale } from "~/i18n";
 import { INNER_CIRCLE } from "../constants";
 import { newId, query, queryOne, transaction } from "../db.server";
 import { createPerson, getPerson } from "../people.server";
-import { aiModel, getAnthropic, isAiConfigured } from "./client.server";
+import { APICallError, generateText, jsonSchema, tool } from "ai";
+import { aiModel, aiProvider, getAnthropic, getOpenRouterModel, isAiConfigured } from "./client.server";
 import { ExaError, exaSearch, isWebSearchConfigured, type ExaCategory, type ExaResult } from "./exa.server";
 
-export const MAX_LEADS = 6;
+/** Web results a search may save as leads (and Exa results per query). */
+export const MAX_LEADS = 20;
 const MAX_URLS_PER_LEAD = 5;
 
 // ---------- the record_leads tool ----------
@@ -228,7 +230,7 @@ export function buildLeadQueries(need: string, viaOrganization: string | null): 
 /** Runs the searches; drops failed ones unless all fail. Dedupes by URL. */
 async function searchAll(queries: { query: string; category: ExaCategory }[]): Promise<(ExaResult & { category: ExaCategory })[]> {
   const settled = await Promise.allSettled(
-    queries.map(async (q) => (await exaSearch({ query: q.query, category: q.category, numResults: 8 })).map((r) => ({ ...r, category: q.category }))),
+    queries.map(async (q) => (await exaSearch({ query: q.query, category: q.category, numResults: MAX_LEADS })).map((r) => ({ ...r, category: q.category }))),
   );
   const ok = settled.filter((s): s is PromiseFulfilledResult<(ExaResult & { category: ExaCategory })[]> => s.status === "fulfilled");
   if (!ok.length) throw (settled[0] as PromiseRejectedResult).reason;
@@ -293,7 +295,7 @@ async function leadsWithClaude(
     title: r.title,
     url: r.url,
     author: r.author,
-    excerpt: r.highlights.join(" ").slice(0, 700),
+    excerpt: r.highlights.join(" ").slice(0, 450),
   }));
   const messages: Anthropic.MessageParam[] = [
     {
@@ -306,6 +308,26 @@ async function leadsWithClaude(
         `\nSearch results (JSON):\n${JSON.stringify(listing)}`,
     },
   ];
+
+  if (aiProvider() === "openrouter") {
+    // GLM through OpenRouter: one call that must answer with record_leads.
+    const { toolCalls } = await generateText({
+      model: getOpenRouterModel(),
+      system: systemPrompt(locale),
+      messages: [{ role: "user", content: messages[0].content as string }],
+      tools: {
+        record_leads: tool({
+          description: RECORD_LEADS_TOOL.description,
+          inputSchema: jsonSchema(RECORD_LEADS_TOOL.input_schema as Parameters<typeof jsonSchema>[0]),
+        }),
+      },
+      toolChoice: { type: "tool", toolName: "record_leads" },
+      maxOutputTokens: 8000,
+      providerOptions: { openrouter: { reasoning: { effort: "low" } } },
+    });
+    const call = toolCalls.find((c) => c.toolName === "record_leads");
+    return call ? parseRecordLeads(call.input, seen) : [];
+  }
 
   const client = getAnthropic();
   for (let turn = 0; turn < 2; turn++) {
@@ -330,8 +352,8 @@ async function leadsWithClaude(
 }
 
 function exaErrorKey(error: unknown): WebSearchError {
-  if (error instanceof ExaError || error instanceof Anthropic.APIError) {
-    const status = error.status ?? 0;
+  if (error instanceof ExaError || error instanceof Anthropic.APIError || APICallError.isInstance(error)) {
+    const status = (APICallError.isInstance(error) ? error.statusCode : error.status) ?? 0;
     if (status === 401 || status === 403) return "connections.web.error.auth";
     if (status === 402 || status === 429 || status === 529 || status >= 500) return "connections.web.error.busy";
   }

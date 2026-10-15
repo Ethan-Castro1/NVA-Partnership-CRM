@@ -1,5 +1,5 @@
 /** Saved chats: a list on the full assistant page, a menu in the side panel. */
-import { History, Loader2, MessageSquare, SquarePen, Trash2 } from "lucide-react";
+import { History, Loader2, Trash2 } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import {
   DropdownMenu,
@@ -22,15 +22,11 @@ function shortWhen(iso: string, locale: string): string {
 }
 
 export function ChatHistoryList() {
-  const { t, locale } = useT();
-  const { chat, history, openChat, deleteChat, newChat, loadingChatId } = useAssistant();
+  const { t } = useT();
+  const { chat, history, openChat, deleteChat, loadingChatId } = useAssistant();
   return (
-    <nav aria-label={t("assistant.history")} className="grid gap-2">
-      <Button type="button" variant="outline" onClick={newChat} className="justify-start">
-        <SquarePen aria-hidden="true" />
-        {t("assistant.newChat")}
-      </Button>
-      <h2 className="mt-2 px-1 text-eyebrow text-smoke">{t("assistant.history")}</h2>
+    <nav aria-label={t("assistant.history")} className="grid gap-1.5">
+      <h2 className="px-1 text-xs font-medium text-smoke">{t("assistant.history")}</h2>
       {history.length === 0 ? (
         <p className="px-1 text-sm text-smoke">{t("assistant.historyEmpty")}</p>
       ) : (
@@ -44,17 +40,12 @@ export function ChatHistoryList() {
                   onClick={() => void openChat(item.id)}
                   aria-current={current || undefined}
                   className={cn(
-                    "flex min-w-0 flex-1 items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm transition-colors hover:bg-taupe focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+                    "flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-graphite transition-colors hover:bg-taupe focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
                     current && "bg-gold-soft font-medium hover:bg-gold-soft",
                   )}
                 >
-                  {loadingChatId === item.id ? (
-                    <Loader2 className="size-4 shrink-0 animate-spin text-smoke" aria-hidden="true" />
-                  ) : (
-                    <MessageSquare className="size-4 shrink-0 text-smoke" aria-hidden="true" />
-                  )}
+                  {loadingChatId === item.id && <Loader2 className="size-3.5 shrink-0 animate-spin text-smoke" aria-hidden="true" />}
                   <span className="min-w-0 flex-1 truncate">{item.title}</span>
-                  <span className="shrink-0 text-xs text-smoke">{shortWhen(item.updated_at, locale)}</span>
                 </button>
                 <Button
                   type="button"
@@ -71,7 +62,6 @@ export function ChatHistoryList() {
           })}
         </ul>
       )}
-      <p className="mt-2 px-1 text-xs text-smoke">{t("assistant.savedNote")}</p>
     </nav>
   );
 }

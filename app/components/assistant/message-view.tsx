@@ -4,13 +4,13 @@
  * answer, then cards for the people in it.
  */
 import type { DynamicToolUIPart } from "ai";
-import { Check, CircleAlert, FolderKanban, Globe, Loader2, Route, Search, UserRound, Users } from "lucide-react";
+import { Check, ChevronDown, CircleAlert, FolderKanban, Globe, Loader2, Route, Search, UserRound, Users } from "lucide-react";
 import type { ReactNode } from "react";
 import { VillageMark } from "~/components/nva";
 import { useT, type MessageKey } from "~/i18n";
 import { cn } from "~/lib/utils";
 import type { AskMessage, StepOutput } from "./chat-types";
-import { PersonCard } from "./person-card";
+import { PersonRow } from "./person-card";
 import { RichAnswer } from "./rich-answer";
 
 const STEP_ICON: Record<string, ReactNode> = {
@@ -53,14 +53,8 @@ function Step({ part }: { part: DynamicToolUIPart }) {
         ? t("assistant.step.found", { count: found })
         : t("assistant.step.none");
   return (
-    <li className="flex items-center gap-2.5 text-sm">
-      <span
-        className={cn(
-          "grid size-6 shrink-0 place-items-center rounded-full [&_svg]:size-3.5",
-          failed ? "bg-rust-soft text-rust-ink" : "bg-gold-soft text-gold-ink",
-        )}
-        aria-hidden="true"
-      >
+    <li className="flex items-center gap-2 text-xs">
+      <span className={cn("grid shrink-0 place-items-center [&_svg]:size-3.5", failed ? "text-rust-ink" : "text-gold-ink")} aria-hidden="true">
         {STEP_ICON[part.toolName] ?? <Search />}
       </span>
       <span className="min-w-0 flex-1 truncate text-graphite">{stepLabel(part, t)}</span>
@@ -78,6 +72,33 @@ function Step({ part }: { part: DynamicToolUIPart }) {
   );
 }
 
+/** All lookups as one quiet line ("Looked in 2 places · 14 found"); open it to see each step. */
+function Steps({ steps }: { steps: DynamicToolUIPart[] }) {
+  const { t } = useT();
+  const working = steps.find((p) => p.state === "input-streaming" || p.state === "input-available");
+  const found = steps.reduce((sum, p) => sum + (p.state === "output-available" ? ((p.output as StepOutput | undefined)?.found ?? 0) : 0), 0);
+  return (
+    <details className="group text-sm">
+      <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 rounded-full text-xs text-smoke hover:text-graphite [&::-webkit-details-marker]:hidden">
+        {working ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <Search className="size-3.5" aria-hidden="true" />}
+        <span>
+          {working
+            ? t("assistant.stepsWorking", { step: stepLabel(working, t) })
+            : steps.length === 1
+              ? t("assistant.stepsSummaryOne", { found })
+              : t("assistant.stepsSummary", { count: steps.length, found })}
+        </span>
+        <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" aria-hidden="true" />
+      </summary>
+      <ol className="mt-2 grid gap-1.5 border-l-2 border-gold-soft pl-3">
+        {steps.map((part) => (
+          <Step key={part.toolCallId} part={part} />
+        ))}
+      </ol>
+    </details>
+  );
+}
+
 export function AskMessageView({ message, busy = false }: { message: AskMessage; busy?: boolean }) {
   const { t } = useT();
 
@@ -85,7 +106,7 @@ export function AskMessageView({ message, busy = false }: { message: AskMessage;
     const text = message.parts.map((p) => (p.type === "text" ? p.text : "")).join("");
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-br-md bg-ink px-4 py-2.5 text-[0.95rem] whitespace-pre-wrap text-white">
+        <div className="max-w-[85%] rounded-2xl rounded-br-md bg-ink px-3.5 py-2 text-sm whitespace-pre-wrap text-white">
           <span className="sr-only">{t("assistant.you")}: </span>
           {text}
         </div>
@@ -102,54 +123,42 @@ export function AskMessageView({ message, busy = false }: { message: AskMessage;
   const notice = message.parts.flatMap((p) => (p.type === "data-notice" ? [p.data.kind] : []))[0];
 
   return (
-    <div className="grid gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <VillageMark className="size-6" />
-        <span className="text-sm font-medium text-ink">{t("assistant.assistantName")}</span>
-        {notice === "fallback" && <span className="rounded-full bg-taupe px-2.5 py-0.5 text-xs text-smoke">{t("assistant.fallbackNotice")}</span>}
-        {notice === "example" && (
-          <span className="rounded-full bg-gold-soft px-2.5 py-0.5 text-xs font-medium text-gold-ink">{t("assistant.exampleBadge")}</span>
+    <div className="flex gap-3">
+      <VillageMark className="mt-0.5 size-6 shrink-0" />
+      <div className="grid min-w-0 flex-1 gap-2.5">
+        <span className="sr-only">{t("assistant.assistantName")}</span>
+        {notice && (
+          <span
+            className={cn(
+              "w-fit rounded-full px-2.5 py-0.5 text-xs",
+              notice === "example" ? "bg-gold-soft font-medium text-gold-ink" : "bg-taupe text-smoke",
+            )}
+          >
+            {notice === "example" ? t("assistant.exampleBadge") : t("assistant.fallbackNotice")}
+          </span>
         )}
-      </div>
-
-      {steps.length > 0 && (
-        <section aria-label={t("assistant.stepsLabel")} className="rounded-2xl border border-stone bg-canvas px-3.5 py-3">
-          <ol className="grid gap-2">
-            {steps.map((part) => (
-              <Step key={part.toolCallId} part={part} />
-            ))}
-          </ol>
-        </section>
-      )}
-
-      {text ? (
-        <RichAnswer text={text} />
-      ) : (
-        busy &&
-        !steps.length && (
-          <p role="status" className="flex items-center gap-3 text-sm text-smoke">
-            <span className="flex gap-1" aria-hidden="true">
-              <span className="size-2 animate-bounce rounded-full bg-gold [animation-delay:-0.3s]" />
-              <span className="size-2 animate-bounce rounded-full bg-gold/70 [animation-delay:-0.15s]" />
-              <span className="size-2 animate-bounce rounded-full bg-gold/40" />
-            </span>
-            {t("assistant.pending")}
-          </p>
-        )
-      )}
-
-      {people && people.people.length > 0 && (
-        <div className="@container grid gap-2 border-t border-stone pt-3">
-          <h3 className="text-eyebrow text-smoke">{t("assistant.peopleMentioned")}</h3>
-          <ul className="grid gap-2.5 @lg:grid-cols-2">
+        {steps.length > 0 && <Steps steps={steps} />}
+        {text ? (
+          <RichAnswer text={text} className="text-sm" />
+        ) : (
+          busy &&
+          !steps.length && (
+            <p role="status" className="flex items-center gap-2 text-sm text-smoke">
+              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+              {t("assistant.pending")}
+            </p>
+          )
+        )}
+        {people && people.people.length > 0 && (
+          <ul aria-label={t("assistant.peopleMentioned")} className="grid gap-1.5">
             {people.people.map((p) => (
               <li key={p.id}>
-                <PersonCard person={p} example={people.example} />
+                <PersonRow person={p} example={people.example} />
               </li>
             ))}
           </ul>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

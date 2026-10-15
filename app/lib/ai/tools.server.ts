@@ -124,6 +124,9 @@ export const TOOLS: Anthropic.Beta.Messages.BetaTool[] = [
   },
 ];
 
+/** Web results per search_web call. */
+export const WEB_RESULTS = 20;
+
 /** Web search (Exa). Offered only when EXA_API_KEY is set; see toolsFor(). */
 export const WEB_TOOL: Anthropic.Beta.Messages.BetaTool = {
   name: "search_web",
@@ -397,7 +400,7 @@ const executors: { [K in ToolName]: Executor<K> } = {
     try {
       // Exa's people index matches best when asked for profiles explicitly.
       const query = category === "people" && !/profiles?/i.test(input.query) ? `professional profiles of ${input.query}` : input.query;
-      const results = await exaSearch({ query, category, numResults: 8 });
+      const results = await exaSearch({ query, category, numResults: WEB_RESULTS });
       return {
         content: json({
           note: "Unverified web results, not NVA contacts. Present them separately, with the page address in plain text. To save one, staff can use Search beyond our network on /app/connections.",
@@ -406,7 +409,7 @@ const executors: { [K in ToolName]: Executor<K> } = {
             url: r.url,
             author: r.author,
             published: r.publishedDate,
-            excerpt: clip(r.highlights.join(" "), 500),
+            excerpt: clip(r.highlights.join(" "), 300),
           })),
         }),
         isError: false,

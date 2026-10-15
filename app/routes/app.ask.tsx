@@ -11,7 +11,9 @@ import { useAssistant } from "~/components/assistant/assistant-provider";
 import { ChatHistoryList } from "~/components/assistant/chat-history";
 import { AssistantConversation } from "~/components/assistant/conversation";
 import { MAX_MESSAGE_CHARS } from "~/components/assistant/types";
-import { AiNotice, PageHeader } from "~/components/nva";
+import { AiNotice } from "~/components/nva";
+import { SquarePen } from "lucide-react";
+import { Button } from "~/components/ui/button";
 import { makeT, useT } from "~/i18n";
 import { requireUser } from "~/lib/auth.server";
 
@@ -31,7 +33,7 @@ export default function Ask() {
   const { q } = useLoaderData<typeof loader>();
   const root = useRouteLoaderData("root") as { aiConfigured?: boolean } | undefined;
   const { t } = useT();
-  const { ask } = useAssistant();
+  const { ask, newChat } = useAssistant();
   const navigate = useNavigate();
   const asked = useRef<string | null>(null);
 
@@ -45,13 +47,19 @@ export default function Ask() {
 
   return (
     <div className="grid gap-6">
-      <PageHeader eyebrow={t("assistant.eyebrow")} title={t("assistant.title")} description={t("assistant.description")} />
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="font-display text-2xl font-bold tracking-tight">{t("assistant.title")}</h1>
+        <Button type="button" variant="outline" size="sm" onClick={newChat}>
+          <SquarePen aria-hidden="true" />
+          {t("assistant.newChat")}
+        </Button>
+      </div>
       {root?.aiConfigured === false && <AiNotice />}
-      <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)] lg:items-start">
-        <aside className="order-2 lg:order-1 lg:sticky lg:top-24">
+      <div className="grid gap-8 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start">
+        <aside className="order-2 lg:sticky lg:top-24 lg:order-1">
           <ChatHistoryList />
         </aside>
-        <section className="order-1 flex min-h-[60vh] flex-col lg:order-2">
+        <section className="order-1 mx-auto flex min-h-[60vh] w-full max-w-3xl flex-col lg:order-2">
           <AssistantConversation variant="page" />
         </section>
       </div>

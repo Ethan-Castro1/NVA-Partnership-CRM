@@ -76,7 +76,7 @@ describe("parseRecordLeads", () => {
   });
 
   it("returns at most MAX_LEADS and survives bad input", () => {
-    const many = Array.from({ length: 10 }, (_, i) => ({ name: `P${i}`, source_urls: [`https://e.org/${i}`] }));
+    const many = Array.from({ length: MAX_LEADS + 5 }, (_, i) => ({ name: `P${i}`, source_urls: [`https://e.org/${i}`] }));
     expect(parseRecordLeads({ leads: many })).toHaveLength(MAX_LEADS);
     expect(parseRecordLeads(null)).toEqual([]);
     expect(parseRecordLeads({ leads: "nope" })).toEqual([]);

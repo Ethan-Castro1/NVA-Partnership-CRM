@@ -72,6 +72,9 @@ export default defineMessages(
     "step.working": "working",
     "step.failed": "didn't work",
     stepsLabel: "What I looked up",
+    stepsSummary: "Looked in {count} places · {found} found",
+    stepsSummaryOne: "Looked in 1 place · {found} found",
+    stepsWorking: "{step}…",
     stop: "Stop",
 
     history: "Past chats",
@@ -167,6 +170,9 @@ export default defineMessages(
     "step.working": "buscando",
     "step.failed": "no funcionó",
     stepsLabel: "Lo que busqué",
+    stepsSummary: "Busqué en {count} lugares · {found} encontrados",
+    stepsSummaryOne: "Busqué en 1 lugar · {found} encontrados",
+    stepsWorking: "{step}…",
     stop: "Detener",
 
     history: "Conversaciones anteriores",

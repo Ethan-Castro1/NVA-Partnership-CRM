@@ -4,12 +4,13 @@
   "type": "module",
   "scripts": {
     "build": "react-router build",
-    "dev": "react-router dev",
+    "dev": "OPEN_ACCESS=true react-router dev",
     "start": "react-router-serve ./build/server/index.js",
     "typecheck": "react-router typegen && tsc",
     "test": "vitest run",
     "seed": "tsx scripts/seed.ts",
-    "create-user": "tsx scripts/create-user.ts"
+    "create-user": "tsx scripts/create-user.ts",
+    "dev:login": "react-router dev"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

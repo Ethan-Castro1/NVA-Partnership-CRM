@@ -142,7 +142,18 @@ async function readToken(request: Request): Promise<string | null> {
 
 // ---------- reading the signed-in user ----------
 
+/**
+ * OPEN_ACCESS=true skips sign-in: every visitor acts as the first active admin.
+ * For local demos only (`npm run dev` sets it); never set it on a real deployment.
+ */
+export const OPEN_ACCESS = process.env.OPEN_ACCESS === "true";
+
 export async function getUser(request: Request): Promise<SessionUser | null> {
+  if (OPEN_ACCESS) {
+    return queryOne<SessionUser>(
+      "SELECT id, email, name, role, locale FROM users WHERE active AND role = 'admin' ORDER BY created_at LIMIT 1",
+    );
+  }
   const token = await readToken(request);
   if (!token) return null;
   return queryOne<SessionUser>(

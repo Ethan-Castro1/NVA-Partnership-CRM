@@ -14,8 +14,9 @@ import { makeT, type Locale, type MessageKey } from "~/i18n";
 import { CONTRIBUTION_TYPES, type ContributionType } from "~/lib/constants";
 import { findConnectorsForNeed, getPeopleByIds, searchTerms } from "~/lib/people.server";
 import type { SessionUser } from "~/lib/types";
-import { AI_MODEL, getAnthropic, isAiConfigured } from "./client.server";
-import { describePath, executeTool, TOOLS } from "./tools.server";
+import { aiModel, getAnthropic, isAiConfigured, usesAnthropicDirectly } from "./client.server";
+import { isWebSearchConfigured } from "./exa.server";
+import { describePath, executeTool, toolsFor } from "./tools.server";
 
 type BetaMessageParam = Anthropic.Beta.Messages.BetaMessageParam;
 type BetaToolResultBlockParam = Anthropic.Beta.Messages.BetaToolResultBlockParam;
@@ -43,6 +44,8 @@ How to work:
 - Search with short keywords ("sewing", "public health", "the bay") rather than whole sentences. If a search comes back empty, try a broader or related word once or twice before giving up. find_connectors_for_need is a good first call for "who could help with X" questions because it also returns how to reach each match.
 - Prefer people whose ways_to_help fit the request (skills_lesson, classroom_volunteer, internship, cap_partner). Mention availability when it matters.
 - When nobody matches, say so plainly and suggest next steps: broaden the search, ask a board member who is on a path to someone close, or use the Connections page (/app/connections) to search the web for new partners.
+- If the search_web tool is available, use it only after the database tools, when they find nobody suitable or the staff member asks to look beyond NVA's records. Put web finds in a separate short section headed "From the web (not in our records yet)", give each page address as plain text (not a link), and never present them as NVA contacts.
+- When the staff member needs someone for a specific day or event, check availability in the results, and offer to draft a short, warm outreach email they can send (in the partner's preferred language).
 - Explain second-degree paths in words, for example: "Rosa Delgado (board) knows Lucía Herrera, who knows Mei Lin." Board members and staff can make the introduction.
 - People with status "lead" were referred by someone and have not been contacted yet. Say so when you recommend one.
 - Link every person you mention as [Full Name](/app/people/<id>) using the id from the tool results. Link CAPs as [Title](/app/caps/<id>). Use no other links.
@@ -84,6 +87,8 @@ async function runWithClaude(messages: ChatTurn[], locale: Locale, user: Session
   const client = getAnthropic();
   const convo: BetaMessageParam[] = messages.map((m) => ({ role: m.role, content: m.content }));
   const seen = new Set<string>();
+  const direct = usesAnthropicDirectly();
+  const tools = toolsFor({ web: isWebSearchConfigured(), strict: direct });
 
   const textOf = (content: Anthropic.Beta.Messages.BetaContentBlock[]) =>
     content
@@ -94,21 +99,23 @@ async function runWithClaude(messages: ChatTurn[], locale: Locale, user: Session
 
   try {
     for (let i = 0; i < MAX_ITERATIONS; i++) {
-      const response = await client.beta.messages.create({
-        model: AI_MODEL,
+      const params = {
+        model: aiModel(),
         max_tokens: 16000,
-        thinking: { type: "adaptive" },
-        output_config: { effort: "medium" },
-        // On a policy decline, the API retries on its default fallback model.
-        betas: ["server-side-fallback-2026-07-01"],
-        fallbacks: "default",
+        thinking: { type: "adaptive" as const },
+        output_config: { effort: "medium" as const },
         system: [
-          { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
-          { type: "text", text: contextBlock(locale, user) },
+          { type: "text" as const, text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" as const } },
+          { type: "text" as const, text: contextBlock(locale, user) },
         ],
-        tools: TOOLS,
+        tools,
         messages: convo,
-      });
+      };
+      const response = direct
+        ? // On a policy decline, Anthropic retries on its default fallback model.
+          await client.beta.messages.create({ ...params, betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" })
+        : // OpenRouter's Anthropic-compatible endpoint takes the plain Messages API.
+          ((await client.messages.create(params as unknown as Anthropic.MessageCreateParamsNonStreaming)) as unknown as Anthropic.Beta.Messages.BetaMessage);
 
       if (response.stop_reason === "refusal") {
         return { ok: true, answer: t("assistant.refusal"), personIds: [], mode: "ai" };

@@ -5,8 +5,8 @@
  * contact (never a relationship).
  */
 import { Form, Link, useFetcher, useNavigation } from "react-router";
-import { ExternalLink, Globe, Loader2, UserPlus, X } from "lucide-react";
-import { AiNotice, Field, Sheet } from "~/components/nva";
+import { ExternalLink, Globe, Loader2, Search, UserPlus, X } from "lucide-react";
+import { Field, Sheet } from "~/components/nva";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
@@ -36,7 +36,12 @@ export function WebSearchForm({
 
   return (
     <div className="grid gap-4">
-      {!aiConfigured && <AiNotice />}
+      {!aiConfigured && (
+        <p className="flex items-start gap-2 rounded-xl bg-gold-soft px-3.5 py-2.5 text-sm text-graphite">
+          <Search className="mt-0.5 size-4 shrink-0 text-gold-ink" aria-hidden="true" />
+          {t("connections.web.error.notConfigured")}
+        </p>
+      )}
       <Form method="post" className="grid gap-4 md:grid-cols-[minmax(0,1fr)_16rem_auto] md:items-end" aria-busy={busy}>
         <input type="hidden" name="intent" value="web" />
         <Field

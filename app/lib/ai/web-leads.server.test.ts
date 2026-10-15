@@ -4,7 +4,9 @@ import { createPerson, getPerson } from "../people.server";
 import {
   MAX_LEADS,
   cleanSourceUrls,
-  collectSearchUrls,
+  buildLeadQueries,
+  leadsFromResults,
+  splitProfileTitle,
   dismissWebLead,
   findWebLeads,
   listWebLeads,
@@ -33,13 +35,7 @@ describe("source URLs", () => {
   });
 
   it("only keeps pages the search actually returned, when we know them", () => {
-    const seen = collectSearchUrls([
-      { type: "web_search_tool_result", content: [{ type: "web_search_result", url: "https://example.org/a" }] },
-      { type: "text", text: "...", citations: [{ type: "web_search_result_location", url: "https://www.news.com/story/" }] },
-      { type: "web_search_tool_result", content: { type: "web_search_tool_result_error", error_code: "unavailable" } },
-      null,
-    ]);
-    expect([...seen].sort()).toEqual(["example.org/a", "news.com/story"]);
+    const seen = new Set(["example.org/a", "news.com/story"]);
     expect(cleanSourceUrls(["https://example.org/a/", "https://news.com/story", "https://made-up.org/"], seen)).toEqual([
       "https://example.org/a/",
       "https://news.com/story",
@@ -135,5 +131,40 @@ describe("stored leads", () => {
     expect(await dismissWebLead(other.id)).toBe(false);
     const after = await listWebLeads();
     expect(after.map((l) => [l.name, l.status, l.saved_person_id])).toEqual([["Sam Shore", "saved", personId]]);
+  });
+});
+
+describe("Exa lead search pieces", () => {
+  it("searches people and organizations, and the connector's workplace when one is chosen", () => {
+    expect(buildLeadQueries("marine biologist", null).map((q) => q.category)).toEqual(["people", "company"]);
+    const withVia = buildLeadQueries("marine biologist", "US Department of Agriculture");
+    expect(withVia).toHaveLength(3);
+    expect(withVia[2]).toMatchObject({ category: "people" });
+    expect(withVia[2].query).toContain("US Department of Agriculture");
+  });
+
+  it("reads names, roles and organizations from profile titles", () => {
+    expect(splitProfileTitle("Jane Doe - Outreach Director - Severn Riverkeeper | LinkedIn")).toEqual({
+      name: "Jane Doe",
+      role: "Outreach Director",
+      organization: "Severn Riverkeeper",
+    });
+    expect(splitProfileTitle("Annapolis Maritime Museum")).toEqual({ name: "Annapolis Maritime Museum", role: null, organization: null });
+  });
+
+  it("turns raw results into sourced leads without Claude", () => {
+    const leads = leadsFromResults(
+      [
+        { title: "Jane Doe - Educator - Bay Center | LinkedIn", url: "https://linkedin.com/in/jane", author: null, publishedDate: null, highlights: ["Runs field trips."], category: "people" },
+        { title: "Bay Center", url: "https://baycenter.org", author: null, publishedDate: null, highlights: [], category: "company" },
+        { title: "Bad link", url: "javascript:alert(1)", author: null, publishedDate: null, highlights: [], category: "company" },
+      ],
+      "Matches your search",
+    );
+    expect(leads.map((l) => [l.name, l.role_title, l.organization])).toEqual([
+      ["Jane Doe", "Educator", "Bay Center"],
+      ["Bay Center", null, null],
+    ]);
+    expect(leads[0].source_urls).toEqual(["https://linkedin.com/in/jane"]);
   });
 });

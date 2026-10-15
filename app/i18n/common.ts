@@ -154,7 +154,7 @@ export default defineMessages(
     "field.website": "Website",
     "field.password": "Password",
 
-    "ai.notConfigured": "AI features need an Anthropic API key (ANTHROPIC_API_KEY). Search still works without it.",
+    "ai.notConfigured": "AI answers need an OpenRouter API key (OPENROUTER_API_KEY). Search still works without it.",
     "footer.privacy": "This tool holds information about adult partners and volunteers only. Never enter student information.",
   },
   {
@@ -305,7 +305,7 @@ export default defineMessages(
     "field.website": "Sitio web",
     "field.password": "Contraseña",
 
-    "ai.notConfigured": "Las funciones de IA necesitan una clave de Anthropic (ANTHROPIC_API_KEY). La búsqueda funciona sin ella.",
+    "ai.notConfigured": "Las respuestas con IA necesitan una clave de OpenRouter (OPENROUTER_API_KEY). La búsqueda funciona sin ella.",
     "footer.privacy": "Esta herramienta solo guarda información de socios y voluntarios adultos. Nunca ingreses información de estudiantes.",
   },
 );

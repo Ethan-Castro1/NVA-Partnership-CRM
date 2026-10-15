@@ -16,7 +16,7 @@ import { Input } from "~/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { makeT, useT, type MessageKey } from "~/i18n";
 import { getLocale } from "~/i18n/locale.server";
-import { isAiConfigured } from "~/lib/ai/client.server";
+import { isWebSearchConfigured } from "~/lib/ai/exa.server";
 import { dismissWebLead, findWebLeads, listWebLeads, saveWebLeadAsContact } from "~/lib/ai/web-leads.server";
 import { requireUser } from "~/lib/auth.server";
 import { getVillageMap, highlightFor, sortConnectorResults } from "~/lib/connections.server";
@@ -57,7 +57,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       .map((p) => ({ id: p.id, full_name: p.full_name }))
       .sort((a, b) => a.full_name.localeCompare(b.full_name)),
     leads,
-    aiConfigured: isAiConfigured(),
+    aiConfigured: isWebSearchConfigured(),
   };
 }
 

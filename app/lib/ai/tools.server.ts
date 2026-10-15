@@ -12,6 +12,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { makeT, type Locale } from "~/i18n";
 import { getCapsForPerson, listCaps } from "~/lib/caps.server";
+import { ExaError, exaSearch, isWebSearchConfigured } from "./exa.server";
 import { AFFILIATIONS, CAP_STATUSES, CONTRIBUTION_TYPES, type CapStatus } from "~/lib/constants";
 import {
   findConnectorsForNeed,
@@ -123,6 +124,40 @@ export const TOOLS: Anthropic.Beta.Messages.BetaTool[] = [
   },
 ];
 
+/** Web search (Exa). Offered only when EXA_API_KEY is set; see toolsFor(). */
+export const WEB_TOOL: Anthropic.Beta.Messages.BetaTool = {
+  name: "search_web",
+  description:
+    "Search the public web (people profiles and organization pages) for possible new partners who are NOT in NVA's database yet. Use it after the database tools, when they find nobody suitable or the staff member asks to look beyond the database. Results are unverified web pages: present them separately as suggestions to check, never as NVA contacts.",
+  strict: true,
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      query: {
+        type: "string",
+        description: "What to look for, including the place, e.g. \"marine biologists Annapolis Maryland\" or \"USDA offices Annapolis\".",
+      },
+      kind: {
+        type: "string",
+        enum: ["people", "organizations", "any"],
+        description: "people for individual profiles, organizations for companies, nonprofits and agencies, any for both.",
+      },
+    },
+    required: ["query", "kind"],
+  },
+};
+
+/**
+ * The tools for one request. OpenRouter's Anthropic endpoint doesn't take
+ * Anthropic's strict tool flag, so it's dropped there (zod still validates
+ * every input before it runs).
+ */
+export function toolsFor(options: { web: boolean; strict: boolean }): Anthropic.Beta.Messages.BetaTool[] {
+  const list = options.web ? [...TOOLS, WEB_TOOL] : TOOLS;
+  return options.strict ? list : list.map(({ strict: _strict, ...tool }) => tool);
+}
+
 // ---------- input validation ----------
 
 /** Keeps only known enum values, so a stray value narrows nothing instead of failing. */
@@ -153,6 +188,10 @@ const inputs = {
   list_caps: z.object({
     status: z.string().max(20).optional(),
     mine: z.boolean().optional(),
+  }),
+  search_web: z.object({
+    query: z.string().trim().min(2).max(300),
+    kind: z.enum(["people", "organizations", "any"]).catch("any"),
   }),
 };
 
@@ -345,6 +384,35 @@ const executors: { [K in ToolName]: Executor<K> } = {
       isError: false,
       personIds: [],
     };
+  },
+
+  async search_web(input) {
+    if (!isWebSearchConfigured()) return { content: "Web search is not set up (no EXA_API_KEY).", isError: true, personIds: [] };
+    const category = input.kind === "people" ? "people" : input.kind === "organizations" ? "company" : undefined;
+    try {
+      const results = await exaSearch({ query: input.query, category, numResults: 8 });
+      return {
+        content: json({
+          note: "Unverified web results, not NVA contacts. Present them separately, with the page address in plain text. To save one, staff can use Search beyond our network on /app/connections.",
+          results: results.map((r) => ({
+            title: r.title,
+            url: r.url,
+            author: r.author,
+            published: r.publishedDate,
+            excerpt: clip(r.highlights.join(" "), 500),
+          })),
+        }),
+        isError: false,
+        personIds: [],
+      };
+    } catch (error) {
+      const status = error instanceof ExaError ? error.status : null;
+      return {
+        content: status === 429 || status === 402 ? "Web search is busy or out of credit right now." : "Web search failed. Answer from the database only.",
+        isError: true,
+        personIds: [],
+      };
+    }
   },
 };
 

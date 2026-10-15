@@ -14,7 +14,7 @@ import {
 } from "~/components/intake/form-parts";
 import { REFERRAL_SLOTS, type IntakeErrors, type IntakeFormValues } from "~/components/intake/form-types";
 import { PublicTopBar, SkipLink } from "~/components/intake/public-shell";
-import { Field, VillageMark } from "~/components/nva";
+import { Field, FullLogo } from "~/components/nva";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Textarea } from "~/components/ui/textarea";
@@ -99,7 +99,7 @@ export default function Join() {
       <PublicTopBar />
       <main id="main" className="px-4 pt-2 pb-16 md:pt-6">
         <div className="mx-auto w-full max-w-2xl rounded-[24px] bg-canvas p-6 shadow-[0_24px_60px_-30px_rgba(0,0,0,0.35)] ring-1 ring-stone sm:p-8 md:p-10">
-          <VillageMark className="mx-auto mb-5 size-11" />
+          <FullLogo className="mx-auto mb-6 max-w-[260px]" />
           <h1 className="text-center font-display text-3xl font-bold tracking-tight md:text-4xl">{t("intake.title")}</h1>
           <p className="mx-auto mt-3 max-w-lg text-center text-smoke">{t("intake.subtitle")}</p>
           <p className="mt-2 text-center text-xs text-smoke">{t("intake.requiredNote")}</p>

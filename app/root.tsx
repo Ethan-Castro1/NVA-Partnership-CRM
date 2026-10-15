@@ -28,7 +28,8 @@ export const links: Route.LinksFunction = () => [
     // Brand kit: Montserrat (titles), Arimo (headings and text), Kaushan Script (accent).
     href: "https://fonts.googleapis.com/css2?family=Arimo:ital,wght@0,400..700;1,400..700&family=Kaushan+Script&family=Montserrat:wght@300;400;600;700&display=swap",
   },
-  { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+  { rel: "icon", type: "image/png", href: "/favicon-64.png" },
+  { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
 ];
 
 export async function loader({ request }: Route.LoaderArgs) {

@@ -5,10 +5,11 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * New Village Academy, from the NVA Brand Kit (rev. 1/5/26), laid out in a
- * quiet editorial style: a warm eggshell page, taupe panels, hairline stone
- * rules, black ink and pill buttons. Gold is the one brand spark; the four
- * secondary brand colours mark the four ways people contribute.
+ * New Village Academy, from the NVA Brand Kit (rev. 1/5/26): black, gold and
+ * white first (in that order of frequency), Montserrat Bold titles, Arimo
+ * Bold headings, Arimo text, Kaushan Script accents in caps. Rust, blue,
+ * purple and sage mark the ways people contribute. Layout is quiet and
+ * editorial: white page, light grey panels, hairline rules, pill buttons.
  *
  * Contrast (WCAG) on canvas #fdfcfc / taupe #f5f3f1:
  *   ink 21 / 19, graphite 10.0 / 9.3, smoke 5.6 / 5.2 (body text OK),
@@ -23,10 +24,10 @@
   --font-accent: "Kaushan Script", "Brush Script MT", cursive;
 
   /* Surfaces, lightest to deepest. */
-  --color-canvas: #fdfcfc;
-  --color-taupe: #f5f3f1;
-  --color-cream: #f8f4ea; /* sidebar and dashboard wash, warmed toward gold */
-  --color-stone: #ebe8e4;
+  --color-canvas: #ffffff; /* brand white */
+  --color-taupe: #f6f5f2; /* quiet panel grey, one step off white */
+  --color-cream: #fffaf0; /* sidebar wash, warmed toward gold */
+  --color-stone: #e9e7e3;
 
   /* Ink, strongest to quietest. */
   --color-ink: #000000;
@@ -62,22 +63,22 @@
 /* shadcn/ui variables, pointed at the NVA tokens above. */
 :root {
   --radius: 0.75rem;
-  --background: #fdfcfc;
+  --background: #ffffff;
   --foreground: #000000;
-  --card: #fdfcfc;
+  --card: #ffffff;
   --card-foreground: #000000;
-  --popover: #fdfcfc;
+  --popover: #ffffff;
   --popover-foreground: #000000;
   --primary: #000000;
   --primary-foreground: #ffffff;
-  --secondary: #f5f3f1;
+  --secondary: #f6f5f2;
   --secondary-foreground: #000000;
-  --muted: #f5f3f1;
+  --muted: #f6f5f2;
   --muted-foreground: #6b655d;
   --accent: #fff3d1;
   --accent-foreground: #000000;
   --destructive: #b42318;
-  --border: #ebe8e4;
+  --border: #e9e7e3;
   --input: #e2ded8;
   --ring: #faad00;
   --chart-1: #faad00;
@@ -85,13 +86,13 @@
   --chart-3: #277f93;
   --chart-4: #7e6f8f;
   --chart-5: #9cb47d;
-  --sidebar: #f8f4ea;
+  --sidebar: #fffaf0;
   --sidebar-foreground: #000000;
   --sidebar-primary: #000000;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #fff3d1;
   --sidebar-accent-foreground: #000000;
-  --sidebar-border: #ebe8e4;
+  --sidebar-border: #e9e7e3;
   --sidebar-ring: #faad00;
 }
 
@@ -147,22 +148,22 @@
   h1,
   h2,
   h3 {
-    @apply font-display;
-    letter-spacing: -0.02em;
+    @apply font-display font-bold;
+    letter-spacing: -0.01em;
   }
 }
 
-/* Display type: Montserrat light, tight, as in the editorial reference. */
+/* Titles: Montserrat Bold, per the brand kit (it names Cocogoose first; Montserrat is its Google stand-in). */
 @utility text-display {
   font-family: var(--font-display);
-  font-weight: 300;
+  font-weight: 700;
   font-size: clamp(2.25rem, 4vw, 3rem);
   line-height: 1.08;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.015em;
 }
 @utility text-heading {
   font-family: var(--font-display);
-  font-weight: 300;
+  font-weight: 700;
   font-size: clamp(1.75rem, 3vw, 2.25rem);
   line-height: 1.15;
   letter-spacing: -0.02em;

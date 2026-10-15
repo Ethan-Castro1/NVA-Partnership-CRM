@@ -1,6 +1,6 @@
 import { Form, Link, data, redirect, useActionData, useNavigation, useSearchParams } from "react-router";
 import type { Route } from "./+types/login";
-import { Field, LanguageToggle, VillageMark } from "~/components/nva";
+import { Field, FullLogo, LanguageToggle } from "~/components/nva";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { makeT, useT } from "~/i18n";
@@ -39,7 +39,7 @@ export default function Login() {
       <LanguageToggle className="absolute top-4 right-4" />
       <div className="w-full max-w-md rounded-[24px] bg-canvas p-8 shadow-[0_24px_60px_-30px_rgba(0,0,0,0.35)] ring-1 ring-stone md:p-10">
         <Link to="/" className="mx-auto mb-6 flex w-fit items-center gap-2">
-          <VillageMark className="size-10" />
+          <FullLogo className="max-w-[230px]" />
         </Link>
         <h1 className="text-center font-display text-3xl font-bold tracking-tight">{t("auth.title")}</h1>
         <p className="mt-2 text-center text-sm text-smoke">{t("auth.subtitle")}</p>

@@ -19,41 +19,49 @@ import { cn } from "~/lib/utils";
 
 // ---------- brand ----------
 
-/** Five overlapping circles in the brand colours: "we are the village". */
+/** The NVA logo mark (the gold village symbol), from public/nva-mark.png. Decorative: pair it with text. */
 export function VillageMark({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 40 40" aria-hidden="true" className={cn("size-8", className)}>
-      <circle cx="20" cy="13" r="8" fill="#faad00" />
-      <circle cx="11" cy="22" r="7" fill="#cf6608" opacity="0.92" />
-      <circle cx="29" cy="22" r="7" fill="#277f93" opacity="0.92" />
-      <circle cx="15" cy="31" r="6" fill="#7e6f8f" opacity="0.92" />
-      <circle cx="26" cy="31" r="6" fill="#9cb47d" opacity="0.95" />
-    </svg>
-  );
+  return <img src="/nva-mark.png" alt="" aria-hidden="true" width={175} height={175} className={cn("size-8 object-contain", className)} />;
 }
 
+/**
+ * The brand-kit lockup: gold mark, NEW VILLAGE ACADEMY in Montserrat Bold
+ * caps, and a small line underneath (the app name, or the tagline).
+ */
 export function Wordmark({ className, subtitle }: { className?: string; subtitle?: string }) {
   const { t } = useT();
   return (
     <span className={cn("flex items-center gap-2.5", className)}>
-      <VillageMark className="size-8 shrink-0" />
+      <VillageMark className="size-9 shrink-0" />
       <span className="grid leading-tight">
-        <span className="font-display text-[0.8rem] font-bold tracking-[0.06em] uppercase">{t("common.schoolName")}</span>
+        <span className="font-display text-[0.85rem] font-bold tracking-[0.02em] text-ink uppercase">{t("common.schoolName")}</span>
         <span className="text-xs text-smoke">{subtitle ?? t("common.appName")}</span>
       </span>
     </span>
   );
 }
 
-/** The signature visual: soft overlapping orbs of the brand colours. Decorative. */
+/** The full logo (mark, name, "High school done differently"), as NVA publishes it. */
+export function FullLogo({ className }: { className?: string }) {
+  const { t } = useT();
+  return (
+    <img
+      src="/nva-logo.webp"
+      alt={`${t("common.schoolName")}: ${t("common.tagline")}`}
+      width={707}
+      height={294}
+      className={cn("h-auto w-full max-w-[420px] object-contain", className)}
+    />
+  );
+}
+
+/** Hero visual for public pages: the brand logo on a soft gold field. Decorative. */
 export function VillageOrbs({ className }: { className?: string }) {
   return (
-    <div aria-hidden="true" className={cn("relative aspect-square w-full max-w-[420px]", className)}>
-      <div className="absolute top-[4%] left-[22%] size-[52%] rounded-full bg-[radial-gradient(circle_at_35%_35%,#ffd36b,#faad00_55%,#f39c00)] opacity-95 blur-[1px]" />
-      <div className="absolute top-[34%] left-[2%] size-[44%] rounded-full bg-[radial-gradient(circle_at_40%_35%,#f0a266,#cf6608_60%)] opacity-85 mix-blend-multiply" />
-      <div className="absolute top-[30%] right-[2%] size-[46%] rounded-full bg-[radial-gradient(circle_at_40%_35%,#7fc0cf,#277f93_65%)] opacity-85 mix-blend-multiply" />
-      <div className="absolute bottom-[2%] left-[18%] size-[38%] rounded-full bg-[radial-gradient(circle_at_40%_35%,#b9aec7,#7e6f8f_65%)] opacity-85 mix-blend-multiply" />
-      <div className="absolute right-[16%] bottom-[4%] size-[36%] rounded-full bg-[radial-gradient(circle_at_40%_35%,#cfe0b8,#9cb47d_65%)] opacity-90 mix-blend-multiply" />
+    <div aria-hidden="true" className={cn("relative grid aspect-square w-full max-w-[420px] place-items-center", className)}>
+      <div className="absolute inset-[6%] rounded-full bg-gold-soft" />
+      <div className="absolute inset-[22%] rounded-full border-[10px] border-gold/25" />
+      <img src="/nva-mark.png" alt="" width={175} height={175} className="relative w-[46%] object-contain" />
     </div>
   );
 }
@@ -140,7 +148,7 @@ export function StatTile({
         {icon && <span className={cn("grid size-7 place-items-center rounded-full [&_svg]:size-4", plate)}>{icon}</span>}
         <span>{label}</span>
       </div>
-      <div className="font-display text-3xl font-light tracking-tight">{value}</div>
+      <div className="font-display text-3xl font-bold tracking-tight">{value}</div>
       {hint && <div className="text-xs text-smoke">{hint}</div>}
     </div>
   );

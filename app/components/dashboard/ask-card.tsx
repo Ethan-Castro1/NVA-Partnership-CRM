@@ -18,7 +18,7 @@ export function AskCard() {
           <p id="ask-heading" className="text-eyebrow text-gold-ink">
             {t("dashboard.askTitle")}
           </p>
-          <h2 className="font-display text-2xl font-light tracking-tight md:text-[1.75rem]">
+          <h2 className="font-display text-2xl font-bold tracking-tight md:text-[1.75rem]">
             <label htmlFor="ask-q">{t("dashboard.askLabel")}</label>
           </h2>
           <p className="text-sm text-smoke">{t("dashboard.askHint")}</p>

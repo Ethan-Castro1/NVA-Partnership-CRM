@@ -2,7 +2,7 @@ import { Link } from "react-router";
 import { ArrowRight } from "lucide-react";
 import type { Route } from "./+types/home";
 import { PublicFooter, PublicTopBar, SkipLink } from "~/components/intake/public-shell";
-import { VillageOrbs } from "~/components/nva";
+import { FullLogo } from "~/components/nva";
 import { Button } from "~/components/ui/button";
 import { makeT, useT, type MessageKey } from "~/i18n";
 import { CONTRIBUTION_COLOR, CONTRIBUTION_TYPES } from "~/lib/constants";
@@ -53,7 +53,7 @@ export default function Home() {
             </div>
           </div>
           <div className="hidden justify-center md:flex">
-            <VillageOrbs />
+            <FullLogo className="max-w-[460px]" />
           </div>
         </section>
 

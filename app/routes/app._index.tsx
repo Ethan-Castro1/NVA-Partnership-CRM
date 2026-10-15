@@ -3,8 +3,10 @@ import { useLoaderData } from "react-router";
 import type { Route } from "./+types/app._index";
 import { AskCard } from "~/components/dashboard/ask-card";
 import { longToday } from "~/components/dashboard/format";
-import { MyCaps, RecentActivity, RecentPeople, SignupsCallout, StatRow } from "~/components/dashboard/panels";
-import type { DashboardCap, RecentEngagement, RecentPerson } from "~/components/dashboard/types";
+import { MyCaps, RecentActivity, SignupsCallout, StatRow } from "~/components/dashboard/panels";
+import { PeopleDataTable } from "~/components/dashboard/people-table/data-table";
+import type { DashboardPerson } from "~/components/dashboard/people-table/features";
+import type { DashboardCap, RecentEngagement } from "~/components/dashboard/types";
 import { PageHeader } from "~/components/nva";
 import { makeT, useT } from "~/i18n";
 import { getLocale } from "~/i18n/locale.server";
@@ -25,15 +27,16 @@ export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
   const locale = await getLocale(request, user.locale);
 
-  const [counts, caps, recentPeople, recentActivity] = await Promise.all([
+  const [counts, caps, people, recentActivity] = await Promise.all([
     getCounts(),
     listCaps({ ownerId: user.id }),
-    query<Omit<RecentPerson, "created_at"> & { created_at: unknown }>(
-      `SELECT p.id, p.full_name, p.title, o.name AS organization_name, p.contribution_types, p.status, p.created_at
+    // The table filters, sorts and pages in the browser; 1000 rows is plenty for one school.
+    query<Omit<DashboardPerson, "updated_at"> & { updated_at: unknown }>(
+      `SELECT p.id, p.full_name, p.title, o.name AS organization_name, p.email, p.contribution_types, p.skills,
+              p.affiliations, p.status, p.preferred_language, p.updated_at
          FROM people p LEFT JOIN organizations o ON o.id = p.organization_id
-        WHERE p.status <> 'inactive'
-        ORDER BY p.created_at DESC, p.full_name
-        LIMIT 6`,
+        ORDER BY p.updated_at DESC, p.full_name
+        LIMIT 1000`,
     ),
     query<RecentEngagement>(
       `SELECT e.id, e.kind, e.happened_on::text AS happened_on, p.id AS person_id, p.full_name AS person_name,
@@ -64,13 +67,13 @@ export async function loader({ request }: Route.LoaderArgs) {
     today: longToday(locale),
     counts,
     myCaps,
-    recentPeople: recentPeople.map((p) => ({ ...p, created_at: iso(p.created_at) })) as RecentPerson[],
+    people: people.map((p) => ({ ...p, updated_at: iso(p.updated_at) })) as DashboardPerson[],
     recentActivity,
   };
 }
 
 export default function Dashboard() {
-  const { firstName, isAdmin, today, counts, myCaps, recentPeople, recentActivity } = useLoaderData<typeof loader>();
+  const { firstName, isAdmin, today, counts, myCaps, people, recentActivity } = useLoaderData<typeof loader>();
   const { t } = useT();
 
   return (
@@ -83,7 +86,7 @@ export default function Dashboard() {
 
       <StatRow people={counts.people} active={counts.active} leads={counts.leads} byContribution={counts.byContribution} />
 
-      <RecentPeople people={recentPeople} />
+      <PeopleDataTable data={people} />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <MyCaps caps={myCaps} />

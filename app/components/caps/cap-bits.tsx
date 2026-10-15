@@ -48,7 +48,7 @@ export function CapCard({ cap }: { cap: CapSummary }) {
         )}
       </div>
       <div className="space-y-2">
-        <h2 className="font-display text-xl font-light tracking-tight">
+        <h2 className="font-display text-xl font-bold tracking-tight">
           <Link to={`/app/caps/${cap.id}`} className="outline-none after:absolute after:inset-0 after:rounded-card hover:underline">
             {cap.title}
           </Link>

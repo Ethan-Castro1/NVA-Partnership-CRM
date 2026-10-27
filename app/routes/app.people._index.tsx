@@ -51,7 +51,7 @@ export default function PeopleDirectory() {
   const count = directorySize === 1 ? t("directory.countOne") : t("directory.countMany", { count: directorySize });
 
   return (
-    <div className="grid gap-6">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <PageHeader
         title={isAdmin ? t("directory.adminTitle") : t("directory.staffTitle")}
         description={
@@ -91,7 +91,7 @@ export default function PeopleDirectory() {
 
       <DirectoryFilters params={params} topics={topics} isAdmin={isAdmin} owners={owners} />
 
-      <section aria-labelledby="people-results" aria-busy={loading} className={cn("grid gap-3 transition-opacity", loading && "opacity-60")}>
+      <section aria-labelledby="people-results" aria-busy={loading} className={cn("grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 transition-opacity", loading && "opacity-60")}>
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 id="people-results" className="sr-only">
             {t("directory.resultsHeading")}

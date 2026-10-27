@@ -15,6 +15,7 @@ import { getPasswordHash, updateOwnProfile } from "~/lib/admin.server";
 import {
   MIN_PASSWORD_LENGTH,
   endAllSessions,
+  isLockedDemoEmail,
   passwordProblem,
   requireUser,
   setPassword,
@@ -64,6 +65,8 @@ export async function action({ request }: Route.ActionArgs) {
     );
   }
 
+  // Demo mode: everyone shares this account, so one visitor can't change its password for the rest.
+  if (isLockedDemoEmail(user.email)) return fail({ ok: false, form: "password", error: "account.error.demoLocked" });
   const hash = await getPasswordHash(user.id);
   if (!hash || !(await verifyPassword(input.current, hash)))
     return fail({ ok: false, form: "password", error: "account.error.currentWrong", field: "current" });

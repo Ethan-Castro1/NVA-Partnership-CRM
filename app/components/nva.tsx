@@ -83,7 +83,7 @@ export function PageHeader({
 }) {
   return (
     <div className={cn("flex flex-col gap-4 md:flex-row md:items-end md:justify-between", className)}>
-      <div className="max-w-3xl space-y-2">
+      <div className="min-w-0 max-w-3xl space-y-2">
         {eyebrow && <p className="text-eyebrow text-gold-ink">{eyebrow}</p>}
         <h1 className="text-heading">{title}</h1>
         {description && <p className="text-[0.95rem] leading-relaxed text-smoke">{description}</p>}

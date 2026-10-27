@@ -283,9 +283,20 @@ function EditForm({
 
 /**
  * The note shown after a decision redirects to the next sign-up (or the list):
- * ?done=approved|linked|rejected|archived, plus &person=<id> for a profile link.
+ * ?done=approved|linked|rejected|archived, plus &person=<id> for a profile link
+ * and &from=<submission id> so the loader can name who was decided.
  */
-export function DoneNotice({ fallback }: { fallback?: ReactNode }) {
+export function DoneNotice({
+  fallback,
+  name,
+  next = false,
+}: {
+  fallback?: ReactNode;
+  /** Who the decision was about (so the note can't be read as being about the sign-up now on screen). */
+  name?: string | null;
+  /** True on the next sign-up's page: says the one below is a different person. */
+  next?: boolean;
+}) {
   const { t } = useT();
   const [searchParams] = useSearchParams();
   const done = searchParams.get("done");
@@ -294,7 +305,10 @@ export function DoneNotice({ fallback }: { fallback?: ReactNode }) {
   if (!known) return done ? <>{fallback}</> : null;
   return (
     <p role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-sage-soft px-3.5 py-2.5 text-sm text-sage-ink">
-      <span>{t(`admin.detail.done.${done}`)}</span>
+      <span>
+        {name ? t(`admin.detail.doneNamed.${done}`, { name }) : t(`admin.detail.done.${done}`)}
+        {next && <> {t("admin.detail.nextBelow")}</>}
+      </span>
       {person && (done === "approved" || done === "linked") && (
         <Link to={`/app/people/${person}`} className="font-medium underline underline-offset-4">
           {t("admin.detail.openProfile")}

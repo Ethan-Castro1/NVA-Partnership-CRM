@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { addRelationship, createPerson } from "~/lib/people.server";
+import { addRelationship, createPerson, searchPeople } from "~/lib/people.server";
 import type { SessionUser } from "~/lib/types";
 import { fallbackAnswer, interpretQuestion, peopleForCards, referencedPersonIds, runAssistant } from "./assistant.server";
 
@@ -42,7 +42,8 @@ describe("the no-API-key fallback", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.mode).toBe("fallback");
-    expect(result.personIds).toEqual([mei]);
+    // Mei teaches sewing; Lucía's tailoring is a related word, ranked lower (same as People & Skills).
+    expect(result.personIds).toEqual([mei, lucia]);
     expect(result.answer).toContain(`Here's who matches "Who can teach a sewing lesson?" in our records:`);
     expect(result.answer).toContain(`[Mei Lin](/app/people/${mei})`);
     expect(result.answer).toContain("Rosa Delgado (Board member) knows Lucía Herrera, who knows Mei Lin");
@@ -55,6 +56,18 @@ describe("the no-API-key fallback", () => {
     expect(personIds).toEqual([tom]);
     expect(answer).toContain("Esto es lo que encontré");
     expect(answer).toContain("Todavía no hay un camino conocido");
+  });
+
+  it("finds the same people, in the same order, as the People & Skills search", async () => {
+    for (const question of ["Who can teach a sewing lesson?", "someone to host a welding internship", "Who speaks Spanish and can teach tailoring?"]) {
+      const { personIds } = await fallbackAnswer(question, "en", user);
+      const spanish = /spanish/i.test(question);
+      const { people } = await searchPeople(
+        { q: spanish ? question.replace(/spanish/gi, " ") : question, language: spanish ? "es" : undefined, limit: 6 },
+        user,
+      );
+      expect(personIds).toEqual(people.map((p) => p.id));
+    }
   });
 
   it("drops a too-strict type filter before giving up", async () => {

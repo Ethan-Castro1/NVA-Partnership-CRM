@@ -136,7 +136,8 @@ export async function listHistory(
             ${admin ? "u.name" : "CASE WHEN u.role = 'admin' THEN NULL ELSE u.name END"} AS user_name,
             e.cap_id, c.title AS cap_title, e.origin, e.visibility,
             ${admin ? "e.opportunity_id, e.follow_up_id, e.email_message_id" : "NULL::text AS opportunity_id, NULL::text AS follow_up_id, NULL::text AS email_message_id"},
-            ${admin ? "e.staff_request_id" : "CASE WHEN sr.requester_id = $2 THEN e.staff_request_id END AS staff_request_id"},
+            ${admin ? "e.staff_request_id" : `CASE WHEN sr.requester_id = $2 OR EXISTS (SELECT 1 FROM staff_request_shares sh WHERE sh.request_id = sr.id AND sh.user_id = $2)
+                    THEN e.staff_request_id END AS staff_request_id`},
             e.created_at
        FROM engagements e
        JOIN people p ON p.id = e.person_id

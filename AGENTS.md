@@ -90,16 +90,30 @@ const schema = z.object({
 
 A bilingual (English/Spanish) partnership CRM for New Village Academy, Annapolis.
 Community members sign up at `/join` to teach a skills lesson, volunteer in a class,
-host an internship or partner on a Community Action Project (CAP). Staff sign in at
-`/login` (email + password; admins create accounts) to search people, ask the AI
-assistant, find second-degree connections, and manage CAPs.
+host an internship or partner on a Community Action Project (CAP). Two roles sign in at
+`/login` (email + password; admins create accounts): **staff** (Search, Connect, Arrange: find
+approved resources, request introductions, track their requests) and **admin** (the full CRM:
+contacts, opportunities, follow-ups, staff requests, sign-up review, email). Spec:
+`docs/requirements.md`; build plan and ownership: `docs/build-contract.md`.
+
+- **Permissions are server side:** every read takes a `viewer`; `app/lib/permissions.server.ts`
+  (`staffVisibleSql`, `requireAdminViewer`). Staff never receive notes, funding focus, origin, owner,
+  opportunities, follow-ups, email, intake or hidden people; contact details only when `contact_mode='direct'`.
+- **History:** `app/lib/history.server.ts` `recordHistory` never changes `people.status` unless asked.
+- **CRM modules:** `opportunities.server.ts`, `follow-ups.server.ts`, `requests.server.ts`, `intake.server.ts`,
+  `saved.server.ts`, `duplicates.server.ts`, `search-language.ts`, `dashboard.server.ts`, `app/lib/email/*`
+  (Google/Microsoft OAuth; needs `EMAIL_TOKEN_KEY`, `APP_URL`, client ids; Settings lists what is missing),
+  `app/lib/ai/drafts.server.ts` (drafts are never sent without explicit approval).
+- **Client code must not import values from `*.server` modules** (the build fails); shared constants go in
+  `app/lib/constants.ts`.
 
 - **Data:** `app/lib/schema.server.ts` (runs at startup, idempotent; add columns with
   `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`). Adults only: never store student data.
 - **Database:** `DATABASE_URL` (Postgres) when deployed; embedded PGlite in `.data/pglite`
   locally. Only one process can open PGlite: stop `npm run dev` before `npm run seed`.
 - **Core logic:** `app/lib/people.server.ts` (search, profiles, relationships, intro paths),
-  `app/lib/caps.server.ts`, `app/lib/auth.server.ts`, `app/lib/ai/*` (Claude, `claude-opus-5-5`).
+  `app/lib/caps.server.ts`, `app/lib/auth.server.ts`, `app/lib/ai/*` (OpenRouter `z-ai/glm-5.3-flash`,
+  override with `AI_MODEL`).
 - **Bilingual:** every string goes through `useT()`/`t("namespace.key")`; one dictionary
   file per feature in `app/i18n/`, Spanish must have every English key (TypeScript checks).
   No em dashes in user-facing copy.

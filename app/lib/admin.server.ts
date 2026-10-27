@@ -19,7 +19,7 @@ import {
   type Role,
 } from "./constants";
 import { query, queryOne, transaction } from "./db.server";
-import { findDuplicates, type DuplicateCandidate } from "./duplicates.server";
+import { findDuplicates, possibleDuplicateSql, type DuplicateCandidate } from "./duplicates.server";
 import type { IntakePayload, IntakeReferral } from "./intake-types";
 import { getCounts, updatePerson } from "./people.server";
 import type { ContactMode } from "./constants";
@@ -96,10 +96,7 @@ const SIGNUP_COLUMNS = `
        THEN jsonb_array_length(s.payload->'referrals') ELSE 0 END AS referral_count,
   (s.status = 'new' AND (
      (s.matched_person_id IS NOT NULL AND s.matched_person_id IS DISTINCT FROM s.person_id)
-     OR EXISTS (SELECT 1 FROM people m
-                 WHERE coalesce(${SIGNUP_PAYLOAD}->>'email', '') <> ''
-                   AND lower(m.email) = lower(${SIGNUP_PAYLOAD}->>'email')
-                   AND m.id IS DISTINCT FROM s.person_id))) AS possible_match`;
+     OR ${possibleDuplicateSql(SIGNUP_PAYLOAD, "s.person_id")})) AS possible_match`;
 
 function toSignupRow(row: SignupRow): SignupRow {
   return {
@@ -391,6 +388,19 @@ export async function setIntakeStatus(id: string, status: "new" | "archived", re
 }
 
 /** The next sign-up still waiting for review, in the list's order (newest first). */
+/**
+ * After a decision the review pages redirect with ?done=...&from=<submission id>;
+ * this is the name on that sign-up (for "Marcus Bell approved..."), or null.
+ * Admin pages only.
+ */
+export async function decidedIntakeName(request: Request): Promise<string | null> {
+  const params = new URL(request.url).searchParams;
+  const from = params.get("from");
+  if (!params.get("done") || !from || from.length > 100) return null;
+  const row = await queryOne<{ name: string | null }>("SELECT coalesce(edited_payload->>'full_name', payload->>'full_name') AS name FROM intake_submissions WHERE id = $1", [from]);
+  return row?.name?.trim() || null;
+}
+
 export async function nextNewIntake(excludeId: string): Promise<string | null> {
   const row = await queryOne<{ id: string }>(
     "SELECT id FROM intake_submissions WHERE status = 'new' AND id <> $1 ORDER BY submitted_at DESC LIMIT 1",

@@ -171,7 +171,7 @@ export default function CapDetail() {
   const countOf = (status: string) => partners.filter((p) => p.status === status).length;
 
   return (
-    <div className="grid gap-8">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-8">
       <BackLink to="/app/caps" label={t("caps.detail.backToList")} />
       <PageHeader
         eyebrow={

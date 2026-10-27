@@ -26,7 +26,7 @@ export default function Organizations() {
   const { q, organizations } = useLoaderData<typeof loader>();
   const { t } = useT();
   return (
-    <div className="grid gap-6">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <PageHeader
         title={t("directory.orgs.title")}
         description={t("directory.orgs.description")}

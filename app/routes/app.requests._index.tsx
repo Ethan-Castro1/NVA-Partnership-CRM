@@ -1,4 +1,4 @@
-/** My Requests: the signed-in user's own staff requests (admins see everyone's at /app/admin/requests). */
+/** My Requests: the signed-in user's own staff requests and ones shared with them (admins see everyone's at /app/admin/requests). */
 import { Link } from "react-router";
 import { Plus } from "lucide-react";
 import type { Route } from "./+types/app.requests._index";
@@ -7,7 +7,8 @@ import { RequestRows } from "~/components/requests";
 import { Button } from "~/components/ui/button";
 import { makeT, useT } from "~/i18n";
 import { requireUser } from "~/lib/auth.server";
-import { ACTIVE_REQUEST_STATUSES, listRequests } from "~/lib/requests.server";
+import { ACTIVE_REQUEST_STATUSES } from "~/lib/constants";
+import { listRequests } from "~/lib/requests.server";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const locale = (matches[0]?.data as { locale?: "en" | "es" } | undefined)?.locale ?? "en";
@@ -29,7 +30,7 @@ export default function MyRequests({ loaderData }: Route.ComponentProps) {
   const { t } = useT();
   const { active, past, isAdmin } = loaderData;
   return (
-    <div className="mx-auto grid w-full max-w-3xl gap-6">
+    <div className="mx-auto grid min-w-0 grid-cols-[minmax(0,1fr)] w-full max-w-3xl gap-6">
       <PageHeader
         title={t("requests.index.title")}
         description={t("requests.index.description")}

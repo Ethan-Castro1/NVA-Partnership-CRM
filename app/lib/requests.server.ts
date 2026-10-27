@@ -2,8 +2,12 @@
  * Staff requests: "I need a guest speaker on healthcare", "Please introduce me
  * to Dr. Cho". Separate from the admin's opportunity pipeline.
  *
- * - Staff create requests and see and update only their own. Anyone else's
+ * - Staff create requests and see and update only their own, plus any a
+ *   colleague (or an admin) explicitly shared with them. Anyone else's
  *   request is null here (a 404 in routes), the same as a missing one.
+ * - A colleague a request is shared with can see it, add a completion note
+ *   and mark it completed. Only the requester and admins edit, cancel,
+ *   reopen or share it; only admins reply, assign and set other statuses.
  * - Admins see every request, assign people to it, reply and set the status.
  * - A contact of interest must be someone the requester can see.
  * - Marking a request Completed adds one `engagement_completed` history entry
@@ -13,6 +17,7 @@
  */
 import { z } from "zod";
 import {
+  ACTIVE_REQUEST_STATUSES,
   REQUEST_PERSON_ROLES,
   REQUEST_STATUSES,
   type RequestKind,
@@ -26,15 +31,14 @@ import { getPeopleByIds, type PersonSummary } from "./people.server";
 import { canViewPerson, isAdmin, visibleToSql, type Viewer } from "./permissions.server";
 import { listSaved } from "./saved.server";
 
+export { ACTIVE_REQUEST_STATUSES };
+
 export const MAX_NEED = 200;
 export const MAX_DESCRIPTION = 2000;
 export const MAX_SHORT = 200;
 export const MAX_NOTE = 1000;
 export const MAX_RESPONSE = 2000;
 export const MAX_PARTICIPANTS = 1000;
-
-/** Statuses that still need something to happen. */
-export const ACTIVE_REQUEST_STATUSES: readonly RequestStatus[] = ["open", "arranged"];
 
 export type RequestPerson = PersonSummary & { request_role: RequestPersonRole };
 
@@ -64,9 +68,23 @@ export type RequestView = {
   updated_at: string;
   /** People on the request this viewer may see: contacts of interest and assigned people. */
   people: RequestPerson[];
+  /** Colleagues it is shared with. */
+  shared_with: RequestShare[];
+  /** Someone else's request that was shared with this viewer. */
+  shared_with_me: boolean;
 };
 
-type RequestRow = Omit<RequestView, "people" | "preferred_date" | "completed_at" | "created_at" | "updated_at"> & {
+export type RequestShare = { user_id: string; name: string };
+
+/** What this viewer may do with a request they can see. */
+export type RequestAccess = "admin" | "requester" | "shared";
+
+export function requestAccess(viewer: Viewer, request: Pick<RequestView, "requester_id">): RequestAccess {
+  if (isAdmin(viewer)) return "admin";
+  return request.requester_id === viewer.id ? "requester" : "shared";
+}
+
+type RequestRow = Omit<RequestView, "people" | "shared_with" | "shared_with_me" | "preferred_date" | "completed_at" | "created_at" | "updated_at"> & {
   preferred_date: unknown;
   completed_at: unknown;
   created_at: unknown;
@@ -79,6 +97,10 @@ const stamp = (v: unknown): string | null =>
 const COLUMNS = `r.id, r.kind, r.need, r.description, r.cap_id, c.title AS cap_title, r.activity, r.preferred_date,
   r.timeframe, r.participant_count, r.status, r.response, r.completed_note, r.requester_id, ru.name AS requester_name,
   r.assigned_to, au.name AS assigned_name, r.completed_at, r.created_at, r.updated_at`;
+/** SQL: the request is the viewer's own or shared with them (`n` is the viewer id parameter). */
+const ownOrSharedSql = (n: string) =>
+  `(r.requester_id = ${n} OR EXISTS (SELECT 1 FROM staff_request_shares sh WHERE sh.request_id = r.id AND sh.user_id = ${n}))`;
+
 const FROM = `FROM staff_requests r
   JOIN users ru ON ru.id = r.requester_id
   LEFT JOIN users au ON au.id = r.assigned_to
@@ -93,6 +115,11 @@ async function withPeople(viewer: Viewer, rows: RequestRow[], db: Queryable = { 
     [rows.map((r) => r.id)],
   );
   const people = new Map((await getPeopleByIds(links.map((l) => l.person_id), viewer)).map((p) => [p.id, p]));
+  const shares = await db.query<{ request_id: string; user_id: string; name: string }>(
+    `SELECT sh.request_id, sh.user_id, u.name FROM staff_request_shares sh JOIN users u ON u.id = sh.user_id
+      WHERE sh.request_id = ANY($1::text[]) ORDER BY lower(u.name)`,
+    [rows.map((r) => r.id)],
+  );
   return rows.map((row) => ({
     ...row,
     preferred_date: toIsoDate(row.preferred_date),
@@ -103,6 +130,8 @@ async function withPeople(viewer: Viewer, rows: RequestRow[], db: Queryable = { 
       const person = l.request_id === row.id ? people.get(l.person_id) : undefined;
       return person ? [{ ...person, request_role: l.role }] : [];
     }),
+    shared_with: shares.filter((s) => s.request_id === row.id).map(({ user_id, name }) => ({ user_id, name })),
+    shared_with_me: row.requester_id !== viewer.id && shares.some((s) => s.request_id === row.id && s.user_id === viewer.id),
   }));
 }
 
@@ -111,16 +140,16 @@ export type RequestListFilter = {
   kind?: RequestKind;
   /** Only requests with this person on them. */
   personId?: string;
-  /** Admins: only this requester's requests. Staff always get only their own. */
+  /** Admins: only this requester's requests. Staff always get only their own (and shared ones). */
   requesterId?: string;
-  /** Only the viewer's own requests (also for admins). */
+  /** Only the viewer's own requests and ones shared with them (also for admins). */
   mine?: boolean;
   limit?: number;
 };
 
 /**
  * Requests the viewer may see, newest first (active ones before closed ones).
- * Staff: only their own. Admins: everyone's, unless `mine` or `requesterId`.
+ * Staff: their own and ones shared with them. Admins: everyone's, unless `mine` or `requesterId`.
  */
 export async function listRequests(viewer: Viewer, filter: RequestListFilter = {}): Promise<RequestView[]> {
   const where: string[] = [];
@@ -129,7 +158,7 @@ export async function listRequests(viewer: Viewer, filter: RequestListFilter = {
     params.push(value);
     where.push(sql(`$${params.length}`));
   };
-  if (!isAdmin(viewer) || filter.mine) add((n) => `r.requester_id = ${n}`, viewer.id);
+  if (!isAdmin(viewer) || filter.mine) add(ownOrSharedSql, viewer.id);
   else if (filter.requesterId) add((n) => `r.requester_id = ${n}`, filter.requesterId);
   if (filter.status) {
     const statuses = (Array.isArray(filter.status) ? filter.status : [filter.status]).filter((s) =>
@@ -164,13 +193,13 @@ export async function listRequestsForPerson(viewer: Viewer, personId: string, li
 async function getRequestRow(viewer: Viewer, id: string, db: Queryable): Promise<RequestRow | null> {
   if (!id || id.length > 100) return null;
   const rows = await db.query<RequestRow>(
-    `SELECT ${COLUMNS} ${FROM} WHERE r.id = $1 ${isAdmin(viewer) ? "" : "AND r.requester_id = $2"}`,
+    `SELECT ${COLUMNS} ${FROM} WHERE r.id = $1 ${isAdmin(viewer) ? "" : `AND ${ownOrSharedSql("$2")}`}`,
     isAdmin(viewer) ? [id] : [id, viewer.id],
   );
   return rows[0] ?? null;
 }
 
-/** One request, or null when it doesn't exist or isn't the viewer's (staff). */
+/** One request, or null when it doesn't exist or isn't the viewer's or shared with them (staff). */
 export async function getRequest(viewer: Viewer, id: string): Promise<RequestView | null> {
   const row = await getRequestRow(viewer, id, { query });
   return row ? ((await withPeople(viewer, [row]))[0] ?? null) : null;
@@ -228,6 +257,8 @@ export type RequestField = "need" | "description" | "capId" | "activity" | "pref
 export type RequestErrors = Partial<Record<RequestField, RequestErrorKey>>;
 
 export type RequestResult = { ok: true; id: string } | { ok: false; errors: RequestErrors };
+/** Editing also refuses a colleague the request is only shared with. */
+export type RequestEditResult = RequestResult | { ok: false; errors: RequestErrors; forbidden: true };
 
 /** Reads the request form (field names match RequestInput; intro is a checkbox "1"/"on"). */
 export function requestInputFromForm(form: FormData): RequestInput {
@@ -302,9 +333,10 @@ export async function updateRequestDetails(
   viewer: Viewer,
   id: string,
   input: Omit<RequestInput, "personId" | "intro">,
-): Promise<RequestResult | null> {
+): Promise<RequestEditResult | null> {
   const current = await getRequest(viewer, id);
   if (!current) return null;
+  if (requestAccess(viewer, current) === "shared") return { ok: false, errors: {}, forbidden: true };
   if (!isAdmin(viewer) && !ACTIVE_REQUEST_STATUSES.includes(current.status)) return { ok: false, errors: {} };
   const checked = await validate(viewer, { ...input, personId: null, intro: false }, { query });
   if (!checked.ok) return checked;
@@ -328,7 +360,7 @@ export type StatusChange = {
 
 export type StatusResult =
   | { ok: true; status: RequestStatus; historyIds: string[] }
-  | { ok: false; error: "not_found" | "invalid" | "locked" };
+  | { ok: false; error: "not_found" | "invalid" | "locked" | "forbidden" };
 
 /** The people a completion is recorded for: the assigned people, or the contacts of interest when nobody was assigned. */
 async function completionPeople(requestId: string, db: Queryable): Promise<string[]> {
@@ -342,7 +374,8 @@ async function completionPeople(requestId: string, db: Queryable): Promise<strin
 
 /**
  * Changes a request's status. Staff: only their own, and a completed request
- * stays completed (an admin can reopen it). Completing records the engagement
+ * stays completed (an admin can reopen it). A colleague it is shared with may
+ * only mark it completed (with a note). Completing records the engagement
  * in each person's history once (re-completing adds nothing) and never
  * changes anyone's relationship status.
  */
@@ -352,6 +385,7 @@ export async function setRequestStatus(viewer: Viewer, id: string, change: Statu
   return transaction(async (tx) => {
     const current = await getRequestRow(viewer, id, tx);
     if (!current) return { ok: false, error: "not_found" } as const;
+    if (requestAccess(viewer, current) === "shared" && change.status !== "completed") return { ok: false, error: "forbidden" } as const;
     const preferredDate = toIsoDate(current.preferred_date);
     if (!isAdmin(viewer) && current.status === "completed" && change.status !== "completed") {
       return { ok: false, error: "locked" } as const;
@@ -392,6 +426,55 @@ export async function setRequestStatus(viewer: Viewer, id: string, change: Statu
     }
     return { ok: true, status: change.status, historyIds } as const;
   });
+}
+
+// ---------- sharing with colleagues ----------
+
+export type ShareResult = { ok: true } | { ok: false; error: "not_found" | "forbidden" | "invalid" };
+
+/** The request, when the viewer may share it (its requester or an admin). */
+async function shareable(viewer: Viewer, requestId: string): Promise<RequestRow | "not_found" | "forbidden"> {
+  const row = await getRequestRow(viewer, requestId, { query });
+  if (!row) return "not_found";
+  return requestAccess(viewer, row) === "shared" ? "forbidden" : row;
+}
+
+/**
+ * Shares a request with another staff member (active, role staff, not the
+ * requester). Only its requester or an admin may share. Sharing twice is a no-op.
+ */
+export async function shareRequest(viewer: Viewer, requestId: string, userId: string): Promise<ShareResult> {
+  const row = await shareable(viewer, requestId);
+  if (typeof row === "string") return { ok: false, error: row };
+  if (!userId || userId === row.requester_id) return { ok: false, error: "invalid" };
+  const target = await query("SELECT 1 FROM users WHERE id = $1 AND role = 'staff' AND active", [userId]);
+  if (!target.length) return { ok: false, error: "invalid" };
+  await query(
+    `INSERT INTO staff_request_shares (request_id, user_id, shared_by) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+    [requestId, userId, viewer.id],
+  );
+  return { ok: true };
+}
+
+/** Stops sharing a request with someone. Only its requester or an admin. */
+export async function unshareRequest(viewer: Viewer, requestId: string, userId: string): Promise<ShareResult> {
+  const row = await shareable(viewer, requestId);
+  if (typeof row === "string") return { ok: false, error: row };
+  await query("DELETE FROM staff_request_shares WHERE request_id = $1 AND user_id = $2", [requestId, userId]);
+  return { ok: true };
+}
+
+/** Colleagues the viewer could share this request with (empty unless they may share it). */
+export async function listShareOptions(viewer: Viewer, requestId: string): Promise<{ id: string; name: string }[]> {
+  const row = await shareable(viewer, requestId);
+  if (typeof row === "string") return [];
+  return query<{ id: string; name: string }>(
+    `SELECT u.id, u.name FROM users u
+      WHERE u.role = 'staff' AND u.active AND u.id <> $1
+        AND NOT EXISTS (SELECT 1 FROM staff_request_shares sh WHERE sh.request_id = $2 AND sh.user_id = u.id)
+      ORDER BY lower(u.name) LIMIT 500`,
+    [row.requester_id, requestId],
+  );
 }
 
 // ---------- admin ----------

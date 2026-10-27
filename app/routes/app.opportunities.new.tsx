@@ -58,7 +58,7 @@ export default function NewOpportunity() {
   const { t } = useT();
   const backTo = personId ? `/app/people/${personId}` : "/app/opportunities";
   return (
-    <div className="mx-auto grid w-full max-w-3xl gap-6">
+    <div className="mx-auto grid min-w-0 grid-cols-[minmax(0,1fr)] w-full max-w-3xl gap-6">
       <Link to={backTo} className="inline-flex w-fit items-center gap-1.5 text-sm text-graphite hover:text-ink">
         <ArrowLeft className="size-4" aria-hidden="true" />
         {personId ? people.find((p) => p.id === personId)?.full_name : t("crm.opps.back")}

@@ -34,7 +34,7 @@ import {
 } from "~/components/nva";
 import { Button } from "~/components/ui/button";
 import { makeT, useT } from "~/i18n";
-import { getIntakeSubmission, nextNewIntake, setIntakeStatus, type IntakeDetail, type MatchedPerson } from "~/lib/admin.server";
+import { decidedIntakeName as decidedName, getIntakeSubmission, nextNewIntake, setIntakeStatus, type IntakeDetail, type MatchedPerson } from "~/lib/admin.server";
 import { requireAdmin } from "~/lib/auth.server";
 import { approveIntake, linkIntake, readIntakeEdits, rejectIntake, saveIntakeEdits } from "~/lib/intake.server";
 import type { IntakePayload } from "~/lib/intake-types";
@@ -50,7 +50,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   await requireAdmin(request);
   const submission = await getIntakeSubmission(params.submissionId);
   if (!submission) throw new Response("Not found", { status: 404 });
-  return { submission };
+  return { submission, decidedName: await decidedName(request) };
 }
 
 const ActionSchema = z.discriminatedUnion("intent", [
@@ -75,7 +75,7 @@ export async function action({ request, params }: Route.ActionArgs) {
   // Decisions go straight to the next new sign-up, with a note (and a profile link) on arrival.
   const moveOn = async (done: "approved" | "linked" | "rejected" | "archived", personId?: string | null) => {
     const next = await nextNewIntake(id);
-    const query = new URLSearchParams({ done, ...(personId ? { person: personId } : {}) });
+    const query = new URLSearchParams({ done, from: id, ...(personId ? { person: personId } : {}) });
     return redirect(next ? `/app/admin/intake/${next}?${query}` : `/app/admin/intake?${query}`);
   };
 
@@ -112,7 +112,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function IntakeDetailPage() {
-  const { submission: s } = useLoaderData<typeof loader>();
+  const { submission: s, decidedName: doneName } = useLoaderData<typeof loader>();
   const { t, locale } = useT();
   const fetcher = useFetcher<ReviewActionData>({ key: REVIEW_FETCHER });
   const busy = fetcher.state !== "idle";
@@ -164,6 +164,8 @@ export default function IntakeDetailPage() {
       />
 
       <DoneNotice
+        name={doneName}
+        next
         fallback={
           <p role="status" className="rounded-xl bg-sage-soft px-3.5 py-2.5 text-sm text-sage-ink">
             {t("admin.detail.doneNext")}

@@ -2,7 +2,9 @@
  * The four things staff can do with a search result: View Profile, Contact,
  * Request Introduction and Save. Contact shows only for direct-contact people
  * whose email or phone the viewer received; otherwise Request Introduction
- * shows. Save posts to /app/saved, which checks the viewer can see the person.
+ * shows. Next to Contact, a quiet "Track as a request" link opens the request
+ * form with this person filled in, so the work reaches their history once it
+ * is completed. Save posts to /app/saved, which checks the viewer can see the person.
  *
  *   <ResourceActions person={hit} saved={savedIds.has(hit.id)} compact />
  */
@@ -27,6 +29,8 @@ export type ResourceActionsProps = {
   saved: boolean;
   /** Smaller buttons and shorter labels, for result rows and cards. */
   compact?: boolean;
+  /** Hide Request Introduction and Track as a request (on a request that is already about this person). */
+  hideRequest?: boolean;
   className?: string;
 };
 
@@ -37,7 +41,12 @@ export function introRequestHref(personId: string): string {
   return `/app/requests/new?person=${encodeURIComponent(personId)}&intro=1`;
 }
 
-export function ResourceActions({ person, saved, compact = false, className }: ResourceActionsProps) {
+/** The link for Track as a request (the request form with this person as the contact of interest). */
+export function trackRequestHref(personId: string): string {
+  return `/app/requests/new?person=${encodeURIComponent(personId)}`;
+}
+
+export function ResourceActions({ person, saved, compact = false, hideRequest = false, className }: ResourceActionsProps) {
   const { t } = useT();
   const fetcher = useFetcher<{ ok: boolean; saved?: boolean }>();
   const size = compact ? "xs" : "sm";
@@ -80,7 +89,7 @@ export function ResourceActions({ person, saved, compact = false, className }: R
         </Button>
       )}
 
-      {!direct && (
+      {!direct && !hideRequest && (
         <Button asChild variant="outline" size={size}>
           <Link to={introRequestHref(person.id)}>
             <Handshake aria-hidden data-icon="inline-start" />
@@ -104,6 +113,15 @@ export function ResourceActions({ person, saved, compact = false, className }: R
           {isSaved ? t("resources.actions.saved") : t("resources.actions.save")}
         </Button>
       </fetcher.Form>
+      {direct && !hideRequest && (
+        <Link
+          to={trackRequestHref(person.id)}
+          aria-label={t("resources.actions.trackLabel", { name })}
+          className="rounded-full px-1.5 text-xs text-smoke underline decoration-stone underline-offset-4 hover:text-ink hover:decoration-gold focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+        >
+          {t("resources.actions.track")}
+        </Link>
+      )}
       {failed && (
         <span role="status" className="text-xs text-rust-ink">
           {t("resources.actions.saveError")}

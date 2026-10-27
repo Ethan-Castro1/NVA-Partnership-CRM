@@ -35,7 +35,7 @@ export default function AdminRequests({ loaderData }: Route.ComponentProps) {
   const { t, locale } = useT();
   const { tab, counts, requests, introductions } = loaderData;
   return (
-    <div className="grid w-full gap-6">
+    <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <PageHeader title={t("requests.list.title")} description={t("requests.list.description")} />
 
       <nav aria-label={t("requests.list.tabs")} className="max-w-full overflow-x-auto">

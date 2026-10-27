@@ -44,7 +44,7 @@ export default function Organization() {
   const website = safeHref(org.website);
 
   return (
-    <div className="grid gap-6">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <div>
         <Button asChild variant="ghost" size="sm" className="-ml-2">
           <Link to="/app/organizations">

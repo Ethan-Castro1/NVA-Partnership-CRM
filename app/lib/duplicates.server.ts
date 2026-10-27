@@ -58,6 +58,29 @@ export function phoneKey(value: string | null | undefined): string {
   return digits.length >= 7 ? digits.slice(-10) : "";
 }
 
+/** `expr` folded in SQL the way normalizeName folds it (Latin accents). */
+const sqlName = (expr: string) =>
+  `trim(regexp_replace(translate(lower(coalesce(${expr}, '')), '${ACCENTED}', '${PLAIN}'), '[^a-z0-9]+', ' ', 'g'))`;
+const sqlDigits = (expr: string) => `regexp_replace(coalesce(${expr}, ''), '\\D', '', 'g')`;
+
+/**
+ * SQL that is true when some person (other than `excludeIdExpr`) matches the
+ * JSON sign-up `payloadExpr` by the same rules as findDuplicates: email, the
+ * last 10 phone digits, or the folded name. For list views, where calling
+ * findDuplicates per row would be too slow. Both arguments are SQL
+ * expressions written by us, never user input.
+ */
+export function possibleDuplicateSql(payloadExpr: string, excludeIdExpr: string): string {
+  const email = `lower(trim(coalesce(${payloadExpr}->>'email', '')))`;
+  const phone = sqlDigits(`${payloadExpr}->>'phone'`);
+  const name = sqlName(`${payloadExpr}->>'full_name'`);
+  return `EXISTS (SELECT 1 FROM people m
+     WHERE m.id IS DISTINCT FROM ${excludeIdExpr}
+       AND ((${email} <> '' AND lower(m.email) = ${email})
+         OR (length(${phone}) >= 7 AND right(${sqlDigits("m.phone")}, 10) = right(${phone}, 10))
+         OR (${name} <> '' AND ${sqlName("m.full_name")} = ${name})))`;
+}
+
 /**
  * Records that may be the same person as `input`, most likely first. A
  * candidate needs at least one of: the same email, the same last-10 phone

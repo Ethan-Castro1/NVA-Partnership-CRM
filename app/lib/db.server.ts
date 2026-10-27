@@ -14,7 +14,7 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import pg from "pg";
-import { SCHEMA_SQL } from "./schema.server";
+import { schemaRunSql, schemaVersionKey } from "./schema.server";
 
 export type Queryable = {
   query<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T[]>;
@@ -83,7 +83,7 @@ async function init(): Promise<Driver> {
   const driver = url
     ? await createPgDriver(url)
     : await createPgliteDriver(process.env.PGLITE_DIR ?? path.resolve(".data/pglite"));
-  await driver.exec(SCHEMA_SQL);
+  await runSchema(driver);
   // One-time data moves that go with the schema (guarded per database in app_meta).
   const { runDataMigrations } = await import("./migrations.server");
   await runDataMigrations(driver);
@@ -92,6 +92,21 @@ async function init(): Promise<Driver> {
   return driver;
 }
 
+/**
+ * Runs SCHEMA_SQL unless this database already ran this exact version. The
+ * usual cold start then takes no table locks at all; a new deploy (or a new
+ * database) runs the DDL once, under an advisory lock (see schemaRunSql).
+ * Returns true when the DDL ran.
+ */
+export async function runSchema(db: Pick<Driver, "query" | "exec">): Promise<boolean> {
+  const [meta] = await db.query<{ ok: boolean }>("SELECT to_regclass('app_meta') IS NOT NULL AS ok");
+  if (meta?.ok) {
+    const done = await db.query("SELECT 1 FROM app_meta WHERE key = $1", [schemaVersionKey()]);
+    if (done.length) return false;
+  }
+  await db.exec(schemaRunSql());
+  return true;
+}
 
 function getDriver(): Promise<Driver> {
   if (!globalForDb.__nvaDb) {

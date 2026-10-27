@@ -52,7 +52,7 @@ export default function Connect() {
   const date = (iso: string) => new Date(iso).toLocaleDateString(locale, { month: "short", day: "numeric", year: "numeric" });
 
   return (
-    <div className="grid max-w-3xl gap-6">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] max-w-3xl gap-6">
       <Button variant="ghost" size="sm" asChild className="-ml-2 justify-self-start">
         <Link to="/app/account">
           <ArrowLeft aria-hidden="true" />

@@ -158,7 +158,7 @@ export default function Connections() {
   const capParam = cap ? `&cap=${encodeURIComponent(cap.id)}` : "";
 
   return (
-    <div className="grid gap-8">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-8">
       {cap && (
         <Link
           to={`/app/caps/${cap.id}`}

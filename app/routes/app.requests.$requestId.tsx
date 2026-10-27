@@ -1,7 +1,9 @@
 /**
- * One staff request. Staff see only their own (anyone else's is a 404, the
- * same as a missing one) and can mark it completed, cancel, reopen or edit
- * it. Admins see every request and also reply, assign people and set the status.
+ * One staff request. Staff see their own and ones shared with them (anyone
+ * else's is a 404, the same as a missing one). The requester can mark it
+ * completed, cancel, reopen, edit and share it with colleagues; a colleague
+ * it is shared with can mark it completed with a note. Admins see every
+ * request and also reply, assign people, share and set the status.
  */
 import { Form, Link, data, useNavigation } from "react-router";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
@@ -9,25 +11,28 @@ import type { ReactNode } from "react";
 import type { Route } from "./+types/app.requests.$requestId";
 import { Field, PageHeader, Panel, Sheet } from "~/components/nva";
 import { formatDate } from "~/components/people/format";
-import { IntroTag, NativeSelect, RequestForm, RequestStatusBadge, requestWhen } from "~/components/requests";
+import { IntroTag, NativeSelect, RequestForm, RequestStatusBadge, SharedTag, requestWhen } from "~/components/requests";
 import { ResourceActions } from "~/components/resources/resource-actions";
 import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
 import { makeT, useT, type MessageKey } from "~/i18n";
 import { requireUser } from "~/lib/auth.server";
-import { REQUEST_PERSON_ROLES, REQUEST_STATUSES, type RequestPersonRole, type RequestStatus } from "~/lib/constants";
+import { ACTIVE_REQUEST_STATUSES, REQUEST_PERSON_ROLES, REQUEST_STATUSES, type RequestPersonRole, type RequestStatus } from "~/lib/constants";
 import { isAdmin, notFound } from "~/lib/permissions.server";
 import {
-  ACTIVE_REQUEST_STATUSES,
   adminUpdateRequest,
   assignPerson,
   getRequest,
   listAdmins,
   listCapOptions,
   listPersonOptions,
+  listShareOptions,
   removePerson,
+  requestAccess,
   requestInputFromForm,
   setRequestStatus,
+  shareRequest,
+  unshareRequest,
   updateRequestDetails,
   type RequestErrors,
 } from "~/lib/requests.server";
@@ -44,16 +49,28 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const found = await getRequest(user, params.requestId);
   if (!found) notFound();
   const admin = isAdmin(user);
-  const [caps, saved, admins, people] = await Promise.all([
+  const access = requestAccess(user, found);
+  const [caps, saved, admins, people, shareOptions] = await Promise.all([
     listCapOptions(),
     savedIdsAmong(user, found.people.map((p) => p.id)),
     admin ? listAdmins(user) : Promise.resolve([]),
     admin ? listPersonOptions(user) : Promise.resolve([]),
+    listShareOptions(user, found.id),
   ]);
-  return { request: found, caps, savedIds: [...saved], admin, admins, people, isMine: found.requester_id === user.id };
+  return {
+    request: found,
+    caps,
+    savedIds: [...saved],
+    admin,
+    admins,
+    people,
+    isMine: found.requester_id === user.id,
+    access,
+    shareOptions,
+  };
 }
 
-type ActionResult = { ok: boolean; message?: "completed" | "saved"; error?: MessageKey; errors?: RequestErrors };
+type ActionResult = { ok: boolean; message?: "completed" | "saved" | "shared"; error?: MessageKey; errors?: RequestErrors };
 
 export async function action({ request, params }: Route.ActionArgs) {
   const user = await requireUser(request);
@@ -62,12 +79,17 @@ export async function action({ request, params }: Route.ActionArgs) {
   const intent = String(form.get("intent") ?? "");
   const text = (name: string) => (typeof form.get(name) === "string" ? String(form.get(name)) : null);
   const fail = (status: number, error: MessageKey = "requests.error.generic") => data<ActionResult>({ ok: false, error }, { status });
+  const forbidden = (): never => {
+    throw new Response("Forbidden", { status: 403 });
+  };
   const fromStatus = (r: Awaited<ReturnType<typeof setRequestStatus>>, message?: ActionResult["message"]) =>
     r.ok
       ? data<ActionResult>({ ok: true, message })
       : r.error === "not_found"
         ? notFound()
-        : fail(r.error === "locked" ? 409 : 400, r.error === "locked" ? "requests.error.locked" : "requests.error.generic");
+        : r.error === "forbidden"
+          ? forbidden()
+          : fail(r.error === "locked" ? 409 : 400, r.error === "locked" ? "requests.error.locked" : "requests.error.generic");
 
   switch (intent) {
     case "complete":
@@ -79,8 +101,18 @@ export async function action({ request, params }: Route.ActionArgs) {
     case "edit": {
       const result = await updateRequestDetails(user, id, requestInputFromForm(form));
       if (!result) notFound();
+      if (!result.ok && "forbidden" in result) forbidden();
       if (!result.ok) return data<ActionResult>({ ok: false, errors: result.errors, error: Object.keys(result.errors).length ? undefined : "requests.error.locked" }, { status: 400 });
       return data<ActionResult>({ ok: true, message: "saved" });
+    }
+    case "share":
+    case "unshare": {
+      const userId = text("userId") ?? "";
+      const r = intent === "share" ? await shareRequest(user, id, userId) : await unshareRequest(user, id, userId);
+      if (r.ok) return data<ActionResult>({ ok: true, message: intent === "share" ? "shared" : "saved" });
+      if (r.error === "not_found") notFound();
+      if (r.error === "forbidden") forbidden();
+      return fail(400, "requests.share.error");
     }
   }
 
@@ -131,7 +163,8 @@ export default function RequestDetail({ loaderData, actionData }: Route.Componen
   const { t, locale } = useT();
   const navigation = useNavigation();
   const busy = navigation.state === "submitting";
-  const { request: r, caps, admin, admins, people, isMine } = loaderData;
+  const { request: r, caps, admin, admins, people, isMine, access, shareOptions } = loaderData;
+  const canManage = access !== "shared";
   const savedIds = new Set(loaderData.savedIds);
   const active = ACTIVE_REQUEST_STATUSES.includes(r.status);
   const when = requestWhen(r, locale);
@@ -139,7 +172,7 @@ export default function RequestDetail({ loaderData, actionData }: Route.Componen
   const onRequest = new Set(r.people.map((p) => p.id));
 
   return (
-    <div className="mx-auto grid w-full max-w-3xl gap-6">
+    <div className="mx-auto grid min-w-0 grid-cols-[minmax(0,1fr)] w-full max-w-3xl gap-6">
       <Link
         to={admin ? "/app/admin/requests" : "/app/requests"}
         className="inline-flex w-fit items-center gap-1.5 text-sm text-graphite hover:text-ink"
@@ -153,6 +186,7 @@ export default function RequestDetail({ loaderData, actionData }: Route.Componen
           <span className="inline-flex items-center gap-2 normal-case">
             <RequestStatusBadge status={r.status} />
             {r.kind === "introduction" && <IntroTag />}
+            {access === "shared" && <SharedTag name={r.requester_name} />}
           </span>
         }
         title={r.need}
@@ -168,6 +202,11 @@ export default function RequestDetail({ loaderData, actionData }: Route.Componen
         <p role="status" className="flex items-center gap-2 rounded-card bg-sage-soft px-4 py-3 text-sm text-sage-ink">
           <CheckCircle2 className="size-4" aria-hidden="true" />
           {t("requests.complete.done")}
+        </p>
+      )}
+      {result?.message === "shared" && (
+        <p role="status" className="rounded-card bg-sage-soft px-4 py-3 text-sm text-sage-ink">
+          {t("requests.share.done")}
         </p>
       )}
       {result?.message === "saved" && (
@@ -221,7 +260,7 @@ export default function RequestDetail({ loaderData, actionData }: Route.Componen
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <ResourceActions person={p} saved={savedIds.has(p.id)} compact />
+                  <ResourceActions person={p} saved={savedIds.has(p.id)} compact hideRequest />
                   {admin && (
                     <Form method="post">
                       <input type="hidden" name="intent" value="remove-person" />
@@ -245,6 +284,57 @@ export default function RequestDetail({ loaderData, actionData }: Route.Componen
           <p className="text-sm text-smoke">{t("requests.detail.noReply")}</p>
         )}
       </Panel>
+
+      {(canManage || r.shared_with.length > 0) && (
+        <Panel title={t("requests.share.title")}>
+          <div className="grid gap-4">
+            {r.shared_with.length ? (
+              <ul className="flex flex-wrap gap-2">
+                {r.shared_with.map((s) => (
+                  <li key={s.user_id} className="inline-flex items-center gap-1 rounded-full border border-stone bg-canvas py-1 pr-1 pl-3 text-sm">
+                    {s.name}
+                    {canManage && (
+                      <Form method="post">
+                        <input type="hidden" name="intent" value="unshare" />
+                        <input type="hidden" name="userId" value={s.user_id} />
+                        <Button type="submit" variant="ghost" size="xs" disabled={busy} aria-label={t("requests.share.remove", { name: s.name })}>
+                          {t("requests.share.removeShort")}
+                        </Button>
+                      </Form>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-smoke">
+                {isMine ? t("requests.share.none") : t("requests.share.noneAdmin", { name: r.requester_name })}
+              </p>
+            )}
+            {canManage && shareOptions.length > 0 && (
+              <Form method="post" className="grid gap-2">
+                <input type="hidden" name="intent" value="share" />
+                <Field label={t("requests.share.label")} htmlFor="share-user" hint={t("requests.share.hint")}>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <NativeSelect id="share-user" name="userId" required defaultValue="" key={r.shared_with.length}>
+                      <option value="" disabled>
+                        {t("requests.share.pick")}
+                      </option>
+                      {shareOptions.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name}
+                        </option>
+                      ))}
+                    </NativeSelect>
+                    <Button type="submit" variant="outline" disabled={busy}>
+                      {t("requests.share.submit")}
+                    </Button>
+                  </div>
+                </Field>
+              </Form>
+            )}
+          </div>
+        </Panel>
+      )}
 
       {!admin && active && (
         <Panel title={t("requests.complete.title")}>
@@ -335,9 +425,9 @@ export default function RequestDetail({ loaderData, actionData }: Route.Componen
         </Panel>
       )}
 
-      {(active || r.status === "canceled") && (
+      {canManage && (active || r.status === "canceled") && (
         <div className="flex flex-wrap items-center gap-2">
-          {active && (
+          {active && canManage && (
             <details className="w-full rounded-card border border-stone p-4 [&_summary]:cursor-pointer">
               <summary className="text-sm font-medium">{t("requests.detail.edit")}</summary>
               <div className="pt-4">

@@ -46,7 +46,7 @@ export default function Ask() {
   }, [q, ask, navigate]);
 
   return (
-    <div className="grid gap-6">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Button asChild variant="ghost" size="icon-sm" className="-ml-2">

@@ -31,7 +31,7 @@ export default function NewCap() {
   const { t } = useT();
   const actionData = useActionData<typeof action>();
   return (
-    <div className="mx-auto grid w-full max-w-3xl gap-6">
+    <div className="mx-auto grid min-w-0 grid-cols-[minmax(0,1fr)] w-full max-w-3xl gap-6">
       <Link to="/app/caps" className="inline-flex w-fit items-center gap-1.5 text-sm text-graphite hover:text-ink">
         <ArrowLeft className="size-4" aria-hidden="true" />
         {t("caps.detail.backToList")}

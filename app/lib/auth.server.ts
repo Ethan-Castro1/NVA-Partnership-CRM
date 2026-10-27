@@ -23,13 +23,35 @@ export type { SessionUser } from "./types";
 
 const isProd = process.env.NODE_ENV === "production";
 
-const sessionCookie = createCookie(isProd ? "__Host-nva_session" : "nva_session", {
+const cookieOptions = {
   httpOnly: true,
-  sameSite: "lax",
+  sameSite: "lax" as const,
   secure: isProd,
   path: "/",
   maxAge: SESSION_DAYS * 24 * 60 * 60,
-});
+};
+const prodCookie = createCookie("__Host-nva_session", cookieOptions);
+const devCookies = new Map<string, ReturnType<typeof createCookie>>();
+
+/**
+ * The session cookie name. Production: always `__Host-nva_session`. In
+ * development, browsers share cookies across localhost ports, so the name
+ * carries the port (`nva_session_5173`) and parallel dev servers don't sign
+ * each other out.
+ */
+export function sessionCookieName(request: Request): string {
+  if (isProd) return "__Host-nva_session";
+  const port = new URL(request.url).port;
+  return port ? `nva_session_${port}` : "nva_session";
+}
+
+function sessionCookieFor(request: Request) {
+  if (isProd) return prodCookie;
+  const name = sessionCookieName(request);
+  let cookie = devCookies.get(name);
+  if (!cookie) devCookies.set(name, (cookie = createCookie(name, cookieOptions)));
+  return cookie;
+}
 
 // ---------- passwords ----------
 
@@ -61,29 +83,45 @@ export function passwordProblem(password: string): "auth.passwordTooShort" | nul
 // email and a wrong password take the same time.
 let dummyHash: Promise<string> | undefined;
 
-// ---------- brute-force guard (per email and per IP, in memory) ----------
+// ---------- brute-force guard (in memory, per 15 minutes) ----------
+//
+// - email + IP: the tight limit. A stranger guessing at someone's account only
+//   locks themselves out, not the real person signing in from elsewhere.
+// - IP: looser, since a whole school can share one address.
+// - email: looser still, so guessing one account from many addresses stops too.
 
 const attempts = new Map<string, { count: number; resetAt: number }>();
 const WINDOW_MS = 15 * 60 * 1000;
-const MAX_ATTEMPTS = 8;
+export const LOGIN_LIMITS = { perEmailAndIp: 8, perIp: 30, perEmail: 30 } as const;
 
-function tooMany(key: string): boolean {
+function tooMany(key: string, max: number): boolean {
   const entry = attempts.get(key);
-  return !!entry && entry.resetAt > Date.now() && entry.count >= MAX_ATTEMPTS;
+  return !!entry && entry.resetAt > Date.now() && entry.count >= max;
 }
 function recordFailure(key: string) {
   const now = Date.now();
+  // Keep the map small: drop expired entries now and then.
+  if (attempts.size > 5000) for (const [k, v] of attempts) if (v.resetAt <= now) attempts.delete(k);
   const entry = attempts.get(key);
   if (!entry || entry.resetAt <= now) attempts.set(key, { count: 1, resetAt: now + WINDOW_MS });
   else entry.count += 1;
 }
 
+/**
+ * The visitor's IP, for rate limits. The first X-Forwarded-For entry is
+ * whatever the client sent, so it is never trusted. On Vercel the edge sets
+ * x-vercel-forwarded-for and x-real-ip itself; elsewhere the right-most
+ * X-Forwarded-For entry is the one our own proxy added.
+ */
 export function clientIp(request: Request): string {
-  return (
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip") ||
-    "local"
-  );
+  const header = (name: string) => request.headers.get(name)?.trim() || "";
+  const onVercel = !!process.env.VERCEL;
+  const vercel = onVercel ? header("x-vercel-forwarded-for").split(",")[0]?.trim() : "";
+  const forwarded = header("x-forwarded-for")
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return vercel || header("x-real-ip") || forwarded[forwarded.length - 1] || "local";
 }
 
 export type LoginResult =
@@ -92,9 +130,16 @@ export type LoginResult =
 
 export async function login(request: Request, email: string, password: string): Promise<LoginResult> {
   const normalized = email.trim().toLowerCase();
-  const ipKey = `ip:${clientIp(request)}`;
+  const ip = clientIp(request);
+  const ipKey = `ip:${ip}`;
   const emailKey = `email:${normalized}`;
-  if (tooMany(ipKey) || tooMany(emailKey)) return { ok: false, error: "auth.tooManyAttempts" };
+  const pairKey = `pair:${normalized}|${ip}`;
+  if (
+    tooMany(pairKey, LOGIN_LIMITS.perEmailAndIp) ||
+    tooMany(ipKey, LOGIN_LIMITS.perIp) ||
+    tooMany(emailKey, LOGIN_LIMITS.perEmail)
+  )
+    return { ok: false, error: "auth.tooManyAttempts" };
 
   const row = await queryOne<SessionUser & { password_hash: string; active: boolean }>(
     "SELECT id, email, name, role, locale, password_hash, active FROM users WHERE email = $1",
@@ -103,24 +148,25 @@ export async function login(request: Request, email: string, password: string): 
   dummyHash ??= hashPassword(randomBytes(12).toString("hex"));
   const valid = await verifyPassword(password, row?.password_hash ?? (await dummyHash));
   if (!row || !row.active || !valid) {
+    recordFailure(pairKey);
     recordFailure(ipKey);
     recordFailure(emailKey);
     return { ok: false, error: "auth.invalid" };
   }
-  attempts.delete(emailKey);
+  attempts.delete(pairKey);
 
   const user: SessionUser = { id: row.id, email: row.email, name: row.name, role: row.role, locale: row.locale };
-  return { ok: true, user, setCookie: await startSession(user.id) };
+  return { ok: true, user, setCookie: await startSession(request, user.id) };
 }
 
 /** Starts a session for a user and returns the Set-Cookie header value. */
-async function startSession(userId: string): Promise<string> {
+async function startSession(request: Request, userId: string): Promise<string> {
   const token = randomBytes(32).toString("base64url");
   const expires = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
   await query("INSERT INTO sessions (id, user_id, expires_at) VALUES ($1, $2, $3)", [hashToken(token), userId, expires]);
   await query("UPDATE users SET last_login_at = now() WHERE id = $1", [userId]);
   await query("DELETE FROM sessions WHERE expires_at < now()");
-  return sessionCookie.serialize(token);
+  return sessionCookieFor(request).serialize(token);
 }
 
 // ---------- demo sign-in ----------
@@ -135,15 +181,42 @@ export function isDemoLoginEnabled(): boolean {
 }
 export const DEMO_LOGIN = isDemoLoginEnabled();
 
+// Said once per server process, so nobody leaves demo mode on by accident.
+const globalForDemo = globalThis as unknown as { __nvaDemoWarned?: boolean };
+if (DEMO_LOGIN && !globalForDemo.__nvaDemoWarned) {
+  globalForDemo.__nvaDemoWarned = true;
+  console.warn(
+    "[auth] Demo login is ON (DEMO_LOGIN or SEED_DEMO is true): anyone can open /login and continue as the demo " +
+      "administrator. Only use this with fictional demo data, never on a deployment with real contacts.",
+  );
+}
+
 /** The seeded demo account for each role (see demo-seed.server.ts). */
 export const DEMO_ACCOUNTS: Record<Role, string> = { admin: "admin@nva.test", staff: "teacher@nva.test" };
+
+/**
+ * In demo mode every visitor shares the demo accounts, so nobody may change
+ * their password, role or active state (one visitor would lock out the rest).
+ */
+export function isLockedDemoEmail(email: string | null | undefined): boolean {
+  if (!email || !isDemoLoginEnabled()) return false;
+  const normalized = email.trim().toLowerCase();
+  return Object.values(DEMO_ACCOUNTS).includes(normalized);
+}
+
+/** isLockedDemoEmail for an account id. */
+export async function isLockedDemoAccount(userId: string): Promise<boolean> {
+  if (!isDemoLoginEnabled()) return false;
+  const row = await queryOne<{ email: string }>("SELECT email FROM users WHERE id = $1", [userId]);
+  return isLockedDemoEmail(row?.email);
+}
 
 export type DemoLoginResult =
   | { ok: true; user: SessionUser; setCookie: string }
   | { ok: false; error: "auth.demoUnavailable" };
 
 /** Signs in as the demo account for `role`. Refuses unless demo mode is on and that account exists. */
-export async function demoLogin(_request: Request, role: Role): Promise<DemoLoginResult> {
+export async function demoLogin(request: Request, role: Role): Promise<DemoLoginResult> {
   if (!isDemoLoginEnabled() || !(role in DEMO_ACCOUNTS)) return { ok: false, error: "auth.demoUnavailable" };
   await whenReady();
   const row = await queryOne<SessionUser & { active: boolean }>(
@@ -152,13 +225,13 @@ export async function demoLogin(_request: Request, role: Role): Promise<DemoLogi
   );
   if (!row || !row.active || row.role !== role) return { ok: false, error: "auth.demoUnavailable" };
   const user: SessionUser = { id: row.id, email: row.email, name: row.name, role: row.role, locale: row.locale };
-  return { ok: true, user, setCookie: await startSession(user.id) };
+  return { ok: true, user, setCookie: await startSession(request, user.id) };
 }
 
 export async function logout(request: Request): Promise<string> {
   const token = await readToken(request);
   if (token) await query("DELETE FROM sessions WHERE id = $1", [hashToken(token)]);
-  return sessionCookie.serialize("", { maxAge: 0 });
+  return sessionCookieFor(request).serialize("", { maxAge: 0 });
 }
 
 /** Signs a user out everywhere (after a password change or deactivation). */
@@ -173,7 +246,7 @@ function hashToken(token: string): string {
 }
 
 async function readToken(request: Request): Promise<string | null> {
-  const value = await sessionCookie.parse(request.headers.get("Cookie"));
+  const value = await sessionCookieFor(request).parse(request.headers.get("Cookie"));
   return typeof value === "string" && value.length > 20 ? value : null;
 }
 
@@ -212,10 +285,26 @@ export async function requireAdmin(request: Request): Promise<SessionUser> {
   return user;
 }
 
-/** Only allow same-site relative redirects after login (no open redirects). */
+const REDIRECT_BASE = "http://redirect.invalid";
+
+/**
+ * Only allow same-site redirects (no open redirects). `next` must be a path
+ * starting with "/". Any control character, space or backslash anywhere is
+ * refused, since browsers strip or rewrite those (`/\t/evil.com` becomes
+ * `//evil.com`). What's left must resolve to our own origin; the result is
+ * just its path, query and hash.
+ */
 export function safeNext(next: string | null | undefined, fallback = "/app"): string {
-  if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) return fallback;
-  return next;
+  if (!next || !next.startsWith("/") || /[\u0000-\u0020\u007f\\]/.test(next)) return fallback;
+  let url: URL;
+  try {
+    url = new URL(next, REDIRECT_BASE);
+  } catch {
+    return fallback;
+  }
+  // Dot segments can collapse to "//host" (`/a/..//evil.com`), which a browser reads as another site.
+  if (url.origin !== REDIRECT_BASE || url.pathname.startsWith("//")) return fallback;
+  return url.pathname + url.search + url.hash;
 }
 
 // ---------- accounts ----------

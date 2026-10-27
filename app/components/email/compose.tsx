@@ -9,7 +9,7 @@ import { CircleAlert, ListChecks, Send, Sparkles, Trash2 } from "lucide-react";
 import type { EmailAccountView } from "~/lib/email/accounts.server";
 import { DRAFT_PURPOSES } from "~/lib/email/purposes";
 import type { DraftView } from "~/lib/email/store.server";
-import { AiNotice, Field } from "~/components/nva";
+import { Field } from "~/components/nva";
 import { Button } from "~/components/ui/button";
 import {
   Dialog,
@@ -91,7 +91,6 @@ export function ComposeStart({ aiOn, defaultLanguage }: { aiOn: boolean; default
         </Form>
       ) : (
         <div className="grid gap-3">
-          <AiNotice />
           <p className="text-sm text-smoke">{t("email.compose.aiOff")}</p>
           <Form method="post">
             <Button type="submit" name="intent" value="blank" variant="outline">

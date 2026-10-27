@@ -1,10 +1,10 @@
 /**
  * Small shared pieces for the staff request screens: the status pill, the
- * "Introduction" tag, a "when" label, a native select styled like Input, and
+ * "Introduction" and "Shared by" tags, a "when" label, a native select styled like Input, and
  * the compact request rows used by MyRequestsList and RequestsPanel.
  */
 import { Link } from "react-router";
-import { Handshake } from "lucide-react";
+import { Handshake, Users } from "lucide-react";
 import type { ComponentProps } from "react";
 import { formatDate } from "~/components/people/format";
 import { useT, type Locale } from "~/i18n";
@@ -64,6 +64,17 @@ export function NativeSelect({ className, ...props }: ComponentProps<"select">) 
  * Compact request rows: need, status, when and who. Each row links to the request.
  * `showRequester` adds "From {name}" (admin views).
  */
+/** "Shared by Ana": someone else's request a colleague shared with the viewer. */
+export function SharedTag({ name, className }: { name: string; className?: string }) {
+  const { t } = useT();
+  return (
+    <span className={cn("inline-flex h-5 items-center gap-1 rounded-full border border-stone px-2 text-[0.7rem] text-graphite", className)}>
+      <Users className="size-3" aria-hidden="true" />
+      {t("requests.share.sharedBy", { name })}
+    </span>
+  );
+}
+
 export function RequestRows({
   requests,
   showRequester = false,
@@ -89,6 +100,7 @@ export function RequestRows({
                 <span className="font-medium group-hover:underline">{r.need}</span>
                 <RequestStatusBadge status={r.status} />
                 {r.kind === "introduction" && <IntroTag />}
+                {r.shared_with_me && <SharedTag name={r.requester_name} />}
               </span>
               <span className="flex flex-wrap gap-x-3 text-xs text-smoke">
                 {showRequester && <span>{t("requests.detail.from", { name: r.requester_name })}</span>}

@@ -119,7 +119,7 @@ function actionPerson(person: SearchHit, isAdmin: boolean): SearchHit {
 /** One result as a card: used for staff everywhere and for admins on phones. */
 function ResultCard({ person, saved, isAdmin }: { person: SearchHit; saved: boolean; isAdmin: boolean }) {
   return (
-    <Sheet className="relative grid content-start gap-3 p-4 focus-within:ring-3 focus-within:ring-ring/50">
+    <Sheet className="relative grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-3 p-4 focus-within:ring-3 focus-within:ring-ring/50">
       <div className="flex items-start gap-3">
         <PersonAvatar name={person.full_name} />
         <div className="min-w-0 flex-1">
@@ -157,9 +157,9 @@ export function PeopleResults({
   const saved = new Set(savedIds);
 
   const cards = (
-    <ul className={cn("grid gap-3", isAdmin ? "md:hidden" : "md:grid-cols-2")}>
+    <ul className={cn("grid grid-cols-[minmax(0,1fr)] gap-3", isAdmin ? "md:hidden" : "md:grid-cols-2")}>
       {people.map((person) => (
-        <li key={person.id} className="grid">
+        <li key={person.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)]">
           <ResultCard person={person} saved={saved.has(person.id)} isAdmin={isAdmin} />
         </li>
       ))}

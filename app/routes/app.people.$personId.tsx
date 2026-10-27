@@ -17,7 +17,7 @@
  */
 import { TopicList } from "~/components/caps/cap-bits";
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, data, redirect, useFetcher, useLoaderData, useSearchParams } from "react-router";
+import { Link, data, redirect, useFetcher, useLoaderData, useLocation, useSearchParams } from "react-router";
 import { ArrowLeft, Globe, Lock, Mail, MapPin, NotebookPen, Pencil, Phone, Plus } from "lucide-react";
 import type { Route } from "./+types/app.people.$personId";
 import { OpportunitiesPanel, FollowUpsPanel } from "~/components/crm";
@@ -412,6 +412,63 @@ function AccessControls({ visible, mode }: { visible: boolean; mode: ContactMode
   );
 }
 
+/** Anchors that open the log box: #log-activity (dashboard, CAP partners) and #record (older links). */
+const LOG_HASHES = new Set(["#log-activity", "#record"]);
+
+/**
+ * "Record an interaction" / "Log work with students": a button until it is
+ * needed, so the history reads first. Opens on its own when the URL points at
+ * it (#log-activity, or ?logCap from a CAP) and when the header button jumps to it.
+ */
+function LogBox({ title, hint, startOpen, children }: { title: string; hint: string; startOpen: boolean; children: ReactNode }) {
+  const { t } = useT();
+  const { hash } = useLocation();
+  const [open, setOpen] = useState(startOpen || LOG_HASHES.has(hash));
+  useEffect(() => {
+    if (LOG_HASHES.has(hash)) setOpen(true);
+  }, [hash]);
+  useEffect(() => {
+    const onHash = () => {
+      if (LOG_HASHES.has(window.location.hash)) setOpen(true);
+    };
+    onHash();
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  const close = () => {
+    setOpen(false);
+    // Drop the anchor so the header button can open the box again.
+    if (LOG_HASHES.has(window.location.hash)) window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
+  };
+
+  if (!open) {
+    return (
+      <div id="log-activity" className="flex scroll-mt-24 flex-wrap items-center gap-x-3 gap-y-1">
+        <Button variant="outline" size="sm" aria-expanded={false} onClick={() => setOpen(true)}>
+          <Plus aria-hidden="true" />
+          {title}
+        </Button>
+        <p className="text-xs text-smoke">{hint}</p>
+      </div>
+    );
+  }
+  return (
+    <div id="log-activity" className="grid scroll-mt-24 gap-3 rounded-xl bg-canvas p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="grid gap-0.5">
+          <h3 className="text-sm font-medium text-ink">{title}</h3>
+          <p className="text-xs text-smoke">{hint}</p>
+        </div>
+        <Button variant="ghost" size="xs" aria-expanded onClick={close}>
+          {t("common.action.close")}
+        </Button>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 /** A quiet "+ Add ..." toggle that reveals a form under a list. */
 function AddToggle({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -551,7 +608,7 @@ function AdminProfile({ data: d }: { data: AdminData }) {
   const sourceLine = person.source ? t("people.profile.sourceLine", { source: t(`common.source.${person.source}`) }) : null;
 
   return (
-    <div className="grid gap-6">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <BackLink />
       <PageHeader
         eyebrow={t("people.profile.eyebrow")}
@@ -609,7 +666,7 @@ function AdminProfile({ data: d }: { data: AdminData }) {
               </Link>
             </Button>
             <Button asChild variant="brand">
-              <a href="#record">
+              <a href="#log-activity">
                 <NotebookPen aria-hidden="true" />
                 {t("people.profile.record")}
               </a>
@@ -661,11 +718,7 @@ function AdminProfile({ data: d }: { data: AdminData }) {
           />
 
           <Panel title={t("people.profile.historyTitle")} bodyClassName="grid gap-6">
-            <div id="record" className="grid scroll-mt-24 gap-3 rounded-xl bg-canvas p-4">
-              <div className="grid gap-0.5">
-                <h3 className="text-sm font-medium text-ink">{t("people.profile.record")}</h3>
-                <p className="text-xs text-smoke">{t("people.profile.recordHint")}</p>
-              </div>
+            <LogBox title={t("people.profile.record")} hint={t("people.profile.recordHint")} startOpen={Boolean(defaultCap)}>
               <LogActivityForm
                 caps={d.capOptions}
                 today={d.today}
@@ -675,7 +728,7 @@ function AdminProfile({ data: d }: { data: AdminData }) {
                 submitLabel={t("common.action.save")}
                 savedLabel={t("people.profile.recordSaved")}
               />
-            </div>
+            </LogBox>
             <HistoryTimeline engagements={d.history} isAdmin personId={person.id} staffAuthored={d.staffAuthored} />
           </Panel>
         </div>
@@ -799,7 +852,7 @@ function StaffProfile({ data: d }: { data: StaffData }) {
   const subtitle = subtitleOf(t, person);
 
   return (
-    <div className="grid gap-6">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <BackLink />
       <PageHeader
         eyebrow={t("people.profile.eyebrow")}
@@ -829,13 +882,9 @@ function StaffProfile({ data: d }: { data: StaffData }) {
           </Panel>
 
           <Panel title={t("people.profile.historyTitle")} bodyClassName="grid gap-6">
-            <div id="log-activity" className="grid scroll-mt-24 gap-3 rounded-xl bg-canvas p-4">
-              <div className="grid gap-0.5">
-                <h3 className="text-sm font-medium text-ink">{t("people.profile.logWork")}</h3>
-                <p className="text-xs text-smoke">{t("people.profile.logWorkHint")}</p>
-              </div>
+            <LogBox title={t("people.profile.logWork")} hint={t("people.profile.logWorkHint")} startOpen={Boolean(defaultCap)}>
               <LogActivityForm caps={d.capOptions} today={d.today} defaultCap={defaultCap} kinds={d.logKinds} />
-            </div>
+            </LogBox>
             <HistoryTimeline
               engagements={d.history}
               isAdmin={false}

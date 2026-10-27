@@ -15,9 +15,12 @@ import {
   listPersonOptions,
   listRequests,
   listRequestsForPerson,
+  listShareOptions,
   removePerson,
   requestInputFromForm,
   setRequestStatus,
+  shareRequest,
+  unshareRequest,
   updateRequestDetails,
 } from "./requests.server";
 import { savePerson } from "./saved.server";
@@ -226,5 +229,74 @@ describe("My Connections", () => {
     expect(list.find((c) => c.id === volunteer)?.worked_with).toBe(true);
     // Other people's requests never leak into someone's connections.
     expect((await listMyConnections(otherStaff)).map((c) => c.id)).not.toContain(volunteer);
+  });
+});
+
+describe("sharing a request with a colleague", () => {
+  it("lets a shared colleague view and complete it, and keeps everyone else out", async () => {
+    const third: Viewer = {
+      id: await createUser({ email: "share-third@test", name: "Quinn", password: "long-enough-pw", role: "staff" }),
+      role: "staff",
+    };
+    const id = await created(staff, { need: "Share me", personId: volunteer });
+
+    // Before sharing, colleagues get nothing (a 404 in routes).
+    expect(await getRequest(otherStaff, id)).toBeNull();
+    expect((await listRequests(otherStaff)).map((r) => r.id)).not.toContain(id);
+    expect(await setRequestStatus(otherStaff, id, { status: "completed" })).toEqual({ ok: false, error: "not_found" });
+
+    // Only the requester (or an admin) may share, only with active staff, never with the requester.
+    expect(await shareRequest(otherStaff, id, otherStaff.id)).toEqual({ ok: false, error: "not_found" });
+    expect(await shareRequest(staff, id, staff.id)).toEqual({ ok: false, error: "invalid" });
+    expect(await shareRequest(staff, id, admin.id)).toEqual({ ok: false, error: "invalid" });
+    expect(await shareRequest(staff, id, "nobody")).toEqual({ ok: false, error: "invalid" });
+    expect((await listShareOptions(staff, id)).map((u) => u.id)).toEqual(expect.arrayContaining([otherStaff.id, third.id]));
+    expect(await listShareOptions(otherStaff, id)).toEqual([]);
+    expect(await shareRequest(staff, id, otherStaff.id)).toEqual({ ok: true });
+    expect(await shareRequest(staff, id, otherStaff.id)).toEqual({ ok: true }); // idempotent
+    expect((await listShareOptions(staff, id)).map((u) => u.id)).not.toContain(otherStaff.id);
+
+    // The shared colleague sees it (and in their list, marked as shared); the third colleague still doesn't.
+    const seen = await getRequest(otherStaff, id);
+    expect(seen?.shared_with_me).toBe(true);
+    expect(seen?.shared_with.map((s) => s.name)).toEqual(["Marisol"]);
+    expect((await getRequest(staff, id))?.shared_with_me).toBe(false);
+    expect((await listRequests(otherStaff, { mine: true })).map((r) => r.id)).toContain(id);
+    expect(await getRequest(third, id)).toBeNull();
+    expect((await listRequests(third)).map((r) => r.id)).not.toContain(id);
+    expect((await listRequestsForPerson(third, volunteer)).map((r) => r.id)).not.toContain(id);
+
+    // A shared colleague can't edit, cancel, share, reply or assign.
+    expect(await updateRequestDetails(otherStaff, id, { need: "Hijacked" })).toMatchObject({ ok: false, forbidden: true });
+    expect(await setRequestStatus(otherStaff, id, { status: "canceled" })).toEqual({ ok: false, error: "forbidden" });
+    expect(await setRequestStatus(otherStaff, id, { status: "arranged" })).toEqual({ ok: false, error: "forbidden" });
+    expect(await shareRequest(otherStaff, id, third.id)).toEqual({ ok: false, error: "forbidden" });
+    expect(await unshareRequest(otherStaff, id, otherStaff.id)).toEqual({ ok: false, error: "forbidden" });
+    expect(await adminUpdateRequest(otherStaff, id, { response: "x", status: "arranged" })).toEqual({ ok: false, error: "not_found" });
+    expect(await assignPerson(otherStaff, id, speaker)).toBe(false);
+    expect((await getRequest(staff, id))?.need).toBe("Share me");
+
+    // But they can mark it completed with a note, which reaches the history like the requester's would.
+    const done = await setRequestStatus(otherStaff, id, { status: "completed", note: "Went well" });
+    expect(done).toMatchObject({ ok: true, status: "completed" });
+    expect(await completions(id)).toEqual([expect.objectContaining({ person_id: volunteer, notes: "Went well", visibility: "staff" })]);
+    expect((await getRequest(staff, id))?.completed_note).toBe("Went well");
+    expect(await status(volunteer)).toBe("lead");
+    // Completed stays completed for staff, shared or not.
+    expect(await setRequestStatus(otherStaff, id, { status: "open" })).toEqual({ ok: false, error: "forbidden" });
+    expect(await setRequestStatus(staff, id, { status: "open" })).toEqual({ ok: false, error: "locked" });
+
+    // The shared colleague sees the request link in the person's history; the third colleague doesn't.
+    const linked = async (viewer: Viewer) => (await listHistory(volunteer, viewer)).some((h) => h.staff_request_id === id);
+    expect(await linked(otherStaff)).toBe(true);
+    expect(await linked(third)).toBe(false);
+
+    // Admins can share too, and the requester can stop sharing.
+    expect(await shareRequest(admin, id, third.id)).toEqual({ ok: true });
+    expect(await getRequest(third, id)).not.toBeNull();
+    expect(await unshareRequest(staff, id, otherStaff.id)).toEqual({ ok: true });
+    expect(await unshareRequest(admin, id, third.id)).toEqual({ ok: true });
+    expect(await getRequest(otherStaff, id)).toBeNull();
+    expect(await getRequest(third, id)).toBeNull();
   });
 });

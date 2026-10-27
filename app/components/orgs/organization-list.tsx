@@ -74,7 +74,7 @@ export function OrganizationList({ items }: { items: OrganizationListItem[] }) {
         </Table>
       </Sheet>
 
-      <ul className="grid gap-3 md:hidden">
+      <ul className="grid grid-cols-[minmax(0,1fr)] gap-3 md:hidden">
         {items.map((org) => (
           <li key={org.id}>
             <Sheet className="relative flex items-start gap-3 p-4 focus-within:ring-3 focus-within:ring-ring/50">

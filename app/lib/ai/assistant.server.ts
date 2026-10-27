@@ -13,7 +13,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { AssistantPerson, ChatTurn } from "~/components/assistant/types";
 import { makeT, type Locale, type MessageKey } from "~/i18n";
 import { CONTRIBUTION_TYPES, type ContributionType } from "~/lib/constants";
-import { findConnectorsForNeed, getPeopleByIds, searchTerms, type MatchReason } from "~/lib/people.server";
+import { findConnectorsForNeed, getPeopleByIds, type MatchReason } from "~/lib/people.server";
+import { hasSearchIntent, parseSearch } from "~/lib/search-language";
 import type { Viewer } from "~/lib/permissions.server";
 import { savedIdsAmong } from "~/lib/saved.server";
 import type { SessionUser } from "~/lib/types";
@@ -409,6 +410,8 @@ const TYPE_WORDS: [RegExp, ContributionType][] = [
   [/\b(funders?|grants?|donors?|financiador(?:es)?|subvenci[oó]n(?:es)?)\b/iu, "funder"],
 ];
 
+const SPANISH_WORDS = /\b(?:spanish[- ]speaking|spanish|bilingual|español|bilingüe)\b/iu;
+
 /** Turns a plain question into a search: keywords, ways to help, and a Spanish-speaking filter. */
 export function interpretQuestion(question: string): {
   q: string;
@@ -416,7 +419,7 @@ export function interpretQuestion(question: string): {
   spanish: boolean;
 } {
   const contributionTypes = TYPE_WORDS.filter(([re]) => re.test(question)).map(([, type]) => type);
-  const spanish = /\b(spanish|bilingual|español|bilingüe)\b/iu.test(question);
+  const spanish = SPANISH_WORDS.test(question);
   const words = question
     .toLowerCase()
     .split(/[^\p{L}\p{N}&+#-]+/u)
@@ -435,17 +438,15 @@ export async function fallbackAnswer(
 ): Promise<{ answer: string; personIds: string[]; reasons: Record<string, MatchReason[]> }> {
   const t = makeT(locale);
   const quoted = question.replace(/\s+/g, " ").trim().slice(0, 120);
-  const { q, contributionTypes, spanish } = interpretQuestion(question);
-  const hasTerms = searchTerms(q).length > 0;
-
-  if (!hasTerms && !contributionTypes.length && !spanish) {
+  // Same search as People & Skills: the question as typed, read by parseSearch (words, synonyms, and the
+  // kind of help as a boost, not a filter). Only "speaks Spanish" becomes a filter, like the language box.
+  const { spanish } = interpretQuestion(question);
+  const q = spanish ? question.replace(new RegExp(SPANISH_WORDS.source, "giu"), " ") : question;
+  if (!hasSearchIntent(parseSearch(q)) && !spanish) {
     return { answer: t("assistant.fallbackNeedWords"), personIds: [], reasons: {} };
   }
 
-  const base = { q, language: spanish ? ("es" as const) : undefined, limit: 8 };
-  let matches = await findConnectorsForNeed({ ...base, contributionTypes }, viewer);
-  // A type word can be too strict ("CAP about the bay" when the right person only listed skills); retry without it.
-  if (!matches.length && contributionTypes.length && hasTerms) matches = await findConnectorsForNeed(base, viewer);
+  const matches = await findConnectorsForNeed({ q, language: spanish ? "es" : undefined, limit: 25 }, viewer);
 
   if (!matches.length) {
     const tips = [

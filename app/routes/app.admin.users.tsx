@@ -17,6 +17,7 @@ import {
   MIN_PASSWORD_LENGTH,
   createUser,
   endAllSessions,
+  isLockedDemoAccount,
   passwordProblem,
   requireAdmin,
   setPassword,
@@ -56,6 +57,12 @@ export async function action({ request }: Route.ActionArgs) {
   const parsed = ActionSchema.safeParse(Object.fromEntries(await request.formData()));
   if (!parsed.success) return fail({ ok: false, error: "admin.error.invalid" });
   const input = parsed.data;
+
+  // Demo mode: every visitor shares the demo accounts, so their role, password and
+  // active state stay as they are (reactivating one is still fine).
+  const touchesDemo =
+    input.intent === "role" || input.intent === "reset" || (input.intent === "active" && input.active === "false");
+  if (touchesDemo && (await isLockedDemoAccount(input.userId))) return fail({ ok: false, error: "admin.error.demoAccount" }, 403);
 
   switch (input.intent) {
     case "create": {

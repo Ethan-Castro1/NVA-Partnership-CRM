@@ -9,7 +9,6 @@
     "typecheck": "react-router typegen && tsc",
     "test": "vitest run",
     "seed": "tsx scripts/seed.ts",
-    "create-user": "tsx scripts/create-user.ts",
     "dev:login": "react-router dev"
   },
   "dependencies": {

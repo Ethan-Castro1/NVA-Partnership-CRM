@@ -161,7 +161,7 @@ export default defineMessages(
     "filter.mine": "Míos",
 
     "opps.title": "Oportunidades",
-    "opps.description": "Cada posible lección, pasantía, alianza o donación, con su propia etapa. El estado de la persona queda como usted lo puso.",
+    "opps.description": "Cada posible lección, pasantía, alianza o donación, con su propia etapa. El estado de la persona queda como lo pusiste.",
     "opps.new": "Nueva oportunidad",
     "opps.back": "Todas las oportunidades",
     "opps.filter.track": "Tipo",

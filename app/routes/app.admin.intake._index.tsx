@@ -7,7 +7,7 @@ import { DoneNotice } from "~/components/intake/review";
 import { ContributionChips, EmptyState, PageHeader, Panel, PersonAvatar, Sheet, StatusBadge } from "~/components/nva";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "~/components/ui/table";
 import { makeT, useT } from "~/i18n";
-import { listIntake, type SignupRow } from "~/lib/admin.server";
+import { decidedIntakeName, listIntake, type SignupRow } from "~/lib/admin.server";
 import { INTAKE_STATUSES, type IntakeStatus } from "~/lib/constants";
 import { requireAdmin } from "~/lib/auth.server";
 import { cn } from "~/lib/utils";
@@ -23,11 +23,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   const requested = new URL(request.url).searchParams.get("status");
   const status: IntakeStatus = INTAKE_STATUSES.find((s) => s === requested) ?? "new";
   const { rows, counts } = await listIntake(status);
-  return { status, rows, counts };
+  return { status, rows, counts, decidedName: await decidedIntakeName(request) };
 }
 
 export default function IntakeList() {
-  const { status, rows, counts } = useLoaderData<typeof loader>();
+  const { status, rows, counts, decidedName } = useLoaderData<typeof loader>();
   const { t } = useT();
 
   return (
@@ -35,6 +35,7 @@ export default function IntakeList() {
       <PageHeader eyebrow={t("common.nav.adminSection")} title={t("admin.intake.title")} description={t("admin.intake.description")} />
 
       <DoneNotice
+        name={decidedName}
         fallback={
           <p role="status" className="rounded-xl bg-sage-soft px-3.5 py-2.5 text-sm text-sage-ink">
             {t("common.state.saved")}
@@ -84,7 +85,7 @@ export default function IntakeList() {
                     <TableHead>{t("admin.col.language")}</TableHead>
                     <TableHead>{t("common.field.contributions")}</TableHead>
                     <TableHead className="text-right">{t("admin.col.referrals")}</TableHead>
-                    <TableHead>{t("admin.col.profile")}</TableHead>
+                    <TableHead>{t("admin.intake.col.crm")}</TableHead>
                     <TableHead className="pr-5">
                       <span className="sr-only">{t("admin.col.actions")}</span>
                     </TableHead>
@@ -174,7 +175,10 @@ function ProfileStatus({ row }: { row: SignupRow }) {
   const { t } = useT();
   if (row.possible_match)
     return (
-      <span className="inline-flex h-5 items-center rounded-full bg-gold-soft px-2 text-[0.7rem] font-medium text-gold-ink">
+      <span
+        title={t("admin.intake.possibleMatchHint")}
+        className="inline-flex h-5 cursor-help items-center rounded-full bg-gold-soft px-2 text-[0.7rem] font-medium text-gold-ink"
+      >
         {t("admin.intake.possibleMatch")}
       </span>
     );

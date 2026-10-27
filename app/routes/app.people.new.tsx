@@ -149,7 +149,7 @@ export default function QuickAdd() {
   const value = (field: QuickAddField) => v?.[field] ?? "";
 
   return (
-    <div className="grid max-w-3xl gap-6">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] max-w-3xl gap-6">
       <PageHeader eyebrow={t("directory.adminTitle")} title={t("directory.quick.title")} description={t("directory.quick.description")} />
 
       <Form method="post" className="grid gap-5" noValidate>

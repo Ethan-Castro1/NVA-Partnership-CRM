@@ -1,6 +1,40 @@
+import { createHash } from "node:crypto";
+
+// ---------- running the schema safely (see db.server.ts runSchema) ----------
+
+/** Any fixed number; every server start takes the same transaction-scoped lock. */
+export const SCHEMA_LOCK_ID = 7_310_402_026;
+
+let versionKey: string | undefined;
+/** app_meta key that records "this database has run this exact SCHEMA_SQL". */
+export function schemaVersionKey(): string {
+  versionKey ??= `schema_sha256:${createHash("sha256").update(SCHEMA_SQL).digest("hex").slice(0, 32)}`;
+  return versionKey;
+}
+
 /**
- * The whole schema, idempotent: it runs every time the server starts (lab
- * school tenants have no migration jobs). To change a table, add an
+ * SCHEMA_SQL wrapped for one simple-protocol run, which Postgres (and PGlite)
+ * treat as one implicit transaction:
+ * - pg_advisory_xact_lock first, so concurrent cold starts take turns instead
+ *   of deadlocking (CREATE INDEX holds ShareLock while ALTER TABLE wants
+ *   AccessExclusive) or racing on CREATE TABLE (duplicate pg_type rows). The
+ *   lock is released at commit, so it also works through a transaction pooler.
+ * - the version key last, so it only lands if the whole schema did; older
+ *   version keys are cleared.
+ */
+export function schemaRunSql(): string {
+  const key = schemaVersionKey();
+  return `SELECT pg_advisory_xact_lock(${SCHEMA_LOCK_ID});
+${SCHEMA_SQL}
+INSERT INTO app_meta (key) VALUES ('${key}') ON CONFLICT (key) DO NOTHING;
+DELETE FROM app_meta WHERE key LIKE 'schema_sha256:%' AND key <> '${key}';
+`;
+}
+
+/**
+ * The whole schema, idempotent. Each server start runs it unless this database
+ * already ran this exact text (see schemaRunSql), so lab school tenants need no
+ * migration jobs. To change a table, add an
  * `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` line at the end rather than
  * editing a CREATE, so existing databases pick the change up too.
  *
@@ -415,4 +449,16 @@ ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS decision_note TEXT;
 ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS edited_payload JSONB;
 ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS decided_by TEXT REFERENCES users(id) ON DELETE SET NULL;
 ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS decided_at TIMESTAMPTZ;
+
+-- A staff request shared with colleagues (requirements section 10: "unless a collaboration is explicitly
+-- shared"). They can see it, add a completion note and mark it completed; only the requester and admins
+-- edit, cancel or share it.
+CREATE TABLE IF NOT EXISTS staff_request_shares (
+  request_id TEXT NOT NULL REFERENCES staff_requests(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  shared_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (request_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS staff_request_shares_user_idx ON staff_request_shares (user_id);
 `;

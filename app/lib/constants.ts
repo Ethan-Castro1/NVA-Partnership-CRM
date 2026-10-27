@@ -234,6 +234,8 @@ export type FollowUpView = (typeof FOLLOW_UP_VIEWS)[number];
 
 export const REQUEST_STATUSES = ["open", "arranged", "completed", "canceled"] as const;
 export type RequestStatus = (typeof REQUEST_STATUSES)[number];
+/** Statuses that still need something to happen. */
+export const ACTIVE_REQUEST_STATUSES: readonly RequestStatus[] = ["open", "arranged"];
 export const REQUEST_KINDS = ["resource", "introduction"] as const;
 export type RequestKind = (typeof REQUEST_KINDS)[number];
 export const REQUEST_PERSON_ROLES = ["interest", "assigned"] as const;

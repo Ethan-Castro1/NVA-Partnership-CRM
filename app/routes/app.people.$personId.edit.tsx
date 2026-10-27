@@ -103,7 +103,7 @@ export default function EditPerson() {
   const actionData = useActionData<typeof action>();
   const { t } = useT();
   return (
-    <div className="grid max-w-4xl gap-6">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] max-w-4xl gap-6">
       <PageHeader
         eyebrow={t("people.edit.title")}
         title={t("people.edit.heading", { name: person.full_name })}

@@ -45,7 +45,7 @@ export async function action({ request }: Route.ActionArgs) {
 export default function NewRequest({ loaderData, actionData }: Route.ComponentProps) {
   const { t } = useT();
   return (
-    <div className="mx-auto grid w-full max-w-2xl gap-6">
+    <div className="mx-auto grid min-w-0 grid-cols-[minmax(0,1fr)] w-full max-w-2xl gap-6">
       <Link to="/app/requests" className="inline-flex w-fit items-center gap-1.5 text-sm text-graphite hover:text-ink">
         <ArrowLeft className="size-4" aria-hidden="true" />
         {t("requests.new.back")}

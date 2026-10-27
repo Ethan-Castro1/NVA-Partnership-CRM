@@ -29,7 +29,7 @@ export default function MyConnections({ loaderData }: Route.ComponentProps) {
   const { t } = useT();
   const { connections } = loaderData;
   return (
-    <div className="mx-auto grid w-full max-w-3xl gap-6">
+    <div className="mx-auto grid min-w-0 grid-cols-[minmax(0,1fr)] w-full max-w-3xl gap-6">
       <PageHeader title={t("requests.connections.title")} description={t("requests.connections.description")} />
       {connections.length === 0 ? (
         <EmptyState

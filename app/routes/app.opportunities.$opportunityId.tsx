@@ -101,7 +101,7 @@ export default function OpportunityDetail() {
   const doneFollowUps = followUps.filter((f) => f.status === "completed");
 
   return (
-    <div className="grid gap-8">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-8">
       <Link to="/app/opportunities" className="inline-flex w-fit items-center gap-1.5 text-sm text-graphite hover:text-ink">
         <ArrowLeft className="size-4" aria-hidden="true" />
         {t("crm.opps.back")}

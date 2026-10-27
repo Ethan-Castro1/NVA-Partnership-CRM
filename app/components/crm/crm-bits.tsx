@@ -107,7 +107,7 @@ export function SegmentedLinks({
   tabs: { to: string; label: ReactNode; current: boolean; count?: number }[];
 }) {
   return (
-    <nav aria-label={label} className="max-w-full overflow-x-auto">
+    <nav aria-label={label} className="min-w-0 max-w-full overflow-x-auto">
       <ul className="inline-flex rounded-full border border-stone bg-taupe p-1">
         {tabs.map((tab) => (
           <li key={tab.to}>

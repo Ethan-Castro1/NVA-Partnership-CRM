@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { addCapPartner, createCap } from "~/lib/caps.server";
 import { query } from "~/lib/db.server";
 import { addRelationship, createPerson, logEngagement } from "~/lib/people.server";
-import { executeTool, TOOLS } from "./tools.server";
+import { ADMIN_TOOLS, executeTool, STAFF_TOOLS, WEB_TOOL } from "./tools.server";
 
 // An admin sees everyone; what staff get is tested in permissions.server.test.ts.
 const ctx = { user: { id: "u-teacher", email: "t@nva.test", name: "Tess Teacher", role: "admin" as const, locale: "en" as const } };
@@ -40,7 +40,7 @@ beforeAll(async () => {
 
 describe("tool definitions", () => {
   it("are strict, closed objects", () => {
-    for (const tool of TOOLS) {
+    for (const tool of [...STAFF_TOOLS, ...ADMIN_TOOLS, WEB_TOOL]) {
       expect(tool.strict).toBe(true);
       expect(tool.input_schema.additionalProperties).toBe(false);
       expect(Array.isArray(tool.input_schema.required)).toBe(true);
@@ -95,7 +95,7 @@ describe("get_person", () => {
     const body = JSON.parse(out.content);
     expect(body.name).toBe("Sue Sewer");
     expect(body.knows.map((k: { person: { name: string } }) => k.person.name)).toEqual(["Mo Middle"]);
-    expect(body.recent_engagements[0]).toMatchObject({ kind: "call", by: "Tess Teacher" });
+    expect(body.recent_history[0]).toMatchObject({ kind: "call", by: "Tess Teacher" });
     expect(body.caps[0]).toMatchObject({ id: capId, title: "Clean the creek", partner_status: "suggested" });
     expect(body.bio.length).toBeLessThanOrEqual(600);
     expect(out.personIds).toContain(mid);

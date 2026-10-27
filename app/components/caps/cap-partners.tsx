@@ -1,11 +1,14 @@
 /**
- * A CAP's partners (inline-editable rows) and the suggested partners to add.
- * Both use fetchers so a change saves in place without leaving the page.
+ * A CAP's partners and the suggested partners. For admins, rows are
+ * inline-editable and suggestions have an Add button (fetchers save in place).
+ * Staff get read-only rows and the usual Contact or Request Introduction actions.
  */
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Link, useFetcher } from "react-router";
 import { Check, CircleDashed, Loader2, Mail, NotebookPen, Plus, Route as RouteIcon, Trash2 } from "lucide-react";
 import { ContributionChips, PersonAvatar, StatusBadge, TagList } from "~/components/nva";
+import { MatchReasons } from "~/components/resources/match-reasons";
+import { ResourceActions } from "~/components/resources/resource-actions";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -28,7 +31,78 @@ type FetcherResult = { ok: boolean; error?: string };
 const ICON_LINK =
   "inline-flex size-7 items-center justify-center rounded-full text-graphite transition-colors hover:bg-stone hover:text-ink focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none [&_svg]:size-3.5";
 
-export function PartnerRow({ partner, capId }: { partner: CapPartnerView; capId: string }) {
+export function PartnerRow({
+  partner,
+  capId,
+  editable = true,
+  saved = false,
+}: {
+  partner: CapPartnerView;
+  capId: string;
+  /** Admins edit status, role and note in place; staff see them read-only. */
+  editable?: boolean;
+  saved?: boolean;
+}) {
+  if (!editable) return <ReadOnlyPartnerRow partner={partner} capId={capId} saved={saved} />;
+  return <EditablePartnerRow partner={partner} capId={capId} />;
+}
+
+function ReadOnlyPartnerRow({ partner, capId, saved }: { partner: CapPartnerView; capId: string; saved: boolean }) {
+  const { t } = useT();
+  const { person } = partner;
+  const subtitle = [person.title, person.organization_name].filter(Boolean).join(", ");
+  return (
+    <li className="grid gap-3 py-4 md:grid-cols-[minmax(0,1.3fr)_minmax(0,2.7fr)] md:items-start md:gap-5">
+      <div className="flex min-w-0 items-start gap-3">
+        <PersonAvatar name={person.full_name} />
+        <div className="min-w-0">
+          <Link
+            to={`/app/people/${person.id}`}
+            className="font-medium underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+          >
+            {person.full_name}
+          </Link>
+          {subtitle && <p className="truncate text-xs text-smoke">{subtitle}</p>}
+          <p className="mt-1 flex items-center gap-1.5 text-xs text-graphite">
+            <span className={cn("size-2 rounded-full", PARTNER_STATUS_DOT[partner.status])} aria-hidden="true" />
+            {t(`common.capPartnerStatus.${partner.status}`)}
+          </p>
+        </div>
+      </div>
+      <div className="grid min-w-0 gap-2">
+        {(partner.role || partner.note) && (
+          <dl className="grid gap-1 text-sm">
+            {partner.role && (
+              <div className="flex gap-1.5">
+                <dt className="text-smoke">{t("caps.partners.role")}:</dt>
+                <dd className="text-graphite">{partner.role}</dd>
+              </div>
+            )}
+            {partner.note && (
+              <div className="flex gap-1.5">
+                <dt className="text-smoke">{t("caps.partners.note")}:</dt>
+                <dd className="text-graphite">{partner.note}</dd>
+              </div>
+            )}
+          </dl>
+        )}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <ResourceActions person={person} saved={saved} compact />
+          <Link
+            to={`/app/people/${person.id}?logCap=${encodeURIComponent(capId)}#log-activity`}
+            className={ICON_LINK}
+            aria-label={t("caps.partners.logFor", { name: person.full_name })}
+            title={t("caps.partners.logFor", { name: person.full_name })}
+          >
+            <NotebookPen aria-hidden="true" />
+          </Link>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function EditablePartnerRow({ partner, capId }: { partner: CapPartnerView; capId: string }) {
   const { t } = useT();
   const save = useFetcher<FetcherResult>();
   const remove = useFetcher<FetcherResult>();
@@ -218,7 +292,16 @@ function pathSummary(suggestion: CapSuggestion, t: ReturnType<typeof useT>["t"])
   return t("caps.suggest.viaTwo", { a: best.chain[0].full_name, b: best.chain[1].full_name });
 }
 
-export function SuggestionItem({ suggestion }: { suggestion: CapSuggestion }) {
+export function SuggestionItem({
+  suggestion,
+  canAdd = true,
+  saved = false,
+}: {
+  suggestion: CapSuggestion;
+  /** Admins add suggestions as partners; staff get Contact or Request Introduction. */
+  canAdd?: boolean;
+  saved?: boolean;
+}) {
   const { t } = useT();
   const fetcher = useFetcher<FetcherResult>();
   const adding = fetcher.state !== "idle";
@@ -246,7 +329,8 @@ export function SuggestionItem({ suggestion }: { suggestion: CapSuggestion }) {
         </div>
       </div>
       <ContributionChips types={person.contribution_types} />
-      {matched.length > 0 && (
+      <MatchReasons reasons={person.reasons} max={2} />
+      {matched.length > 0 && !person.reasons.length && (
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-xs text-smoke">{t("caps.suggest.matched")}:</span>
           <TagList tags={matched} highlight={matched} />
@@ -260,6 +344,9 @@ export function SuggestionItem({ suggestion }: { suggestion: CapSuggestion }) {
         )}
         {pathSummary(suggestion, t)}
       </p>
+      {!canAdd ? (
+        <ResourceActions person={person} saved={saved} compact />
+      ) : (
       <fetcher.Form method="post">
         <input type="hidden" name="intent" value="add-partner" />
         <input type="hidden" name="personId" value={person.id} />
@@ -274,6 +361,7 @@ export function SuggestionItem({ suggestion }: { suggestion: CapSuggestion }) {
           {adding ? t("caps.suggest.adding") : t("caps.suggest.add")}
         </Button>
       </fetcher.Form>
+      )}
     </li>
   );
 }

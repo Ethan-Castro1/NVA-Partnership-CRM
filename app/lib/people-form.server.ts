@@ -9,6 +9,8 @@ import { z } from "zod";
 import type { MessageKey } from "~/i18n";
 import {
   AFFILIATIONS,
+  CONTACT_CATEGORIES,
+  CONTACT_MODES,
   CONTRIBUTION_TYPES,
   ENGAGEMENT_KINDS,
   LANGUAGES,
@@ -17,6 +19,7 @@ import {
   RELATIONSHIP_KINDS,
   normalizeTags,
   type Affiliation,
+  type ContactMode,
   type ContributionType,
   type EngagementKind,
   type PersonStatus,
@@ -56,14 +59,17 @@ export const PERSON_FORM_FIELDS = [
   "bio",
   "notes",
   "funding_focus",
+  "location",
+  "origin",
+  "shared_summary",
 ] as const;
 export type PersonFormField = (typeof PERSON_FORM_FIELDS)[number];
 
 export type PersonFormErrorKey = Extract<
   MessageKey,
-  "people.form.errorNameRequired" | "people.form.errorEmail" | "people.form.errorTooLong"
+  "people.form.errorNameRequired" | "people.form.errorEmail" | "people.form.errorTooLong" | "people.form.errorOwner"
 >;
-export type PersonFormErrors = Partial<Record<PersonFormField, PersonFormErrorKey>>;
+export type PersonFormErrors = Partial<Record<PersonFormField | "owner_user_id", PersonFormErrorKey>>;
 
 const TOO_LONG: PersonFormErrorKey = "people.form.errorTooLong";
 const optionalText = (max: number) =>
@@ -98,6 +104,9 @@ const personSchema = z.object({
   bio: optionalText(4000),
   notes: optionalText(4000),
   funding_focus: optionalText(2000),
+  location: optionalText(200),
+  origin: optionalText(2000),
+  shared_summary: optionalText(2000),
 });
 
 export type PersonFormResult =
@@ -108,6 +117,8 @@ export type PersonFormResult =
  * Reads the shared PersonForm. Free-text fields are validated (first error per
  * field wins); vocabulary fields fall back to safe defaults when missing or
  * unknown. `source` is never read from the form: the route decides it.
+ * `owner_user_id` is only shape-checked here ("none" or blank is nobody); the
+ * route must confirm it names an admin.
  */
 export function parsePersonForm(form: FormData): PersonFormResult {
   const raw = Object.fromEntries(PERSON_FORM_FIELDS.map((field) => [field, str(form, field)]));
@@ -129,8 +140,27 @@ export function parsePersonForm(form: FormData): PersonFormResult {
       contribution_types: known(CONTRIBUTION_TYPES, form.getAll("contribution_types")),
       affiliations: known(AFFILIATIONS, form.getAll("affiliations")),
       status: oneOf(PERSON_STATUSES, form.get("status")) ?? "new",
+      categories: known(CONTACT_CATEGORIES, form.getAll("categories")),
+      directory_visible: ["on", "true", "1"].includes(str(form, "directory_visible")),
+      contact_mode: oneOf(CONTACT_MODES, form.get("contact_mode")) ?? "introduction",
+      owner_user_id: ownerId(form),
     },
   };
+}
+
+function ownerId(form: FormData): string | null {
+  const raw = str(form, "owner_user_id").trim();
+  return raw && raw !== "none" && id.safeParse(raw).success ? raw : null;
+}
+
+/** The profile's inline visibility controls: in the staff directory or not, and direct contact or introduction. */
+export function parseVisibilityForm(
+  form: FormData,
+): { ok: true; value: { directory_visible: boolean; contact_mode: ContactMode } } | { ok: false } {
+  const visible = str(form, "directory_visible");
+  const mode = oneOf(CONTACT_MODES, form.get("contact_mode"));
+  if (!["true", "false"].includes(visible) || !mode) return { ok: false };
+  return { ok: true, value: { directory_visible: visible === "true", contact_mode: mode } };
 }
 
 // ---------- profile actions ----------

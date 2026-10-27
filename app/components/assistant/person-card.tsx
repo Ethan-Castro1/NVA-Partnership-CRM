@@ -1,7 +1,8 @@
 import { Link } from "react-router";
 import { ArrowUpRight } from "lucide-react";
 import { ContributionChips, PersonAvatar, StatusBadge, TagList } from "~/components/nva";
-import { ChevronRight } from "lucide-react";
+import { MatchReasons } from "~/components/resources/match-reasons";
+import { ResourceActions } from "~/components/resources/resource-actions";
 import { useT } from "~/i18n";
 import type { AssistantPerson } from "./types";
 
@@ -38,33 +39,50 @@ export function PersonCard({ person, example = false }: { person: AssistantPerso
   );
 }
 
-/** A person in an answer, as one compact row: avatar, name, role, and a way to the profile. */
+/**
+ * A person in an answer, as one compact block: avatar, name and role, why they
+ * matched, then View Profile, Contact or Request Introduction (by contact
+ * mode) and Save. Example cards are inert.
+ */
 export function PersonRow({ person, example = false }: { person: AssistantPerson; example?: boolean }) {
   const { t } = useT();
   const role =
     person.title && person.organization_name
       ? t("assistant.roleAt", { title: person.title, org: person.organization_name })
       : person.title || person.organization_name;
-  const body = (
-    <>
-      <PersonAvatar name={person.full_name} className="size-8" />
-      <span className="grid min-w-0 flex-1 leading-tight">
-        <span className="truncate text-sm font-medium text-ink">{person.full_name}</span>
-        {role && <span className="truncate text-xs text-smoke">{role}</span>}
-      </span>
-      <StatusBadge status={person.status} />
-      {!example && <ChevronRight className="size-4 shrink-0 text-smoke" aria-hidden="true" />}
-    </>
-  );
-  const box = "flex items-center gap-2.5 rounded-xl border border-stone bg-canvas px-2.5 py-2";
-  return example ? (
-    <div className={box}>{body}</div>
-  ) : (
-    <Link
-      to={`/app/people/${person.id}`}
-      className={`${box} transition-colors hover:border-gold hover:bg-gold-soft/40 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none`}
-    >
-      {body}
-    </Link>
+  return (
+    <div className="grid gap-2 rounded-xl border border-stone bg-canvas px-2.5 py-2">
+      <div className="flex items-center gap-2.5">
+        <PersonAvatar name={person.full_name} className="size-8" />
+        <span className="grid min-w-0 flex-1 leading-tight">
+          {example ? (
+            <span className="truncate text-sm font-medium text-ink">{person.full_name}</span>
+          ) : (
+            <Link
+              to={`/app/people/${person.id}`}
+              className="truncate rounded-sm text-sm font-medium text-ink underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+            >
+              {person.full_name}
+            </Link>
+          )}
+          {role && <span className="truncate text-xs text-smoke">{role}</span>}
+        </span>
+        <StatusBadge status={person.status} />
+      </div>
+      <MatchReasons reasons={person.reasons} max={2} />
+      {!example && (
+        <ResourceActions
+          person={{
+            id: person.id,
+            full_name: person.full_name,
+            email: person.email ?? null,
+            phone: person.phone ?? null,
+            contact_mode: person.contact_mode ?? "introduction",
+          }}
+          saved={person.saved ?? false}
+          compact
+        />
+      )}
+    </div>
   );
 }

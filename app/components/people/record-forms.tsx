@@ -1,8 +1,9 @@
 /**
- * The three small forms on a profile that teachers and admins can use: log
- * activity, add a connection, add to a CAP. Each sits beside the list it adds
- * to and posts through its own fetcher so the rest of the page stays put; on
- * success the form clears and a short confirmation is announced.
+ * The small forms on a profile: record an interaction (admins: calls,
+ * meetings, notes, emails and work; staff: only the work itself), add a
+ * connection and add to a CAP (admins). Each posts through its own fetcher so
+ * the rest of the page stays put; on success the form clears and a short
+ * confirmation is announced. The route action checks the role for every one.
  */
 import { useEffect, useState, type ReactNode } from "react";
 import { useFetcher } from "react-router";
@@ -12,7 +13,7 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Textarea } from "~/components/ui/textarea";
 import { useT, type MessageKey } from "~/i18n";
-import { ENGAGEMENT_KINDS, RELATIONSHIP_KINDS, type EngagementKind } from "~/lib/constants";
+import { ADMIN_LOGGABLE_KINDS, RELATIONSHIP_KINDS, type EngagementKind } from "~/lib/constants";
 import { NamedSelect, type SelectOption } from "./named-select";
 
 export type ProfileActionData =
@@ -64,13 +65,19 @@ export function LogActivityForm({
   caps,
   today,
   defaultCap,
-  kinds = ENGAGEMENT_KINDS,
+  kinds = ADMIN_LOGGABLE_KINDS,
+  defaultKind,
+  submitLabel,
+  savedLabel,
 }: {
   caps: SelectOption[];
   today: string;
   defaultCap?: string;
-  /** What this viewer may log (staff: STAFF_LOGGABLE_KINDS). */
+  /** What this viewer may log (staff: STAFF_LOGGABLE_KINDS). The server checks again. */
   kinds?: readonly EngagementKind[];
+  defaultKind?: EngagementKind;
+  submitLabel?: string;
+  savedLabel?: string;
 }) {
   const { t } = useT();
   const { fetcher, formKey, saved, errors, busy } = useRecordFetcher("logEngagement");
@@ -83,7 +90,7 @@ export function LogActivityForm({
           <NamedSelect
             id="log-kind"
             name="kind"
-            defaultValue="lesson"
+            defaultValue={defaultKind && kinds.includes(defaultKind) ? defaultKind : kinds[0]}
             invalid={!!errors.kind}
             options={kinds.map((k) => ({ value: k, label: t(`common.engagement.${k}`) }))}
           />
@@ -115,9 +122,9 @@ export function LogActivityForm({
       <FormError errors={errors} />
       <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" disabled={busy}>
-          {busy ? t("common.state.saving") : t("people.profile.logSubmit")}
+          {busy ? t("common.state.saving") : (submitLabel ?? t("people.profile.logSubmit"))}
         </Button>
-        <SavedNote show={saved}>{t("people.profile.logSaved")}</SavedNote>
+        <SavedNote show={saved}>{savedLabel ?? t("people.profile.logSaved")}</SavedNote>
       </div>
     </fetcher.Form>
   );

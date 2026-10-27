@@ -7,6 +7,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "~/components/ui/sidebar";
+import { cn } from "~/lib/utils";
 
 export type NavItem = {
   title: string;
@@ -14,17 +15,28 @@ export type NavItem = {
   icon?: React.ReactNode;
   /** Only active on an exact match (for index pages like /app). */
   end?: boolean;
+  /** Other path prefixes that also mark this item active (e.g. /app/organizations under People). */
+  also?: string[];
+  /** A small count next to the item; 0 or undefined hides it. */
   badge?: number;
+  /** Read by screen readers instead of the bare number ("3 overdue"). */
+  badgeLabel?: string;
+  /** "alert" for things past due (rust); default is the quiet gold. */
+  badgeTone?: "default" | "alert";
 };
 
-export function NavMain({ label, items }: { label: string; items: NavItem[] }) {
+const matches = (pathname: string, url: string) => pathname === url || pathname.startsWith(`${url}/`);
+
+export function NavMain({ label, items }: { label?: string; items: NavItem[] }) {
   const { pathname } = useLocation();
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>{label}</SidebarGroupLabel>
+      {label && <SidebarGroupLabel>{label}</SidebarGroupLabel>}
       <SidebarMenu>
         {items.map((item) => {
-          const active = item.end ? pathname === item.url : pathname === item.url || pathname.startsWith(`${item.url}/`);
+          const active = item.end
+            ? pathname === item.url
+            : matches(pathname, item.url) || (item.also ?? []).some((url) => matches(pathname, url));
           return (
             <SidebarMenuItem key={item.url}>
               <SidebarMenuButton
@@ -36,10 +48,19 @@ export function NavMain({ label, items }: { label: string; items: NavItem[] }) {
                 <NavLink to={item.url} end={item.end}>
                   {item.icon}
                   <span>{item.title}</span>
+                  {item.badge && item.badgeLabel ? <span className="sr-only">, {item.badgeLabel}</span> : null}
                 </NavLink>
               </SidebarMenuButton>
               {item.badge ? (
-                <SidebarMenuBadge className="rounded-full bg-gold px-1.5 text-ink">{item.badge}</SidebarMenuBadge>
+                <SidebarMenuBadge
+                  aria-hidden={item.badgeLabel ? true : undefined}
+                  className={cn(
+                    "rounded-full px-1.5 tabular-nums",
+                    item.badgeTone === "alert" ? "bg-rust-soft text-rust-ink" : "bg-gold-soft text-gold-ink",
+                  )}
+                >
+                  {item.badge}
+                </SidebarMenuBadge>
               ) : null}
             </SidebarMenuItem>
           );

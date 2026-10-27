@@ -87,7 +87,7 @@ export function VillageMap({
         <span id={captionId} className="sr-only">
           {t("connections.map.figureLabel", { people: map.nodes.length, links: map.links.length })}
         </span>
-        <MapLegend />
+        <MapLegend shown={new Set(map.nodes.flatMap((n) => (n.contribution ? [n.contribution] : [])))} />
         <HighlightList active={active} results={results} />
       </figcaption>
     </figure>
@@ -137,7 +137,8 @@ function MapDot({ node, lit, matched, faded }: { node: MapNode; lit: boolean; ma
   );
 }
 
-function MapLegend() {
+/** Colors for the ways to help that appear on this map (so staff never see a funder swatch). */
+function MapLegend({ shown }: { shown: ReadonlySet<string> }) {
   const { t } = useT();
   const swatch = (children: React.ReactNode) => (
     <svg viewBox="0 0 20 20" className="size-4 shrink-0" aria-hidden="true">
@@ -146,7 +147,7 @@ function MapLegend() {
   );
   return (
     <ul className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-graphite">
-      {CONTRIBUTION_TYPES.map((type) => (
+      {CONTRIBUTION_TYPES.filter((type) => shown.has(type)).map((type) => (
         <li key={type} className="flex items-center gap-1.5">
           {swatch(<circle cx="10" cy="10" r="6" fill={CONTRIBUTION_COLOR[type].hex} />)}
           {t(`common.contribution.${type}`)}

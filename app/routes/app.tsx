@@ -10,17 +10,15 @@ import { Separator } from "~/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "~/components/ui/sidebar";
 import { useT } from "~/i18n";
 import { requireUser } from "~/lib/auth.server";
-import { queryOne } from "~/lib/db.server";
+import { getNavCounts } from "~/lib/dashboard.server";
 import { cn } from "~/lib/utils";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
-  const newSignups =
-    user.role === "admin"
-      ? ((await queryOne<{ n: number }>("SELECT count(*)::int AS n FROM intake_submissions WHERE status = 'new'"))?.n ?? 0)
-      : 0;
+  // Small sidebar counts for admins: overdue follow-ups, new sign-ups, introductions waiting.
+  const navCounts = await getNavCounts(user);
   const sidebarOpen = !/(?:^|;\s*)sidebar_state=false/.test(request.headers.get("Cookie") ?? "");
-  return data({ user, newSignups, sidebarOpen });
+  return data({ user, navCounts, sidebarOpen });
 }
 
 export default function AppLayout() {
@@ -32,7 +30,7 @@ export default function AppLayout() {
 }
 
 function AppShell() {
-  const { user, newSignups, sidebarOpen } = useLoaderData<typeof loader>();
+  const { user, navCounts, sidebarOpen } = useLoaderData<typeof loader>();
   const { t } = useT();
   const panelVisible = usePanelVisible();
   const location = useLocation();
@@ -46,7 +44,7 @@ function AppShell() {
       >
         {t("common.skipToContent")}
       </a>
-      <AppSidebar user={user} newSignups={newSignups} />
+      <AppSidebar user={user} counts={navCounts} />
       <SidebarInset className={cn("bg-canvas transition-[padding]", panelVisible && PANEL_WIDTH_CLASS)}>
         <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-3 border-b border-stone bg-canvas/90 px-4 backdrop-blur transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-14 md:px-6">
           <SidebarTrigger className="-ml-1" />

@@ -1,7 +1,9 @@
 /**
  * The connection finder: "who can get us to...?" Need search with intro paths
- * from the board and staff, the village map, saved web leads, and an opt-in
- * web search for when no one in the village fits.
+ * from the board and staff, and the village map. Staff use it too, scoped to
+ * the staff directory: results, paths, the map and the inner circle are built
+ * only from people they can see. Web search for new leads and saved web leads
+ * are admin-only (loader and action).
  */
 import { Form, Link, data, useActionData, useLoaderData, useNavigation } from "react-router";
 import { ArrowLeft, ChevronRight, Loader2, Search } from "lucide-react";
@@ -25,6 +27,7 @@ import { getVillageMap, highlightFor, sortConnectorResults } from "~/lib/connect
 import { CONTRIBUTION_COLOR, CONTRIBUTION_TYPES, INNER_CIRCLE } from "~/lib/constants";
 import { findConnectorsForNeed, searchPeople, searchTerms } from "~/lib/people.server";
 import { isAdmin, visibleToSql } from "~/lib/permissions.server";
+import { savedIdsAmong } from "~/lib/saved.server";
 import { cn } from "~/lib/utils";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
@@ -38,19 +41,20 @@ export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const capId = (url.searchParams.get("cap") ?? "").trim().slice(0, 100);
   const q = (url.searchParams.get("q") ?? "").trim().slice(0, 200);
+  const admin = isAdmin(user);
   const typeParam = url.searchParams.get("type");
-  const type = CONTRIBUTION_TYPES.find((value) => value === typeParam) ?? null;
+  const types = admin ? CONTRIBUTION_TYPES : CONTRIBUTION_TYPES.filter((value) => value !== "funder");
+  const type = types.find((value) => value === typeParam) ?? null;
   // A query of only stopwords ("someone") would match everyone, so treat it as empty.
   const searching = searchTerms(q).length > 0;
 
-  const admin = isAdmin(user);
   // Staff see only the staff directory (results, map, inner circle); web leads are admin-only.
   const [results, map, inner, leads, capRow] = await Promise.all([
     searching ? findConnectorsForNeed({ q, contributionTypes: type ? [type] : undefined, limit: 25 }, user) : Promise.resolve([]),
     getVillageMap(user),
     searchPeople({ affiliations: [...INNER_CIRCLE], limit: 100 }, user),
     admin ? listWebLeads() : Promise.resolve([]),
-    capId ? getCap(capId) : Promise.resolve(null),
+    capId ? getCap(capId, user) : Promise.resolve(null),
   ]);
   // People already on the CAP get a note instead of an Add button.
   const partnerIds = capRow
@@ -63,7 +67,10 @@ export async function loader({ request }: Route.LoaderArgs) {
       ).map((r) => r.person_id)
     : [];
   const sorted = sortConnectorResults(results);
+  const saved = sorted.length ? await savedIdsAmong(user, sorted.map((r) => r.person.id)) : new Set<string>();
   return {
+    types,
+    savedIds: [...saved],
     q,
     type,
     searching,
@@ -139,7 +146,9 @@ const EXAMPLES = [
 ] as const;
 
 export default function Connections() {
-  const { q, type, searching, results, highlight, map, innerCircle, leads, aiConfigured, isAdmin, cap } = useLoaderData<typeof loader>();
+  const { q, type, types, savedIds, searching, results, highlight, map, innerCircle, leads, aiConfigured, isAdmin, cap } =
+    useLoaderData<typeof loader>();
+  const saved = new Set(savedIds);
   const actionData = useActionData<typeof action>() as WebActionResult | { intent: string } | undefined;
   const webResult = actionData?.intent === "web" ? (actionData as WebActionResult) : undefined;
   const { t } = useT();
@@ -185,7 +194,7 @@ export default function Connections() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="any">{t("connections.search.typeAny")}</SelectItem>
-                {CONTRIBUTION_TYPES.map((value) => (
+                {types.map((value) => (
                   <SelectItem key={value} value={value}>
                     <span className={cn("size-2 rounded-full", CONTRIBUTION_COLOR[value].dot)} aria-hidden="true" />
                     {t(`common.contribution.${value}`)}
@@ -229,11 +238,17 @@ export default function Connections() {
           {results.length ? (
             <div className="grid gap-4">
               {results.map((result) => (
-                <ConnectorCard key={result.person.id} result={result} cap={cap} />
+                <ConnectorCard
+                  key={result.person.id}
+                  result={result}
+                  cap={cap}
+                  admin={isAdmin}
+                  saved={saved.has(result.person.id)}
+                />
               ))}
             </div>
           ) : (
-            <EmptyState title={t("connections.results.none")} body={t(showWeb ? "connections.results.noneBody" : "connections.results.noneBodyNoWeb")} />
+            <EmptyState title={t("connections.results.none")} body={t(showWeb ? "connections.results.noneBody" : isAdmin ? "connections.results.noneBodyNoWeb" : "connections.results.noneBodyStaff")} />
           )}
         </section>
       )}

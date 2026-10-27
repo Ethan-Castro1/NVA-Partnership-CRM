@@ -2,7 +2,8 @@
  * Shapes shared by the assistant's server code and its page. Plain types only,
  * so this file is safe to import from both sides.
  */
-import type { ContributionType, PersonStatus } from "~/lib/constants";
+import type { ContactMode, ContributionType, PersonStatus } from "~/lib/constants";
+import type { MatchReason } from "~/lib/search-language";
 
 /** One turn as the browser keeps it and sends it back (text only). */
 export type ChatTurn = { role: "user" | "assistant"; content: string };
@@ -16,6 +17,15 @@ export type AssistantPerson = {
   contribution_types: ContributionType[];
   status: PersonStatus;
   skills: string[];
+  /** As the viewer may see them: staff get these only for direct contacts. */
+  email?: string | null;
+  phone?: string | null;
+  /** direct: Contact; introduction: Request Introduction. */
+  contact_mode?: ContactMode;
+  /** Whether the viewer has saved this person. */
+  saved?: boolean;
+  /** Why they matched the search (from fields the viewer may see). */
+  reasons?: MatchReason[];
 };
 
 /** Limits the page and the server agree on. */

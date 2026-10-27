@@ -1,11 +1,13 @@
 /**
- * The one add/edit person form (admins only). Field names match
+ * The full add/edit person form (admins only). Field names match
  * parsePersonForm in app/lib/people-form.server.ts; errors arrive as i18n
- * keys from the route action and are translated here.
+ * keys from the route action and are translated here. When the action finds
+ * likely duplicates it passes them back, and the form lists them with a
+ * "Save anyway" button (which posts confirm_duplicates=1).
  */
 import { useState } from "react";
 import { Form, Link, useNavigation } from "react-router";
-import { Plus } from "lucide-react";
+import { AlertTriangle, Plus } from "lucide-react";
 import { Field, Panel } from "~/components/nva";
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
@@ -14,6 +16,8 @@ import { Textarea } from "~/components/ui/textarea";
 import { useT } from "~/i18n";
 import {
   AFFILIATIONS,
+  CONTACT_CATEGORIES,
+  CONTACT_MODES,
   CONTRIBUTION_COLOR,
   CONTRIBUTION_TYPES,
   LANGUAGES,
@@ -22,11 +26,14 @@ import {
   SUGGESTED_CAP_TOPICS,
   normalizeTags,
   type Affiliation,
+  type ContactCategory,
+  type ContactMode,
   type ContributionType,
   type OrganizationKind,
   type PersonStatus,
   type PreferredLanguage,
 } from "~/lib/constants";
+import type { DuplicateCandidate } from "~/lib/duplicates.server";
 import type { PersonFormErrors } from "~/lib/people-form.server";
 import { cn } from "~/lib/utils";
 import { useTopicLabel } from "~/components/caps/cap-bits";
@@ -49,6 +56,13 @@ export type PersonFormValues = {
   status: PersonStatus;
   notes: string | null;
   funding_focus: string | null;
+  categories: ContactCategory[];
+  origin: string | null;
+  owner_user_id: string | null;
+  shared_summary: string | null;
+  location: string | null;
+  directory_visible: boolean;
+  contact_mode: ContactMode;
 };
 
 export const EMPTY_PERSON: PersonFormValues = {
@@ -68,21 +82,85 @@ export const EMPTY_PERSON: PersonFormValues = {
   status: "new",
   notes: null,
   funding_focus: null,
+  categories: [],
+  origin: null,
+  owner_user_id: null,
+  shared_summary: null,
+  location: null,
+  directory_visible: false,
+  contact_mode: "introduction",
 };
 
 const checkCard =
   "flex cursor-pointer items-start gap-3 rounded-xl border border-stone bg-canvas p-3.5 transition-colors hover:border-graphite/40 has-[[data-state=checked]]:border-ink has-[[data-state=checked]]:bg-gold-soft/60";
 
+export type PersonFormDuplicate = Pick<
+  DuplicateCandidate,
+  "id" | "full_name" | "email" | "organization_name" | "directory_visible" | "reasons"
+>;
+
+/** Likely duplicates found when the name or email changed, with a way to save anyway. */
+function DuplicateWarning({ duplicates, busy }: { duplicates: PersonFormDuplicate[]; busy: boolean }) {
+  const { t } = useT();
+  return (
+    <section role="alert" aria-labelledby="pf-dup-title" className="grid gap-3 rounded-card border border-gold bg-gold-soft/50 p-4">
+      <div className="flex items-start gap-2">
+        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-gold-ink" aria-hidden="true" />
+        <div className="grid gap-0.5">
+          <h2 id="pf-dup-title" className="text-sm font-medium text-ink">
+            {t("people.form.dupTitle")}
+          </h2>
+          <p className="text-sm text-graphite">{t("people.form.dupBody")}</p>
+        </div>
+      </div>
+      <ul className="grid gap-2">
+        {duplicates.map((d) => (
+          <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-canvas px-3 py-2 text-sm">
+            <span className="grid min-w-0">
+              <Link to={`/app/people/${d.id}`} className="font-medium text-ink underline decoration-stone underline-offset-4 hover:decoration-gold">
+                {d.full_name}
+              </Link>
+              <span className="text-xs break-all text-smoke">{[d.organization_name, d.email].filter(Boolean).join(" · ")}</span>
+            </span>
+            <span className="flex flex-wrap gap-1">
+              {d.reasons.map((r) => (
+                <span key={r} className="inline-flex h-5 items-center rounded-full bg-stone px-2 text-[0.7rem] text-graphite">
+                  {t(`people.form.dupReason.${r}`)}
+                </span>
+              ))}
+              {!d.directory_visible && (
+                <span className="inline-flex h-5 items-center rounded-full border border-stone px-2 text-[0.7rem] text-smoke">
+                  {t("people.form.dupHidden")}
+                </span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <Button type="submit" name="confirm_duplicates" value="1" variant="outline" size="sm" className="w-fit" disabled={busy}>
+        {t("people.form.dupSaveAnyway")}
+      </Button>
+    </section>
+  );
+}
+
 export function PersonForm({
   defaults = EMPTY_PERSON,
   errors = {},
   duplicateId,
+  duplicates = [],
+  owners = [],
   submitLabel,
   cancelTo,
 }: {
   defaults?: PersonFormValues;
   errors?: PersonFormErrors;
+  /** Another record already has this exact email (saving is blocked). */
   duplicateId?: string | null;
+  /** Likely duplicates to confirm before saving. */
+  duplicates?: PersonFormDuplicate[];
+  /** Admins who can own the relationship. */
+  owners?: { id: string; name: string }[];
   submitLabel: string;
   cancelTo: string;
 }) {
@@ -104,6 +182,7 @@ export function PersonForm({
   const err = (field: keyof PersonFormErrors) => (errors[field] ? t(errors[field]!) : undefined);
   const invalid = (field: keyof PersonFormErrors) => (errors[field] ? true : undefined);
   const hasErrors = Object.keys(errors).length > 0 || !!duplicateId;
+  const [contactMode, setContactMode] = useState<ContactMode>(defaults.contact_mode);
 
   return (
     <Form method="post" className="grid gap-6" noValidate>
@@ -112,6 +191,7 @@ export function PersonForm({
           {t("people.form.errorSummary")}
         </p>
       )}
+      {duplicates.length > 0 && <DuplicateWarning duplicates={duplicates} busy={busy} />}
 
       <Panel title={t("people.form.sectionBasics")} bodyClassName="grid gap-4 md:grid-cols-2">
         <Field label={t("common.field.name")} htmlFor="pf-name" error={err("full_name")} className="md:col-span-2">
@@ -181,6 +261,16 @@ export function PersonForm({
             name="organization_kind"
             defaultValue={defaults.organization_kind ?? "other"}
             options={ORGANIZATION_KINDS.map((k) => ({ value: k, label: t(`common.orgKind.${k}`) }))}
+          />
+        </Field>
+        <Field label={t("common.field.location")} htmlFor="pf-location" optional error={err("location")}>
+          <Input
+            id="pf-location"
+            name="location"
+            maxLength={200}
+            placeholder={t("people.form.locationPlaceholder")}
+            defaultValue={defaults.location ?? ""}
+            aria-invalid={invalid("location")}
           />
         </Field>
       </Panel>
@@ -321,6 +411,96 @@ export function PersonForm({
             placeholder={t("people.form.bioPlaceholder")}
             defaultValue={defaults.bio ?? ""}
             aria-invalid={invalid("bio")}
+            className="bg-canvas"
+          />
+        </Field>
+      </Panel>
+
+      <Panel title={t("people.form.sectionCrm")} bodyClassName="grid gap-5">
+        <fieldset className="grid gap-2">
+          <legend className="mb-1 text-sm font-medium text-graphite">{t("common.field.categories")}</legend>
+          <p className="mb-1 text-xs text-smoke">{t("people.form.categoriesHint")}</p>
+          <div className="flex flex-wrap gap-2">
+            {CONTACT_CATEGORIES.map((c) => (
+              <label
+                key={c}
+                htmlFor={`pf-cat-${c}`}
+                className="flex cursor-pointer items-center gap-2 rounded-full border border-stone bg-canvas py-2 pr-3.5 pl-3 text-sm text-graphite has-[[data-state=checked]]:border-ink has-[[data-state=checked]]:text-ink"
+              >
+                <Checkbox id={`pf-cat-${c}`} name="categories" value={c} defaultChecked={defaults.categories.includes(c)} />
+                {t(`common.category.${c}`)}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label={t("common.field.owner")} htmlFor="pf-owner" error={err("owner_user_id")}>
+            <NamedSelect
+              id="pf-owner"
+              name="owner_user_id"
+              defaultValue={defaults.owner_user_id ?? "none"}
+              invalid={invalid("owner_user_id")}
+              options={[{ value: "none", label: t("people.form.ownerNone") }, ...owners.map((o) => ({ value: o.id, label: o.name }))]}
+            />
+          </Field>
+          <Field label={t("common.field.origin")} htmlFor="pf-origin" optional error={err("origin")} className="md:col-span-2">
+            <Textarea
+              id="pf-origin"
+              name="origin"
+              rows={2}
+              maxLength={2000}
+              placeholder={t("people.form.originPlaceholder")}
+              defaultValue={defaults.origin ?? ""}
+              aria-invalid={invalid("origin")}
+              className="bg-canvas"
+            />
+          </Field>
+        </div>
+        <div className="grid gap-4 rounded-xl border border-stone bg-canvas p-4 md:grid-cols-2">
+          <label htmlFor="pf-visible" className="flex cursor-pointer items-start gap-3">
+            <Checkbox id="pf-visible" name="directory_visible" value="on" defaultChecked={defaults.directory_visible} className="mt-0.5" />
+            <span className="grid gap-0.5">
+              <span className="text-sm font-medium text-ink">{t("common.field.directoryVisible")}</span>
+              <span className="text-xs text-smoke">{t("people.form.directoryVisibleHint")}</span>
+            </span>
+          </label>
+          <div className="grid gap-1.5">
+            <label htmlFor="pf-contact-mode" className="text-sm font-medium text-graphite">
+              {t("common.field.contactMode")}
+            </label>
+            <select
+              id="pf-contact-mode"
+              name="contact_mode"
+              value={contactMode}
+              onChange={(e) => setContactMode(e.target.value as ContactMode)}
+              aria-describedby="pf-contact-mode-help"
+              className="h-10 w-full rounded-lg border border-input bg-canvas px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            >
+              {CONTACT_MODES.map((m) => (
+                <option key={m} value={m}>
+                  {t(`common.contactMode.${m}`)}
+                </option>
+              ))}
+            </select>
+            <p id="pf-contact-mode-help" className="text-xs text-smoke">
+              {t(`common.contactModeHelp.${contactMode}`)}
+            </p>
+          </div>
+        </div>
+        <Field
+          label={t("common.field.sharedSummary")}
+          htmlFor="pf-summary"
+          optional
+          hint={t("people.form.sharedSummaryHint")}
+          error={err("shared_summary")}
+        >
+          <Textarea
+            id="pf-summary"
+            name="shared_summary"
+            rows={3}
+            maxLength={2000}
+            defaultValue={defaults.shared_summary ?? ""}
+            aria-invalid={invalid("shared_summary")}
             className="bg-canvas"
           />
         </Field>

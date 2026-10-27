@@ -1,8 +1,10 @@
 /**
  * One CAP as a partner pipeline: partners (inline status/role/note), the
- * activity logged against it, its details and possible partners. Anyone
- * signed in can add partners; only owners and admins can edit (?edit=1) or
- * delete, and that rule is enforced in the action, not just by hiding buttons.
+ * activity logged against it, its details and possible partners. Everyone
+ * signed in can read it (staff see only partners in the staff directory).
+ * Only admins add, update or remove partners; only owners and admins edit
+ * (?edit=1) or delete. Both rules are enforced in the action, not just by
+ * hiding buttons.
  */
 import { useEffect, useState } from "react";
 import { Form, Link, data, redirect, useActionData, useFetcher, useLoaderData, useNavigation } from "react-router";
@@ -33,6 +35,7 @@ import { requireUser } from "~/lib/auth.server";
 import {
   addCapPartner,
   canEditCap,
+  canManagePartners,
   deleteCap,
   getCap,
   getCapActivity,
@@ -46,6 +49,7 @@ import {
   updateCapPartner,
 } from "~/lib/caps.server";
 import { canViewPerson } from "~/lib/permissions.server";
+import { savedIdsAmong } from "~/lib/saved.server";
 
 export const meta: Route.MetaFunction = ({ matches, data: loaderData }) => {
   const locale = (matches[0]?.data as { locale?: "en" | "es" } | undefined)?.locale ?? "en";
@@ -56,34 +60,42 @@ export const meta: Route.MetaFunction = ({ matches, data: loaderData }) => {
 
 async function loadCap(request: Request, capId: string) {
   const user = await requireUser(request);
-  const cap = await getCap(capId);
+  const cap = await getCap(capId, user);
   if (!cap) throw new Response("Not found", { status: 404 });
-  return { user, cap, canEdit: canEditCap(cap, user) };
+  return { user, cap, canEdit: canEditCap(cap, user), canManage: canManagePartners(user) };
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const { user, cap, canEdit } = await loadCap(request, params.capId);
+  const { user, cap, canEdit, canManage } = await loadCap(request, params.capId);
   const editing = canEdit && new URL(request.url).searchParams.get("edit") === "1";
   // Everything about people is scoped to the viewer: staff see only the staff directory.
   const [partners, suggestions, activity, others] = await Promise.all([
     getCapPartners(cap.id, user),
     editing ? Promise.resolve([]) : getCapSuggestions(cap, user),
     editing ? Promise.resolve([]) : getCapActivity(cap.id, user),
-    editing ? Promise.resolve([]) : getCapPartnerOptions(cap.id, user),
+    editing || !canManage ? Promise.resolve([]) : getCapPartnerOptions(cap.id, user),
   ]);
   const partnerOptions: SelectOption[] = others.map((p) => ({
     value: p.id,
     label: p.organization_name ? `${p.full_name}, ${p.organization_name}` : p.full_name,
   }));
-  return { cap, canEdit, editing, partners, suggestions, activity, partnerOptions };
+  // Staff rows offer Save; admins manage partners instead.
+  const saved = canManage
+    ? new Set<string>()
+    : await savedIdsAmong(user, [...partners.map((p) => p.person.id), ...suggestions.map((s) => s.person.id)]);
+  return { cap, canEdit, canManage, editing, partners, suggestions, activity, partnerOptions, savedIds: [...saved] };
 }
 
 const personIdSchema = z.string().min(1).max(100);
 
 export async function action({ request, params }: Route.ActionArgs) {
-  const { user, cap, canEdit } = await loadCap(request, params.capId);
+  const { user, cap, canEdit, canManage } = await loadCap(request, params.capId);
   const form = await request.formData();
   const intent = form.get("intent");
+  // Partners are managed by admins only.
+  if ((intent === "add-partner" || intent === "update-partner" || intent === "remove-partner") && !canManage) {
+    throw new Response("Forbidden", { status: 403 });
+  }
 
   switch (intent) {
     case "update": {
@@ -101,7 +113,6 @@ export async function action({ request, params }: Route.ActionArgs) {
     case "add-partner": {
       const personId = personIdSchema.safeParse(form.get("personId"));
       if (!personId.success) throw new Response("Bad request", { status: 400 });
-      // Staff can only add people they can see (hidden looks the same as missing).
       if (!(await canViewPerson(user, personId.data))) {
         return data({ ok: false as const, error: "caps.error.personNotFound" as MessageKey }, { status: 404 });
       }
@@ -128,7 +139,8 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function CapDetail() {
-  const { cap, canEdit, editing, partners, suggestions, activity, partnerOptions } = useLoaderData<typeof loader>();
+  const { cap, canEdit, canManage, editing, partners, suggestions, activity, partnerOptions, savedIds } = useLoaderData<typeof loader>();
+  const saved = new Set(savedIds);
   const actionData = useActionData<typeof action>();
   const { t, locale } = useT();
   const connectionsQuery = (cap.needs?.trim() || cap.topics.join(", ")).slice(0, 200);
@@ -188,7 +200,7 @@ export default function CapDetail() {
                 </Link>
               </Button>
             )}
-            <AddPartnerDialog options={partnerOptions} />
+            {canManage && <AddPartnerDialog options={partnerOptions} />}
           </>
         }
       />
@@ -211,11 +223,20 @@ export default function CapDetail() {
               {partners.length ? (
                 <ul className="divide-y divide-stone">
                   {partners.map((partner) => (
-                    <PartnerRow key={partner.person.id} partner={partner} capId={cap.id} />
+                    <PartnerRow
+                      key={partner.person.id}
+                      partner={partner}
+                      capId={cap.id}
+                      editable={canManage}
+                      saved={saved.has(partner.person.id)}
+                    />
                   ))}
                 </ul>
               ) : (
-                <p className="py-6 text-center text-sm text-smoke">{t("caps.partners.empty")}</p>
+                <p className="py-6 text-center text-sm text-smoke">{t(canManage ? "caps.partners.empty" : "caps.partners.emptyStaff")}</p>
+              )}
+              {!canManage && (
+                <p className="border-t border-stone px-1 pt-3 pb-2 text-xs text-smoke">{t("caps.partners.adminManaged")}</p>
               )}
             </Sheet>
           </Panel>
@@ -312,7 +333,12 @@ export default function CapDetail() {
             {suggestions.length ? (
               <ul className="divide-y divide-stone">
                 {suggestions.map((suggestion) => (
-                  <SuggestionItem key={suggestion.person.id} suggestion={suggestion} />
+                  <SuggestionItem
+                    key={suggestion.person.id}
+                    suggestion={suggestion}
+                    canAdd={canManage}
+                    saved={saved.has(suggestion.person.id)}
+                  />
                 ))}
               </ul>
             ) : (

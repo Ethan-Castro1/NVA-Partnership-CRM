@@ -1,10 +1,11 @@
 /** Community Action Projects and the partners attached to them. */
 import { z } from "zod";
 import { CAP_BLOCKS, CAP_LABELS, type CapBlock, type CapLabel } from "./cap-catalog";
-import { CAP_PARTNER_STATUSES, CAP_STATUSES, normalizeTags, type CapPartnerStatus, type CapStatus, type EngagementKind } from "./constants";
+import { CAP_PARTNER_STATUSES, CAP_STATUSES, normalizeTags, type CapPartnerStatus, type CapStatus, type ContactMode, type EngagementKind } from "./constants";
 import { newId, query, queryOne } from "./db.server";
 import { findConnectorsForNeed, type IntroPath, type MiniPerson, type SearchHit } from "./people.server";
-import { isAdmin, visibleToSql, type Viewer } from "./permissions.server";
+import { isAdmin, staffVisibleSql, visibleToSql, type Viewer } from "./permissions.server";
+import type { SessionUser } from "./types";
 
 export type CapSummary = {
   id: string;
@@ -27,22 +28,35 @@ export type CapSummary = {
 };
 
 export type CapPartnerView = {
-  person: MiniPerson & { email: string | null; skills: string[] };
+  /** Email and phone are null for staff unless the person is set to direct contact. */
+  person: MiniPerson & { email: string | null; phone: string | null; contact_mode: ContactMode; skills: string[] };
   role: string | null;
   status: CapPartnerStatus;
   note: string | null;
   created_at: string;
 };
 
-const CAP_COLUMNS = `
+/**
+ * CAP columns. Partner counts include only partners this viewer may see, so a
+ * staff member can't learn that hidden people are attached. Without a viewer,
+ * counts are the staff-safe ones.
+ */
+function capColumns(viewer?: Viewer): string {
+  const visible = viewer && isAdmin(viewer) ? "" : ` AND EXISTS (SELECT 1 FROM people vp WHERE vp.id = cp.person_id AND ${staffVisibleSql("vp")})`;
+  return `
   c.id, c.title, c.driving_question, c.description, c.topics, c.needs, c.term, c.status, c.owner_id,
   c.teacher, c.blocks, c.labels, c.impact,
   u.name AS owner_name, c.updated_at,
-  (SELECT count(*)::int FROM cap_partners cp WHERE cp.cap_id = c.id AND cp.status <> 'declined') AS partner_count,
-  (SELECT count(*)::int FROM cap_partners cp WHERE cp.cap_id = c.id AND cp.status = 'confirmed') AS confirmed_count`;
+  (SELECT count(*)::int FROM cap_partners cp WHERE cp.cap_id = c.id AND cp.status <> 'declined'${visible}) AS partner_count,
+  (SELECT count(*)::int FROM cap_partners cp WHERE cp.cap_id = c.id AND cp.status = 'confirmed'${visible}) AS confirmed_count`;
+}
 
+const ORDER_CAPS = "ORDER BY CASE c.status WHEN 'active' THEN 0 WHEN 'planning' THEN 1 ELSE 2 END, c.updated_at DESC";
+
+/** CAPs (everyone may read every CAP). Pass the viewer so partner counts are scoped to them. */
 export async function listCaps(
   filter: { ownerId?: string; status?: CapStatus; excludeComplete?: boolean } = {},
+  viewer?: Viewer,
 ): Promise<CapSummary[]> {
   const where: string[] = [];
   const params: unknown[] = [];
@@ -56,15 +70,48 @@ export async function listCaps(
   }
   if (filter.excludeComplete) where.push("c.status <> 'complete'");
   return query<CapSummary>(
-    `SELECT ${CAP_COLUMNS} FROM caps c LEFT JOIN users u ON u.id = c.owner_id
+    `SELECT ${capColumns(viewer)} FROM caps c LEFT JOIN users u ON u.id = c.owner_id
       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
-      ORDER BY CASE c.status WHEN 'active' THEN 0 WHEN 'planning' THEN 1 ELSE 2 END, c.updated_at DESC`,
+      ${ORDER_CAPS}`,
     params,
   );
 }
 
-export async function getCap(id: string): Promise<CapSummary | null> {
-  return queryOne<CapSummary>(`SELECT ${CAP_COLUMNS} FROM caps c LEFT JOIN users u ON u.id = c.owner_id WHERE c.id = $1`, [id]);
+/**
+ * "My CAPs" for a staff member: the CAPs they teach (caps.teacher is their
+ * name, ignoring case, spacing and a leading title like "Dr." or "Ms.") or
+ * started (owner). Current ones only unless includeComplete.
+ */
+export async function listMyCaps(
+  user: Pick<SessionUser, "id" | "name" | "role">,
+  options: { includeComplete?: boolean; limit?: number } = {},
+): Promise<CapSummary[]> {
+  const name = normalizeTeacherName(user.name);
+  const limit = Math.min(Math.max(options.limit ?? 50, 1), 200);
+  return query<CapSummary>(
+    `SELECT ${capColumns(user)} FROM caps c LEFT JOIN users u ON u.id = c.owner_id
+      WHERE (c.owner_id = $1 OR ($2 <> '' AND ${TEACHER_NAME_SQL} = $2))
+        ${options.includeComplete ? "" : "AND c.status <> 'complete'"}
+      ${ORDER_CAPS}
+      LIMIT ${limit}`,
+    [user.id, name],
+  );
+}
+
+/** The SQL twin of normalizeTeacherName() for caps.teacher. */
+const TEACHER_NAME_SQL = `regexp_replace(regexp_replace(lower(trim(coalesce(c.teacher, ''))), '^(dr|mr|mrs|ms|mx|prof)\\.?\\s+', ''), '\\s+', ' ', 'g')`;
+
+/** "Dr. Sharonda  Scott" and "sharonda scott" are the same teacher. */
+export function normalizeTeacherName(name: string | null | undefined): string {
+  return (name ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/^(dr|mr|mrs|ms|mx|prof)\.?\s+/, "")
+    .replace(/\s+/g, " ");
+}
+
+export async function getCap(id: string, viewer?: Viewer): Promise<CapSummary | null> {
+  return queryOne<CapSummary>(`SELECT ${capColumns(viewer)} FROM caps c LEFT JOIN users u ON u.id = c.owner_id WHERE c.id = $1`, [id]);
 }
 
 export type CapInput = {
@@ -138,11 +185,12 @@ export async function deleteCap(id: string): Promise<void> {
 export async function getCapPartners(capId: string, viewer: Viewer): Promise<CapPartnerView[]> {
   const rows = await query<{
     id: string; full_name: string; title: string | null; organization_name: string | null; affiliations: MiniPerson["affiliations"];
-    person_status: MiniPerson["status"]; email: string | null; skills: string[];
+    person_status: MiniPerson["status"]; email: string | null; phone: string | null; contact_mode: ContactMode; skills: string[];
     role: string | null; status: CapPartnerStatus; note: string | null; created_at: string;
   }>(
     `SELECT p.id, p.full_name, p.title, o.name AS organization_name, p.affiliations, p.status AS person_status,
-            ${isAdmin(viewer) ? "p.email" : "CASE WHEN p.contact_mode = 'direct' THEN p.email END AS email"}, p.skills,
+            ${isAdmin(viewer) ? "p.email, p.phone" : "CASE WHEN p.contact_mode = 'direct' THEN p.email END AS email, CASE WHEN p.contact_mode = 'direct' THEN p.phone END AS phone"},
+            p.contact_mode, p.skills,
             cp.role, cp.status, cp.note, cp.created_at
        FROM cap_partners cp
        JOIN people p ON p.id = cp.person_id
@@ -154,7 +202,7 @@ export async function getCapPartners(capId: string, viewer: Viewer): Promise<Cap
   return rows.map((r) => ({
     person: {
       id: r.id, full_name: r.full_name, title: r.title, organization_name: r.organization_name,
-      affiliations: r.affiliations, status: r.person_status, email: r.email, skills: r.skills,
+      affiliations: r.affiliations, status: r.person_status, email: r.email, phone: r.phone, contact_mode: r.contact_mode, skills: r.skills,
     },
     role: r.role,
     status: r.status,
@@ -245,6 +293,11 @@ export async function removeCapPartner(capId: string, personId: string): Promise
 /** Only a CAP's owner or an admin may edit or delete it. Check on the server, not just in the UI. */
 export function canEditCap(cap: Pick<CapSummary, "owner_id">, user: { id: string; role: string }): boolean {
   return user.role === "admin" || (!!cap.owner_id && cap.owner_id === user.id);
+}
+
+/** Only admins add, update or remove a CAP's partners (staff ask through a request instead). */
+export function canManagePartners(user: { role: string }): boolean {
+  return user.role === "admin";
 }
 
 /** The words that describe what a CAP needs: its needs text plus its topics. */

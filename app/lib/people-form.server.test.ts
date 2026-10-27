@@ -7,6 +7,7 @@ import {
   parseEngagementForm,
   parsePersonForm,
   parseTargetId,
+  parseVisibilityForm,
 } from "./people-form.server";
 
 function form(entries: [string, string][]): FormData {
@@ -59,8 +60,49 @@ describe("parsePersonForm", () => {
       status: "active",
       notes: null,
       funding_focus: null,
+      location: null,
+      origin: null,
+      shared_summary: null,
+      categories: [],
+      directory_visible: false,
+      contact_mode: "introduction",
+      owner_user_id: null,
     });
     expect("source" in result.input).toBe(false);
+  });
+
+  it("reads the CRM fields: categories, visibility, contact mode, owner, origin, summary and location", () => {
+    const result = parsePersonForm(
+      form([
+        ["full_name", "Dana Whitfield"],
+        ["categories", "prospective_funder"],
+        ["categories", "volunteer"],
+        ["categories", "dragon_tamer"],
+        ["directory_visible", "on"],
+        ["contact_mode", "direct"],
+        ["owner_user_id", "user_1"],
+        ["origin", " Met at the community reception "],
+        ["shared_summary", "Knows youth workforce grants."],
+        ["location", "Eastport"],
+      ]),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.input).toMatchObject({
+      categories: ["volunteer", "prospective_funder"],
+      directory_visible: true,
+      contact_mode: "direct",
+      owner_user_id: "user_1",
+      origin: "Met at the community reception",
+      shared_summary: "Knows youth workforce grants.",
+      location: "Eastport",
+    });
+    const none = parsePersonForm(form([["full_name", "Mei"], ["owner_user_id", "none"], ["contact_mode", "telepathy"]]));
+    expect(none.ok && none.input.owner_user_id).toBeNull();
+    expect(none.ok && none.input.contact_mode).toBe("introduction");
+    const long = parsePersonForm(form([["full_name", "Mei"], ["location", "x".repeat(201)]]));
+    expect(long.ok).toBe(false);
+    if (!long.ok) expect(long.errors.location).toBe("people.form.errorTooLong");
   });
 
   it("falls back to defaults for missing or unknown enum values", () => {
@@ -186,5 +228,20 @@ describe("parseDirectoryParams", () => {
     expect(params.page).toBe(1);
     expect(filter.includeInactive).toBe(true);
     expect(parseDirectoryParams(new URLSearchParams("page=abc")).params.page).toBe(1);
+  });
+});
+
+describe("parseVisibilityForm", () => {
+  it("needs an explicit true or false and a known contact mode", () => {
+    expect(parseVisibilityForm(form([["directory_visible", "true"], ["contact_mode", "direct"]]))).toEqual({
+      ok: true,
+      value: { directory_visible: true, contact_mode: "direct" },
+    });
+    expect(parseVisibilityForm(form([["directory_visible", "false"], ["contact_mode", "introduction"]]))).toEqual({
+      ok: true,
+      value: { directory_visible: false, contact_mode: "introduction" },
+    });
+    expect(parseVisibilityForm(form([["directory_visible", "yes"], ["contact_mode", "direct"]])).ok).toBe(false);
+    expect(parseVisibilityForm(form([["directory_visible", "true"], ["contact_mode", "phone"]])).ok).toBe(false);
   });
 });

@@ -23,8 +23,8 @@ export default defineMessages(
     "section.referralsHint": "Share up to three people. We'll save them as someone you know and reach out kindly, only about NVA.",
     "section.consent": "Permission to contact you",
 
-    skillsLabel: "Skills or activities you could teach or lead",
-    skillsHint: "Separate them with commas. For example: sewing, carpentry, budgeting, soccer, chess club.",
+    skillsLabel: "Your skills and expertise",
+    skillsHint: "Things you could teach, talk about or help with. Separate them with commas. For example: carpentry, nursing, budgeting, soccer.",
     organizationHint: "Where you work, or a group you belong to. If neither, write \"Independent\".",
     otherHelpLabel: "How would you like to help?",
     otherHelpPlaceholder: "Tell us your idea in a sentence or two.",
@@ -118,8 +118,8 @@ export default defineMessages(
     "section.referralsHint": "Comparte hasta tres personas. Las guardaremos como alguien que conoces y nos comunicaremos con ellas con amabilidad, solo para hablar de NVA.",
     "section.consent": "Permiso para contactarte",
 
-    skillsLabel: "Habilidades o actividades que podrías enseñar o dirigir",
-    skillsHint: "Sepáralas con comas. Por ejemplo: costura, carpintería, presupuestos, fútbol, club de ajedrez.",
+    skillsLabel: "Tus habilidades y experiencia",
+    skillsHint: "Lo que podrías enseñar, contar o apoyar. Sepáralas con comas. Por ejemplo: carpintería, enfermería, presupuestos, fútbol.",
     organizationHint: "Donde trabajas o un grupo al que perteneces. Si no tienes, escribe \"Independiente\".",
     otherHelpLabel: "¿Cómo te gustaría ayudar?",
     otherHelpPlaceholder: "Cuéntanos tu idea en una o dos frases.",

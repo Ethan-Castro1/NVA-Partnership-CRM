@@ -7,7 +7,7 @@ import { EmptyState, PageHeader } from "~/components/nva";
 import { Button } from "~/components/ui/button";
 import { makeT, useT } from "~/i18n";
 import { requireUser } from "~/lib/auth.server";
-import { listCaps } from "~/lib/caps.server";
+import { listCaps, listMyCaps } from "~/lib/caps.server";
 import { cn } from "~/lib/utils";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
@@ -21,8 +21,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   const params = new URL(request.url).searchParams;
   const mine = params.get("show") === "mine";
   const finished = params.get("state") === "finished";
-  const ownerId = mine ? user.id : undefined;
-  const caps = await listCaps(finished ? { ownerId, status: "complete" } : { ownerId, excludeComplete: true });
+  // "Mine": CAPs this person teaches or started. Partner counts are scoped to the viewer.
+  const caps = mine
+    ? (await listMyCaps(user, { includeComplete: true })).filter((c) => (c.status === "complete") === finished)
+    : await listCaps(finished ? { status: "complete" } : { excludeComplete: true }, user);
   return { caps, mine, finished };
 }
 

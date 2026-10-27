@@ -125,7 +125,7 @@ describe("sign-up review", () => {
     expect(matchPerson({ name: "Nobody" }, [], [c("3", "Sam Lee", null)])).toBeNull();
   });
 
-  it("links referrals, records the reviewer and can activate the person", async () => {
+  it("links referrals to existing profiles and archives or reopens with the reviewer recorded", async () => {
     const reviewer = await createUser({ email: "rev@test.local", name: "Rev", password: "x".repeat(12), role: "admin" });
     const referrer = await createPerson({ full_name: "Aisha Khan", affiliations: ["board"], status: "active" }, null);
     const person = await createPerson({ full_name: "Jordan Ellis", email: "jordan@example.org", source: "intake" }, null);
@@ -153,23 +153,26 @@ describe("sign-up review", () => {
     const detail = await getIntakeSubmission(id);
     expect(detail?.referredBy?.id).toBe(referrer);
     expect(detail?.referrals.map((r) => r.match?.id ?? null)).toEqual([lead, null]);
+    // Its own (older-style) contact is not offered as a duplicate of itself.
+    expect(detail?.duplicates.map((d) => d.id)).not.toContain(person);
 
-    expect(await setIntakeStatus(id, "approved", reviewer, { activatePerson: true })).toBe(true);
-    const row = await queryOne<{ status: string; reviewed_by: string; reviewed_at: Date | null }>(
-      "SELECT status, reviewed_by, reviewed_at FROM intake_submissions WHERE id = $1",
+    expect(await setIntakeStatus(id, "archived", reviewer)).toBe(true);
+    const row = await queryOne<{ status: string; decided_by: string; decided_at: Date | null }>(
+      "SELECT status, decided_by, decided_at FROM intake_submissions WHERE id = $1",
       [id],
     );
-    expect(row?.status).toBe("approved");
-    expect(row?.reviewed_by).toBe(reviewer);
-    expect(row?.reviewed_at).toBeTruthy();
-    expect((await queryOne<{ status: string }>("SELECT status FROM people WHERE id = $1", [person]))?.status).toBe("active");
+    expect(row?.status).toBe("archived");
+    expect(row?.decided_by).toBe(reviewer);
+    expect(row?.decided_at).toBeTruthy();
 
-    await setIntakeStatus(id, "new", reviewer);
-    const back = await queryOne<{ status: string; reviewed_by: string | null }>(
-      "SELECT status, reviewed_by FROM intake_submissions WHERE id = $1",
+    expect(await setIntakeStatus(id, "new", reviewer)).toBe(true);
+    const back = await queryOne<{ status: string; decided_by: string | null }>(
+      "SELECT status, decided_by FROM intake_submissions WHERE id = $1",
       [id],
     );
-    expect(back).toEqual({ status: "new", reviewed_by: null });
+    expect(back).toEqual({ status: "new", decided_by: null });
+    // Only rejected or archived sign-ups can be reopened.
+    expect(await setIntakeStatus(id, "new", reviewer)).toBe(false);
     expect(await setIntakeStatus("missing", "archived", reviewer)).toBe(false);
   });
 });

@@ -19,8 +19,10 @@ import {
   type Role,
 } from "./constants";
 import { query, queryOne, transaction } from "./db.server";
+import { findDuplicates, type DuplicateCandidate } from "./duplicates.server";
 import type { IntakePayload, IntakeReferral } from "./intake-types";
 import { getCounts, updatePerson } from "./people.server";
+import type { ContactMode } from "./constants";
 import type { Viewer } from "./permissions.server";
 
 /** Timestamps leave the server as ISO strings (pg and PGlite both hand back Dates). */
@@ -49,6 +51,8 @@ export type SignupRow = {
   status: IntakeStatus;
   person_id: string | null;
   person_status: PersonStatus | null;
+  /** A record with the same email (or the match saved when it was sent): review may link instead of adding. */
+  possible_match: boolean;
 };
 
 export type LeadRow = {
@@ -79,20 +83,29 @@ export type RecentPersonRow = {
   created_at: string;
 };
 
+// The admin's edits win over the payload as sent.
+const SIGNUP_PAYLOAD = "coalesce(s.edited_payload, s.payload)";
 const SIGNUP_COLUMNS = `
   s.id, s.status, s.locale, s.submitted_at, s.person_id, p.status AS person_status,
-  coalesce(p.full_name, s.payload->>'full_name', '') AS full_name,
-  coalesce(p.email, s.payload->>'email') AS email,
-  coalesce(s.payload->>'preferred_language', 'en') AS preferred_language,
-  CASE WHEN jsonb_typeof(s.payload->'contribution_types') = 'array'
-       THEN ARRAY(SELECT jsonb_array_elements_text(s.payload->'contribution_types')) ELSE '{}'::text[] END AS contribution_types,
+  coalesce(p.full_name, ${SIGNUP_PAYLOAD}->>'full_name', '') AS full_name,
+  coalesce(p.email, ${SIGNUP_PAYLOAD}->>'email') AS email,
+  coalesce(${SIGNUP_PAYLOAD}->>'preferred_language', 'en') AS preferred_language,
+  CASE WHEN jsonb_typeof(${SIGNUP_PAYLOAD}->'contribution_types') = 'array'
+       THEN ARRAY(SELECT jsonb_array_elements_text(${SIGNUP_PAYLOAD}->'contribution_types')) ELSE '{}'::text[] END AS contribution_types,
   CASE WHEN jsonb_typeof(s.payload->'referrals') = 'array'
-       THEN jsonb_array_length(s.payload->'referrals') ELSE 0 END AS referral_count`;
+       THEN jsonb_array_length(s.payload->'referrals') ELSE 0 END AS referral_count,
+  (s.status = 'new' AND (
+     (s.matched_person_id IS NOT NULL AND s.matched_person_id IS DISTINCT FROM s.person_id)
+     OR EXISTS (SELECT 1 FROM people m
+                 WHERE coalesce(${SIGNUP_PAYLOAD}->>'email', '') <> ''
+                   AND lower(m.email) = lower(${SIGNUP_PAYLOAD}->>'email')
+                   AND m.id IS DISTINCT FROM s.person_id))) AS possible_match`;
 
 function toSignupRow(row: SignupRow): SignupRow {
   return {
     ...row,
     referral_count: Number(row.referral_count),
+    possible_match: row.possible_match === true,
     submitted_at: iso(row.submitted_at),
     contribution_types: CONTRIBUTION_TYPES.filter((type) => row.contribution_types.includes(type)),
     preferred_language: LANGUAGES.includes(row.preferred_language) ? row.preferred_language : "en",
@@ -208,6 +221,8 @@ export type LinkedPerson = {
   status: PersonStatus;
   contribution_types: ContributionType[];
   affiliations: Affiliation[];
+  directory_visible: boolean;
+  contact_mode: ContactMode;
 };
 
 type MatchCandidate = { id: string; full_name: string; email: string | null; source: PersonSource; status: PersonStatus };
@@ -236,38 +251,67 @@ export function matchPerson(
   return hit ? { id: hit.id, full_name: hit.full_name, status: hit.status } : null;
 }
 
+/** What the admin is deciding on: their edits when they made any, otherwise the sign-up as sent. */
+export function effectivePayload(row: { payload: unknown; edited_payload: unknown }): IntakePayload {
+  const raw = row.edited_payload ?? row.payload;
+  return readPayload(typeof raw === "string" ? JSON.parse(raw) : raw);
+}
+
 export type IntakeDetail = {
   id: string;
   status: IntakeStatus;
   locale: string;
   submitted_at: string;
-  reviewed_at: string | null;
-  reviewed_by_name: string | null;
+  decided_at: string | null;
+  decided_by_name: string | null;
+  /** Private reason or note from the admin who decided (rejections). */
+  decision_note: string | null;
+  /** The payload being decided on (with the admin's edits). */
   payload: IntakePayload;
+  /** The sign-up exactly as sent, when the admin has edited it. */
+  original: IntakePayload | null;
   person: LinkedPerson | null;
+  /** Possible existing records for the same person, strongest first (new sign-ups only). */
+  duplicates: DuplicateCandidate[];
   referredBy: MatchedPerson;
   referrals: { referral: IntakeReferral; match: MatchedPerson }[];
 };
 
+/** One sign-up for the review page. Admin-only: it includes possible matches among hidden records. */
 export async function getIntakeSubmission(id: string): Promise<IntakeDetail | null> {
   const row = await queryOne<{
-    id: string; status: IntakeStatus; locale: string; submitted_at: Date | string; reviewed_at: Date | string | null;
-    reviewed_by_name: string | null; payload: unknown; person_id: string | null;
+    id: string; status: IntakeStatus; locale: string; submitted_at: Date | string;
+    decided_at: Date | string | null; reviewed_at: Date | string | null; decided_by_name: string | null;
+    decision_note: string | null; payload: unknown; edited_payload: unknown; person_id: string | null;
   }>(
-    `SELECT s.id, s.status, s.locale, s.submitted_at, s.reviewed_at, u.name AS reviewed_by_name, s.payload, s.person_id
-       FROM intake_submissions s LEFT JOIN users u ON u.id = s.reviewed_by WHERE s.id = $1`,
+    `SELECT s.id, s.status, s.locale, s.submitted_at, s.decided_at, s.reviewed_at,
+            coalesce(d.name, r.name) AS decided_by_name, s.decision_note, s.payload, s.edited_payload, s.person_id
+       FROM intake_submissions s
+       LEFT JOIN users d ON d.id = s.decided_by
+       LEFT JOIN users r ON r.id = s.reviewed_by
+      WHERE s.id = $1`,
     [id],
   );
   if (!row) return null;
-  const payload = readPayload(typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload);
+  const payload = effectivePayload(row);
+  const original = row.edited_payload ? effectivePayload({ payload: row.payload, edited_payload: null }) : null;
 
   const person = row.person_id
     ? await queryOne<LinkedPerson>(
-        `SELECT p.id, p.full_name, p.email, p.title, o.name AS organization_name, p.status, p.contribution_types, p.affiliations
+        `SELECT p.id, p.full_name, p.email, p.title, o.name AS organization_name, p.status, p.contribution_types, p.affiliations,
+                p.directory_visible, p.contact_mode
            FROM people p LEFT JOIN organizations o ON o.id = p.organization_id WHERE p.id = $1`,
         [row.person_id],
       )
     : null;
+
+  const duplicates =
+    row.status === "new"
+      ? await findDuplicates(
+          { full_name: payload.full_name, email: payload.email, phone: payload.phone, organization_name: payload.organization },
+          { excludeId: row.person_id, limit: 5 },
+        )
+      : [];
 
   // People already tied to this sign-up through 'referred' links come first.
   const columns = "p.id, p.full_name, p.email, p.source, p.status";
@@ -306,10 +350,13 @@ export async function getIntakeSubmission(id: string): Promise<IntakeDetail | nu
     status: row.status,
     locale: row.locale,
     submitted_at: iso(row.submitted_at),
-    reviewed_at: isoOrNull(row.reviewed_at),
-    reviewed_by_name: row.reviewed_by_name,
+    decided_at: isoOrNull(row.decided_at ?? row.reviewed_at),
+    decided_by_name: row.decided_by_name,
+    decision_note: row.decision_note,
     payload,
+    original,
     person: person ? { ...person, contribution_types: CONTRIBUTION_TYPES.filter((t) => person.contribution_types.includes(t)) } : null,
+    duplicates,
     referredBy: payload.referred_by
       ? matchPerson(payload.referred_by, referrers, [...emailMatches, ...referrerByName])
       : null,
@@ -321,30 +368,26 @@ export async function getIntakeSubmission(id: string): Promise<IntakeDetail | nu
 }
 
 /**
- * Moves a sign-up between New, Approved, Rejected and Archived. Deciding
- * records who did it and when; moving back to New clears that.
+ * Archives a sign-up, or moves a rejected or archived one back to New
+ * (clearing the decision). Approving and rejecting go through
+ * approveIntake / linkIntake / rejectIntake in intake.server, which record history.
+ * Returns false when the sign-up doesn't exist or can't make that move
+ * (an approved sign-up can be archived but not reopened).
  */
-export async function setIntakeStatus(
-  id: string,
-  status: IntakeStatus,
-  reviewerId: string,
-  options: { activatePerson?: boolean } = {},
-): Promise<boolean> {
-  return transaction(async (tx) => {
-    const rows = await tx.query<{ person_id: string | null }>(
-      status === "new"
-        ? `UPDATE intake_submissions SET status = $2, reviewed_by = NULL, reviewed_at = NULL, decided_by = NULL, decided_at = NULL
-            WHERE id = $1 RETURNING person_id`
-        : `UPDATE intake_submissions SET status = $2, reviewed_by = $3, reviewed_at = now(), decided_by = $3, decided_at = now()
-            WHERE id = $1 RETURNING person_id`,
-      status === "new" ? [id, status] : [id, status, reviewerId],
-    );
-    if (!rows[0]) return false;
-    if (status === "approved" && options.activatePerson && rows[0].person_id) {
-      await updatePerson(rows[0].person_id, { status: "active" }, tx);
-    }
-    return true;
-  });
+export async function setIntakeStatus(id: string, status: "new" | "archived", reviewerId: string): Promise<boolean> {
+  const rows = await query<{ id: string }>(
+    status === "new"
+      ? `UPDATE intake_submissions
+            SET status = 'new', reviewed_by = NULL, reviewed_at = NULL, decided_by = NULL, decided_at = NULL, decision_note = NULL
+          WHERE id = $1 AND status IN ('rejected', 'archived')
+            -- Once approved, always approved: its contact and history already exist.
+            AND NOT EXISTS (SELECT 1 FROM engagements e WHERE e.kind = 'signup_approved' AND e.meta->>'submissionId' = intake_submissions.id)
+          RETURNING id`
+      : `UPDATE intake_submissions SET status = 'archived', reviewed_by = $2, reviewed_at = now(), decided_by = $2, decided_at = now()
+          WHERE id = $1 AND status <> 'archived' RETURNING id`,
+    status === "new" ? [id] : [id, reviewerId],
+  );
+  return rows.length > 0;
 }
 
 /** The next sign-up still waiting for review, in the list's order (newest first). */

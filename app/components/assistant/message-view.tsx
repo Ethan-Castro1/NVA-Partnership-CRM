@@ -4,7 +4,20 @@
  * answer, then cards for the people in it.
  */
 import type { DynamicToolUIPart } from "ai";
-import { Check, ChevronDown, CircleAlert, FolderKanban, Globe, Loader2, Route, Search, UserRound, Users } from "lucide-react";
+import {
+  Briefcase,
+  CalendarCheck,
+  Check,
+  ChevronDown,
+  CircleAlert,
+  FolderKanban,
+  Globe,
+  Loader2,
+  Route,
+  Search,
+  UserRound,
+  Users,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { VillageMark } from "~/components/nva";
 import { useT, type MessageKey } from "~/i18n";
@@ -20,6 +33,8 @@ const STEP_ICON: Record<string, ReactNode> = {
   find_intro_paths: <Route />,
   list_caps: <FolderKanban />,
   search_web: <Globe />,
+  list_follow_ups: <CalendarCheck />,
+  list_opportunities: <Briefcase />,
 };
 
 function stepLabel(part: DynamicToolUIPart, t: (key: MessageKey, vars?: Record<string, string | number>) => string): string {
@@ -34,6 +49,8 @@ function stepLabel(part: DynamicToolUIPart, t: (key: MessageKey, vars?: Record<s
     case "get_person":
     case "find_intro_paths":
     case "list_caps":
+    case "list_follow_ups":
+    case "list_opportunities":
       return t(`assistant.step.${part.toolName}`);
     default:
       return t("assistant.step.other");

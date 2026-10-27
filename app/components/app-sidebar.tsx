@@ -1,13 +1,18 @@
 import * as React from "react";
 import { Link } from "react-router";
 import {
-  Building2,
-  ClipboardList,
+  BookUser,
+  CalendarClock,
   FolderKanban,
+  HandHelping,
+  Inbox,
   LayoutDashboard,
+  Mail,
   MessagesSquare,
   Network,
-  UserCog,
+  Settings,
+  Target,
+  UserPlus,
   Users,
 } from "lucide-react";
 import { NavMain, type NavItem } from "~/components/nav-main";
@@ -26,28 +31,65 @@ import {
 import { useT } from "~/i18n";
 import type { SessionUser } from "~/lib/types";
 
+/** The sidebar's small numbers (all zero for staff). */
+export type NavCounts = { overdueFollowUps: number; newSignups: number; introductions: number };
+
+const NO_COUNTS: NavCounts = { overdueFollowUps: 0, newSignups: 0, introductions: 0 };
+
 export function AppSidebar({
   user,
-  newSignups = 0,
+  counts = NO_COUNTS,
   ...props
-}: React.ComponentProps<typeof Sidebar> & { user: SessionUser; newSignups?: number }) {
+}: React.ComponentProps<typeof Sidebar> & { user: SessionUser; counts?: NavCounts }) {
   const { t } = useT();
 
-  // Record types, the full-screen assistant chat, and the daily inbox. Connector setup is in the user menu.
-  const main: NavItem[] = [
-    { title: t("common.nav.dashboard"), url: "/app", icon: <LayoutDashboard />, end: true },
-    { title: t("common.nav.people"), url: "/app/people", icon: <Users /> },
-    { title: t("common.nav.caps"), url: "/app/caps", icon: <FolderKanban /> },
-    { title: t("common.nav.connections"), url: "/app/connections", icon: <Network /> },
-    { title: t("common.nav.ask"), url: "/app/ask", icon: <MessagesSquare /> },
-    ...(user.role === "admin"
-      ? [{ title: t("common.nav.intake"), url: "/app/admin/intake", icon: <ClipboardList />, badge: newSignups || undefined }]
-      : []),
-  ];
-  const manage: NavItem[] = [
-    { title: t("common.nav.adminOverview"), url: "/app/admin", icon: <Building2 />, end: true },
-    { title: t("common.nav.users"), url: "/app/admin/users", icon: <UserCog /> },
-  ];
+  // Ask the Village is the full-screen chat; the side panel opens from the top bar.
+  const dashboard: NavItem = { title: t("common.nav.dashboard"), url: "/app", icon: <LayoutDashboard />, end: true };
+  const ask: NavItem = { title: t("common.nav.ask"), url: "/app/ask", icon: <MessagesSquare /> };
+  const caps: NavItem = { title: t("common.nav.caps"), url: "/app/caps", icon: <FolderKanban /> };
+
+  const items: NavItem[] =
+    user.role === "admin"
+      ? [
+          dashboard,
+          ask,
+          { title: t("common.nav.peopleOrgs"), url: "/app/people", icon: <Users />, also: ["/app/organizations"] },
+          { title: t("common.nav.connections"), url: "/app/connections", icon: <Network /> },
+          { title: t("common.nav.opportunities"), url: "/app/opportunities", icon: <Target /> },
+          {
+            title: t("common.nav.followUps"),
+            url: "/app/follow-ups",
+            icon: <CalendarClock />,
+            badge: counts.overdueFollowUps,
+            badgeLabel: t("common.nav.badgeOverdue", { count: counts.overdueFollowUps }),
+            badgeTone: "alert",
+          },
+          {
+            title: t("common.nav.staffRequests"),
+            url: "/app/admin/requests",
+            icon: <HandHelping />,
+            badge: counts.introductions,
+            badgeLabel: t("common.nav.badgeIntros", { count: counts.introductions }),
+          },
+          caps,
+          { title: t("common.nav.communications"), url: "/app/communications", icon: <Mail /> },
+          {
+            title: t("common.nav.signups"),
+            url: "/app/admin/intake",
+            icon: <UserPlus />,
+            badge: counts.newSignups,
+            badgeLabel: t("common.nav.badgeSignups", { count: counts.newSignups }),
+          },
+          { title: t("common.nav.settings"), url: "/app/admin/settings", icon: <Settings />, also: ["/app/admin/users"] },
+        ]
+      : [
+          dashboard,
+          ask,
+          { title: t("common.nav.browse"), url: "/app/people", icon: <Users /> },
+          { title: t("common.nav.myRequests"), url: "/app/requests", icon: <Inbox /> },
+          caps,
+          { title: t("common.nav.myConnections"), url: "/app/my-connections", icon: <BookUser /> },
+        ];
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -69,8 +111,7 @@ export function AppSidebar({
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain label={t("common.nav.teacherSection")} items={main} />
-        {user.role === "admin" && <NavMain label={t("common.nav.adminSection")} items={manage} />}
+        <NavMain items={items} />
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={user} />

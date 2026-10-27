@@ -1,10 +1,10 @@
 /**
- * Read-mostly sections of a profile: connections, CAPs and the activity
+ * Read-mostly sections of a profile: connections, CAPs and the history
  * timeline, plus the admin-only delete dialog. Admin removals post through
  * fetchers; the route action checks requireAdmin either way.
  */
 import { Form, Link, useFetcher, useNavigation } from "react-router";
-import { Trash2, X } from "lucide-react";
+import { Handshake, Mail, MailCheck, NotebookPen, Sparkles, Trash2, Users, X } from "lucide-react";
 import { PersonAvatar } from "~/components/nva";
 import { Button } from "~/components/ui/button";
 import {
@@ -121,38 +121,111 @@ export function CapsList({
   );
 }
 
-export function ActivityTimeline({ engagements, isAdmin }: { engagements: EngagementView[]; isAdmin: boolean }) {
+type EntrySource = "manual" | "email" | "staff" | "request" | "system";
+
+/** Where an entry came from, so manual notes, verified email and staff-logged work look different. */
+function entrySource(e: EngagementView, staffAuthored: ReadonlySet<string>): EntrySource {
+  if (e.origin === "email") return "email";
+  if (e.origin === "staff_request") return "request";
+  if (e.origin === "system") return "system";
+  return staffAuthored.has(e.id) ? "staff" : "manual";
+}
+
+const SOURCE_STYLE: Record<EntrySource, { dot: string; badge: string; icon: typeof Mail; label: MessageKey }> = {
+  manual: { dot: "bg-graphite", badge: "bg-stone text-graphite", icon: NotebookPen, label: "people.profile.entryManual" },
+  email: { dot: "bg-blue", badge: "bg-blue-soft text-blue-ink", icon: MailCheck, label: "people.profile.entryEmail" },
+  staff: { dot: "bg-sage", badge: "bg-sage-soft text-sage-ink", icon: Users, label: "people.profile.entryStaff" },
+  request: { dot: "bg-sage", badge: "bg-sage-soft text-sage-ink", icon: Handshake, label: "people.profile.entryRequest" },
+  system: { dot: "bg-stone", badge: "bg-canvas text-smoke", icon: Sparkles, label: "people.profile.entrySystem" },
+};
+
+/**
+ * One chronological history. Manual entries read as typed notes, synced email
+ * as a quoted snippet marked "Verified email", and work logged by staff (or
+ * from a staff request) in sage. Admins can remove manual entries only.
+ */
+export function HistoryTimeline({
+  engagements,
+  isAdmin,
+  personId,
+  staffAuthored = [],
+  emptyLabel,
+}: {
+  engagements: EngagementView[];
+  isAdmin: boolean;
+  personId: string;
+  /** Ids of entries a staff member recorded. */
+  staffAuthored?: string[];
+  emptyLabel?: string;
+}) {
   const { t, locale } = useT();
-  if (!engagements.length) return <p className="text-sm text-smoke">{t("people.profile.activityEmpty")}</p>;
+  if (!engagements.length) return <p className="text-sm text-smoke">{emptyLabel ?? t("people.profile.historyEmpty")}</p>;
+  const staffIds = new Set(staffAuthored);
   return (
-    <ol className="relative grid gap-4 border-l border-stone pl-5">
-      {engagements.map((e) => (
-        <li key={e.id} className="relative">
-          <span className="absolute top-1.5 -left-[25px] size-2.5 rounded-full bg-gold ring-4 ring-taupe" aria-hidden="true" />
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-ink">{t(`common.engagement.${e.kind}`)}</p>
-              <p className="text-xs text-smoke">
-                <time dateTime={isoDate(e.happened_on)}>{formatDate(e.happened_on, locale)}</time>
-                {e.user_name && <> · {t("people.profile.activityBy", { name: e.user_name })}</>}
-              </p>
-              {e.cap_id && e.cap_title && (
-                <p className="mt-1 text-xs text-graphite">
-                  {withNode(
-                    t("people.profile.activityForCap"),
-                    <Link to={`/app/caps/${e.cap_id}`} className="underline underline-offset-4">
-                      {e.cap_title}
-                    </Link>,
-                    "{cap}",
+    <ol className="relative grid gap-5 border-l border-stone pl-5">
+      {engagements.map((e) => {
+        const source = entrySource(e, staffIds);
+        const style = SOURCE_STYLE[source];
+        const Icon = style.icon;
+        return (
+          <li key={e.id} className="relative">
+            <span className={cn("absolute top-1.5 -left-[25px] size-2.5 rounded-full ring-4 ring-taupe", style.dot)} aria-hidden="true" />
+            <div className="flex items-start justify-between gap-2">
+              <div className="grid min-w-0 gap-1">
+                <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="text-sm font-medium text-ink">{t(`common.engagement.${e.kind}`)}</span>
+                  <span className={cn("inline-flex h-5 items-center gap-1 rounded-full px-2 text-[0.7rem] font-medium", style.badge)}>
+                    <Icon className="size-3" aria-hidden="true" />
+                    {t(style.label)}
+                  </span>
+                  {isAdmin && e.visibility === "staff" && (
+                    <span className="text-[0.7rem] text-smoke">{t("people.profile.entryShared")}</span>
                   )}
                 </p>
+                <p className="text-xs text-smoke">
+                  <time dateTime={isoDate(e.happened_on)}>{formatDate(e.happened_on, locale)}</time>
+                  {e.user_name && <> · {t("people.profile.activityBy", { name: e.user_name })}</>}
+                </p>
+                {e.cap_id && e.cap_title && (
+                  <p className="text-xs text-graphite">
+                    {withNode(
+                      t("people.profile.activityForCap"),
+                      <Link to={`/app/caps/${e.cap_id}`} className="underline underline-offset-4">
+                        {e.cap_title}
+                      </Link>,
+                      "{cap}",
+                    )}
+                  </p>
+                )}
+                {e.notes &&
+                  (source === "email" ? (
+                    <p className="mt-1 border-l-2 border-blue/50 pl-3 text-sm whitespace-pre-line text-graphite italic">{e.notes}</p>
+                  ) : (
+                    <p
+                      className={cn(
+                        "mt-1 text-sm whitespace-pre-line text-graphite",
+                        source === "manual" && "rounded-xl bg-canvas px-3 py-2",
+                      )}
+                    >
+                      {e.notes}
+                    </p>
+                  ))}
+                {isAdmin && source === "email" && (
+                  <Link
+                    to={`/app/people/${personId}/email`}
+                    className="w-fit text-xs text-smoke underline decoration-stone underline-offset-4 hover:text-ink hover:decoration-gold"
+                  >
+                    {t("people.profile.openEmail")}
+                  </Link>
+                )}
+              </div>
+              {isAdmin && source === "manual" && (
+                <RemoveButton intent="deleteEngagement" targetId={e.id} label={t("people.profile.deleteActivity")} />
               )}
-              {e.notes && <p className="mt-1.5 text-sm whitespace-pre-line text-graphite">{e.notes}</p>}
             </div>
-            {isAdmin && <RemoveButton intent="deleteEngagement" targetId={e.id} label={t("people.profile.deleteActivity")} />}
-          </div>
-        </li>
-      ))}
+          </li>
+        );
+      })}
     </ol>
   );
 }

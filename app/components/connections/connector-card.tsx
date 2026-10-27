@@ -1,7 +1,13 @@
-/** One need-search match: who they are, why they matched, and how to reach them. */
+/**
+ * One need-search match: who they are, why they matched, how to reach them,
+ * and View Profile, Contact or Request Introduction, and Save. Admins coming
+ * from a CAP also get Add to this CAP (the CAP action checks that too).
+ */
 import { Link, useFetcher } from "react-router";
-import { Check, CircleDashed, Loader2, Mail, MessageCircle, Plus } from "lucide-react";
+import { Check, CircleDashed, Loader2, MessageCircle, Plus } from "lucide-react";
 import { ContributionChips, PersonAvatar, Sheet, StatusBadge, TagList } from "~/components/nva";
+import { MatchReasons } from "~/components/resources/match-reasons";
+import { ResourceActions } from "~/components/resources/resource-actions";
 import { Button } from "~/components/ui/button";
 import { useT, type MessageKey } from "~/i18n";
 import type { ConnectorResult } from "~/lib/connections.server";
@@ -13,9 +19,14 @@ const VISIBLE_PATHS = 2;
 export function ConnectorCard({
   result,
   cap,
+  admin = false,
+  saved = false,
 }: {
   result: ConnectorResult;
   cap?: { id: string; title: string; partnerIds: string[] } | null;
+  /** Admins get Add to this CAP (partners are managed by admins) and admin hints. */
+  admin?: boolean;
+  saved?: boolean;
 }) {
   const { t } = useT();
   const topicLabel = useTopicLabel();
@@ -48,19 +59,8 @@ export function ConnectorCard({
             {t("connections.results.askDirectly")}
           </span>
         )}
-        {(person.email || cap) && (
+        {cap && (onCap || admin) && (
           <div className="flex items-center gap-1">
-            {person.email && (
-              <Button asChild variant="ghost" size="icon-sm">
-                <a
-                  href={`mailto:${person.email}`}
-                  aria-label={t("caps.partners.emailFor", { name: person.full_name })}
-                  title={t("caps.partners.emailFor", { name: person.full_name })}
-                >
-                  <Mail aria-hidden="true" />
-                </a>
-              </Button>
-            )}
             {cap &&
               (onCap ? (
                 <span className="inline-flex items-center gap-1 text-xs text-sage-ink">
@@ -76,13 +76,15 @@ export function ConnectorCard({
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <ContributionChips types={person.contribution_types} />
-        {matched.length > 0 && (
+        {matched.length > 0 && !person.reasons.length && (
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs text-smoke">{t("connections.results.matched")}:</span>
             <TagList tags={matched} highlight={matched} />
           </div>
         )}
       </div>
+      <MatchReasons reasons={person.reasons} />
+      <ResourceActions person={person} saved={saved} compact />
 
       {direct ? (
         <p className="text-sm text-smoke">{t("connections.results.askDirectlyHelp")}</p>
@@ -110,7 +112,7 @@ export function ConnectorCard({
           <CircleDashed className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <p>
             <span className="font-medium text-graphite">{t("connections.results.noPath")}.</span>{" "}
-            {t("connections.results.noPathHelp")}
+            {t(admin ? "connections.results.noPathHelp" : "connections.results.noPathHelpStaff")}
           </p>
         </div>
       )}

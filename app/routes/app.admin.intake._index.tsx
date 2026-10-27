@@ -1,8 +1,9 @@
-/** Sign-ups from the public form, in New / Reviewed / Archived tabs. */
-import { Link, useLoaderData, useSearchParams } from "react-router";
+/** Sign-ups from the public form, in New / Approved / Rejected / Archived tabs. Admins only. */
+import { Link, useLoaderData } from "react-router";
 import { ChevronRight } from "lucide-react";
 import type { Route } from "./+types/app.admin.intake._index";
 import { formatDate } from "~/components/admin/format";
+import { DoneNotice } from "~/components/intake/review";
 import { ContributionChips, EmptyState, PageHeader, Panel, PersonAvatar, Sheet, StatusBadge } from "~/components/nva";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "~/components/ui/table";
 import { makeT, useT } from "~/i18n";
@@ -28,17 +29,18 @@ export async function loader({ request }: Route.LoaderArgs) {
 export default function IntakeList() {
   const { status, rows, counts } = useLoaderData<typeof loader>();
   const { t } = useT();
-  const [searchParams] = useSearchParams();
 
   return (
     <div className="space-y-6">
       <PageHeader eyebrow={t("common.nav.adminSection")} title={t("admin.intake.title")} description={t("admin.intake.description")} />
 
-      {searchParams.get("done") === "1" && (
-        <p role="status" className="rounded-xl bg-sage-soft px-3.5 py-2.5 text-sm text-sage-ink">
-          {t("common.state.saved")}
-        </p>
-      )}
+      <DoneNotice
+        fallback={
+          <p role="status" className="rounded-xl bg-sage-soft px-3.5 py-2.5 text-sm text-sage-ink">
+            {t("common.state.saved")}
+          </p>
+        }
+      />
 
       <nav aria-label={t("admin.intake.tabsLabel")}>
         <ul className="inline-flex flex-wrap gap-1 rounded-full bg-taupe p-1">
@@ -170,5 +172,11 @@ function SubmittedDate({ iso }: { iso: string }) {
 
 function ProfileStatus({ row }: { row: SignupRow }) {
   const { t } = useT();
+  if (row.possible_match)
+    return (
+      <span className="inline-flex h-5 items-center rounded-full bg-gold-soft px-2 text-[0.7rem] font-medium text-gold-ink">
+        {t("admin.intake.possibleMatch")}
+      </span>
+    );
   return row.person_status ? <StatusBadge status={row.person_status} /> : <span className="text-xs text-smoke">{t("admin.intake.noProfile")}</span>;
 }

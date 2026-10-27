@@ -27,6 +27,7 @@ import {
 import { newId, query, type Queryable } from "./db.server";
 import { defaultVisibility, listHistory, recordHistory, type HistoryView } from "./history.server";
 import { isAdmin, staffVisibleSql, visibleToSql, type Viewer } from "./permissions.server";
+import { explainMatch, matchTerms, parseSearch, type MatchReason, type MatchTerm, type MatchTier } from "./search-language";
 
 export type { Viewer } from "./permissions.server";
 
@@ -128,7 +129,15 @@ export type PeopleFilter = {
   offset?: number;
 };
 
-export type SearchHit = PersonSummary & { score: number; matched: string[] };
+export type SearchHit = PersonSummary & {
+  score: number;
+  /** Skill and CAP tags that match the words typed (or, when none do, their related words). */
+  matched: string[];
+  /** Why this person matches, from fields the viewer may see only. */
+  reasons: MatchReason[];
+};
+
+export type { MatchReason } from "./search-language";
 
 const STOPWORDS = new Set(
   (
@@ -140,7 +149,12 @@ const STOPWORDS = new Set(
   ).split(" "),
 );
 
-/** Splits free text into search terms: lowercase, no stopwords, light de-pluralizing. */
+/**
+ * Splits free text into plain words: lowercase, no stopwords, light de-pluralizing.
+ * Pages use it to tell whether a box holds any words; searchPeople itself reads
+ * questions with parseSearch() (search-language.ts), which also knows synonyms
+ * and the kind of help asked for.
+ */
 export function searchTerms(q: string | undefined): string[] {
   if (!q) return [];
   const terms = new Set<string>();
@@ -151,12 +165,26 @@ export function searchTerms(q: string | undefined): string[] {
   return [...terms].slice(0, 8);
 }
 
+/** Points per field for each kind of word (see searchPeople). */
+const WEIGHTS: Record<MatchTier, { skill: number; cap: number; name: number; titleOrg: number; loose: number }> = {
+  core: { skill: 4, cap: 3, name: 3, titleOrg: 2, loose: 1 },
+  related: { skill: 3, cap: 2, name: 0, titleOrg: 2, loose: 1 },
+  hint: { skill: 1, cap: 0, name: 0, titleOrg: 1, loose: 1 },
+};
+
 /**
- * Ranked search. Each term scores: skill 4, CAP topic 3, name 3, title or
- * organization 2, about/summary/location/availability 1 (admins: private notes
- * and funding focus count too; staff rankings never use private fields). With a
- * q, only people matching at least one term come back; without one, everyone
- * matching the filters does, most recently updated first.
+ * Ranked search in everyday language ("Find a guest speaker who works in
+ * healthcare"). parseSearch() turns q into words, related words and the kind
+ * of help asked for. Each word scores: skill 4, CAP topic 3, name 3, title or
+ * organization 2, about/summary/location/availability 1; related words a
+ * little less, and never on names. Offering the help asked for adds 3, a
+ * matching category 2. Admins also match private notes, funding focus and
+ * origin; staff rankings and reasons never use private fields.
+ *
+ * Who comes back: with words, people matching at least one word or related
+ * word; with only a kind of help ("volunteers for a school event"), people
+ * offering it; with neither, everyone matching the filters, most recently
+ * updated first. Each hit carries `reasons` built from fields the viewer may see.
  */
 export async function searchPeople(
   filter: PeopleFilter,
@@ -169,21 +197,38 @@ export async function searchPeople(
     return `$${params.length}`;
   };
   const where: string[] = admin ? [] : [staffVisibleSql("p")];
-  const terms = searchTerms(filter.q);
+  const parsed = parseSearch(filter.q);
+  const terms = matchTerms(parsed);
+  const topical = terms.filter((t) => t.tier !== "hint");
+  const intentTypes = parsed.contributionTypes;
+  const intentCategories = parsed.categories;
 
   // Text that counts 1 point. Staff never match on private fields.
-  const looseText = admin
-    ? "coalesce(p.bio, '') || ' ' || coalesce(p.shared_summary, '') || ' ' || coalesce(p.location, '') || ' ' || coalesce(p.availability, '') || ' ' || coalesce(p.notes, '') || ' ' || coalesce(p.funding_focus, '') || ' ' || coalesce(p.origin, '')"
-    : "coalesce(p.bio, '') || ' ' || coalesce(p.shared_summary, '') || ' ' || coalesce(p.location, '') || ' ' || coalesce(p.availability, '')";
-  const scoreParts = terms.map((term) => {
+  const privateText = "coalesce(p.notes, '') || ' ' || coalesce(p.funding_focus, '') || ' ' || coalesce(p.origin, '')";
+  const looseText =
+    "coalesce(p.bio, '') || ' ' || coalesce(p.shared_summary, '') || ' ' || coalesce(p.location, '') || ' ' || coalesce(p.availability, '')" +
+    (admin ? ` || ' ' || ${privateText}` : "");
+  const termScore = ({ term, tier }: MatchTerm) => {
+    const w = WEIGHTS[tier];
     const like = p(`%${term}%`);
-    return `(CASE WHEN EXISTS (SELECT 1 FROM unnest(p.skills) s WHERE s ILIKE ${like}) THEN 4 ELSE 0 END
-      + CASE WHEN EXISTS (SELECT 1 FROM unnest(p.cap_topics) s WHERE s ILIKE ${like}) THEN 3 ELSE 0 END
-      + CASE WHEN p.full_name ILIKE ${like} THEN 3 ELSE 0 END
-      + CASE WHEN coalesce(p.title, '') ILIKE ${like} OR coalesce(o.name, '') ILIKE ${like} THEN 2 ELSE 0 END
-      + CASE WHEN ${looseText} ILIKE ${like} THEN 1 ELSE 0 END)`;
-  });
-  const score = scoreParts.length ? scoreParts.join(" + ") : "0";
+    const parts = [
+      w.skill && `CASE WHEN EXISTS (SELECT 1 FROM unnest(p.skills) s WHERE s ILIKE ${like}) THEN ${w.skill} ELSE 0 END`,
+      w.cap && `CASE WHEN EXISTS (SELECT 1 FROM unnest(p.cap_topics) s WHERE s ILIKE ${like}) THEN ${w.cap} ELSE 0 END`,
+      w.name && `CASE WHEN p.full_name ILIKE ${like} THEN ${w.name} ELSE 0 END`,
+      w.titleOrg && `CASE WHEN coalesce(p.title, '') ILIKE ${like} OR coalesce(o.name, '') ILIKE ${like} THEN ${w.titleOrg} ELSE 0 END`,
+      w.loose && `CASE WHEN ${looseText} ILIKE ${like} THEN ${w.loose} ELSE 0 END`,
+    ].filter(Boolean);
+    return `(${parts.join(" + ")})`;
+  };
+  const sum = (parts: string[]) => (parts.length ? parts.join(" + ") : "0");
+  const topicScore = sum(topical.map(termScore));
+  const hintScore = sum(terms.filter((t) => t.tier === "hint").map(termScore));
+  const intentParts: string[] = [];
+  if (intentTypes.length) intentParts.push(`CASE WHEN p.contribution_types && ${p(intentTypes)}::text[] THEN 3 ELSE 0 END`);
+  if (intentCategories.length) intentParts.push(`CASE WHEN p.categories && ${p(intentCategories)}::text[] THEN 2 ELSE 0 END`);
+  const intentScore = sum(intentParts);
+  // Words decide who matches; a kind of help alone decides only when there are no words.
+  const qualify = topical.length ? "topic > 0" : intentParts.length ? "intent > 0" : "";
 
   if (filter.contributionTypes?.length) where.push(`p.contribution_types && ${p(filter.contributionTypes)}::text[]`);
   if (filter.affiliations?.length) where.push(`p.affiliations && ${p(filter.affiliations)}::text[]`);
@@ -201,38 +246,53 @@ export async function searchPeople(
   const limit = Math.min(Math.max(filter.limit ?? 50, 1), 200);
   const offset = Math.max(filter.offset ?? 0, 0);
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  const scored = `(${topicScore})::int AS topic, (${hintScore})::int AS hint, (${intentScore})::int AS intent`;
+  // Only fields the viewer may see feed the reasons.
+  const reasonColumns = `p.bio AS _bio, p.shared_summary AS _summary, ${admin ? privateText : "NULL::text"} AS _private`;
   const sql = `
-    SELECT * FROM (
-      SELECT ${summaryColumns(viewer)}, (${score})::int AS score, count(*) OVER () AS total
+    SELECT *, topic + hint + intent AS score FROM (
+      SELECT ${summaryColumns(viewer)}, ${reasonColumns}, ${scored}, count(*) OVER () AS total
         FROM people p LEFT JOIN organizations o ON o.id = p.organization_id
        ${whereSql}
     ) ranked
-    ${terms.length ? "WHERE score > 0" : ""}
-    ORDER BY ${terms.length ? "score DESC," : ""} updated_at DESC, full_name ASC
+    ${qualify ? `WHERE ${qualify}` : ""}
+    ORDER BY ${qualify ? "topic + hint + intent DESC," : ""} updated_at DESC, full_name ASC
     LIMIT ${limit} OFFSET ${offset}`;
 
-  // count(*) OVER () counts before the score filter, so count matches separately when searching.
-  const rows = await query<SearchHit & { total: string | number }>(sql, params);
+  type Row = SearchHit & { total: string | number; topic: number; hint: number; intent: number; _bio: string | null; _summary: string | null; _private: string | null };
+  const rows = await query<Row>(sql, params);
+  // count(*) OVER () counts before the match filter, so count matches separately when searching.
   let total = rows.length ? Number(rows[0].total) : 0;
-  if (terms.length) {
+  if (qualify) {
     const countRows = await query<{ n: number }>(
       `SELECT count(*)::int AS n FROM (
-         SELECT (${score}) AS score FROM people p LEFT JOIN organizations o ON o.id = p.organization_id
-         ${whereSql}) s WHERE score > 0`,
+         SELECT ${scored} FROM people p LEFT JOIN organizations o ON o.id = p.organization_id
+         ${whereSql}) s WHERE ${qualify}`,
       params,
     );
     total = countRows[0]?.n ?? rows.length;
   }
 
+  const tagsMatching = (row: Row, list: MatchTerm[]) =>
+    [...new Set([...row.skills, ...row.cap_topics])].filter((tag) => list.some(({ term }) => tag.toLowerCase().includes(term)));
+  const core = terms.filter((t) => t.tier === "core");
+  const related = terms.filter((t) => t.tier === "related");
+
   return {
     total,
-    people: rows.map(({ total: _total, ...row }) => ({
-      ...row,
-      score: Number(row.score),
-      matched: terms.length
-        ? [...new Set([...row.skills, ...row.cap_topics])].filter((tag) => terms.some((term) => tag.includes(term)))
-        : [],
-    })),
+    people: rows.map(({ total: _total, topic: _t, hint: _h, intent: _i, _bio, _summary, _private, ...row }) => {
+      const matchedCore = tagsMatching(row as Row, core);
+      return {
+        ...row,
+        score: Number(row.score),
+        matched: matchedCore.length ? matchedCore : tagsMatching(row as Row, related),
+        reasons: explainMatch(
+          { ...row, bio: _bio, shared_summary: _summary, private: admin ? _private : null },
+          parsed,
+          filter.contributionTypes ?? [],
+        ),
+      };
+    }),
   };
 }
 

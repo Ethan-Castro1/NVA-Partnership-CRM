@@ -5,6 +5,8 @@
  */
 import { messageText, type AskMessage, type ChatSummary } from "~/components/assistant/chat-types";
 import { query, queryOne } from "~/lib/db.server";
+import type { Viewer } from "~/lib/permissions.server";
+import { peopleForCards } from "./assistant.server";
 
 /** How many chats the history list shows. */
 export const CHAT_LIST_LIMIT = 50;
@@ -45,4 +47,31 @@ export async function saveChat(userId: string, id: string, messages: AskMessage[
 
 export async function deleteChat(userId: string, id: string): Promise<void> {
   await query("DELETE FROM assistant_chats WHERE id = $1 AND user_id = $2", [id, userId]);
+}
+
+/**
+ * A saved chat's person cards, rebuilt for the viewer as they are now: people
+ * since hidden from them drop out, and contact details and the Contact or
+ * Request Introduction choice follow each person's current settings.
+ */
+export async function refreshChatCards(messages: AskMessage[], viewer: Viewer): Promise<AskMessage[]> {
+  return Promise.all(
+    messages.map(async (message) => {
+      if (!message.parts.some((p) => p.type === "data-people" && !p.data.example)) return message;
+      const parts = await Promise.all(
+        message.parts.map(async (part) => {
+          if (part.type !== "data-people" || part.data.example) return part;
+          const old = part.data.people;
+          const reasons = Object.fromEntries(old.map((p) => [p.id, p.reasons ?? []]));
+          const people = await peopleForCards(
+            old.map((p) => p.id),
+            viewer,
+            reasons,
+          );
+          return { ...part, data: { ...part.data, people } };
+        }),
+      );
+      return { ...message, parts };
+    }),
+  );
 }

@@ -1,133 +1,97 @@
-/** The dashboard's sections: stat row, my CAPs, recently added people and recent activity. */
-import { Link } from "react-router";
-import { ArrowRight, ClipboardList, FolderKanban, Plus, UserCheck, UserPlus, Users } from "lucide-react";
-import {
-  ContributionChips,
-  EmptyState,
-  Panel,
-  PersonAvatar,
-  StatTile,
-  StatusBadge,
-} from "~/components/nva";
+/** Pieces both dashboards use: the search box, CAP cards, resource rows and confirmed engagements. */
+import { Form, Link } from "react-router";
+import { ArrowRight, CalendarCheck, Search } from "lucide-react";
+import { EmptyState, Panel, PersonAvatar } from "~/components/nva";
+import { RequestStatusBadge, requestWhen } from "~/components/requests";
+import { ResourceActions, type ResourcePerson } from "~/components/resources/resource-actions";
 import { Button } from "~/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "~/components/ui/table";
-import { useT } from "~/i18n";
+import { useT, type MessageKey } from "~/i18n";
 import type { CapStatus } from "~/lib/constants";
 import { cn } from "~/lib/utils";
-import { shortDate } from "./format";
-import type { DashboardCap, RecentEngagement, RecentPerson } from "./types";
 
-const linkClass =
+export const linkClass =
   "rounded-sm font-medium text-ink hover:underline hover:decoration-gold hover:decoration-2 hover:underline-offset-4 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none";
 
-function ViewAll({ to }: { to: string }) {
+export function ViewAll({ to, label }: { to: string; label?: string }) {
   const { t } = useT();
   return (
     <Button asChild variant="ghost" size="sm">
       <Link to={to}>
-        {t("common.action.viewAll")}
+        {label ?? t("dashboard.viewAll")}
         <ArrowRight aria-hidden="true" />
       </Link>
     </Button>
   );
 }
 
-const roleLine = (p: { title: string | null; organization_name: string | null }) =>
-  [p.title, p.organization_name].filter(Boolean).join(", ");
+// ---------- search ----------
 
-// ---------- stats ----------
+const EXAMPLES = ["carpentry", "healthcare", "event", "environment", "internships"] as const;
 
-export function StatRow({
-  people,
-  leads,
-  active,
-  isAdmin,
-  newSignups,
-  myCaps,
-}: {
-  people: number;
-  leads: number;
-  active: number;
-  isAdmin: boolean;
-  newSignups: number;
-  myCaps: number;
-}) {
+/**
+ * "What do you need help with?" Submits to /app/people?q=. The examples are
+ * one-click searches. `prominent` is the staff hero; admins get a quieter one.
+ */
+export function NeedSearch({ prominent = false, brand = false }: { prominent?: boolean; brand?: boolean }) {
   const { t } = useT();
-  return (
-    <section aria-labelledby="stats-heading">
-      <h2 id="stats-heading" className="sr-only">
-        {t("dashboard.statsHeading")}
-      </h2>
-      <ul className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <li>
-          <StatTile label={t("dashboard.statPeople")} value={people} icon={<Users aria-hidden="true" />} to="/app/people" />
-        </li>
-        <li>
-          <StatTile
-            label={t("dashboard.statLeads")}
-            value={leads}
-            icon={<UserPlus aria-hidden="true" />}
-            to="/app/people?status=lead"
-          />
-        </li>
-        <li>
-          <StatTile
-            label={t("dashboard.statActive")}
-            value={active}
-            icon={<UserCheck aria-hidden="true" />}
-            to="/app/people?status=active"
-          />
-        </li>
-        <li>
-          {isAdmin ? (
-            <StatTile
-              label={t("dashboard.statSignups")}
-              value={newSignups}
-              icon={<ClipboardList aria-hidden="true" />}
-              to="/app/admin/intake"
-            />
-          ) : (
-            <StatTile
-              label={t("dashboard.statMyCaps")}
-              value={myCaps}
-              icon={<FolderKanban aria-hidden="true" />}
-              to="/app/caps?show=mine"
-            />
-          )}
-        </li>
-      </ul>
-    </section>
-  );
-}
-
-// ---------- admin callout ----------
-
-export function SignupsCallout({ count }: { count: number }) {
-  const { t } = useT();
+  const inputId = prominent ? "need-search" : "need-search-admin";
   return (
     <section
-      aria-labelledby="signups-heading"
-      className="flex flex-col gap-3 rounded-card border border-gold/60 bg-gold-soft p-4 sm:flex-row sm:items-center md:p-5"
+      aria-labelledby={`${inputId}-label`}
+      className={cn("rounded-card bg-canvas shadow-whisper", prominent ? "p-5 md:p-8" : "p-4 md:p-5")}
     >
-      <span className="grid size-10 shrink-0 place-items-center rounded-full bg-gold text-ink" aria-hidden="true">
-        <Users className="size-5" />
-      </span>
-      <div className="flex-1">
-        <h2 id="signups-heading" className="font-semibold text-ink">
-          {count === 1 ? t("dashboard.signupsTitleOne") : t("dashboard.signupsTitle", { count })}
-        </h2>
+      <Form method="get" action="/app/people" role="search" className="grid gap-3">
+        <label
+          id={`${inputId}-label`}
+          htmlFor={inputId}
+          className={cn(prominent ? "text-heading" : "text-section")}
+        >
+          {t("dashboard.search.title")}
+        </label>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-smoke" aria-hidden="true" />
+            <input
+              id={inputId}
+              name="q"
+              type="search"
+              required
+              maxLength={200}
+              placeholder={t("dashboard.search.placeholder")}
+              className={cn(
+                "w-full rounded-full border border-stone bg-taupe pr-4 pl-12 outline-none placeholder:text-smoke focus-visible:border-gold focus-visible:bg-canvas focus-visible:ring-3 focus-visible:ring-ring/40",
+                prominent ? "h-14 text-base" : "h-11 text-sm",
+              )}
+            />
+          </div>
+          <Button type="submit" variant={brand ? "brand" : "default"} size={prominent ? "lg" : "default"} className={prominent ? "h-14" : "h-11"}>
+            {t("dashboard.search.button")}
+          </Button>
+        </div>
+      </Form>
+      <div className="mt-4 grid gap-2">
+        <p className="text-xs text-smoke">{t("dashboard.examplesLabel")}</p>
+        <ul className="flex flex-wrap gap-2">
+          {EXAMPLES.map((key) => {
+            const text = t(`dashboard.search.example.${key}` as MessageKey);
+            return (
+              <li key={key}>
+                <Link
+                  to={`/app/people?q=${encodeURIComponent(text)}`}
+                  className="inline-flex min-h-8 items-center rounded-full border border-stone bg-canvas px-3 py-1 text-left text-sm text-graphite transition-colors hover:border-gold hover:text-ink focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+                >
+                  {text}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
       </div>
-      <Button asChild variant="outline">
-        <Link to="/app/admin/intake">
-          {t("dashboard.signupsAction")}
-          <ArrowRight aria-hidden="true" />
-        </Link>
-      </Button>
     </section>
   );
 }
 
-// ---------- my CAPs ----------
+// ---------- CAPs ----------
 
 const CAP_STATUS_STYLE: Record<CapStatus, string> = {
   planning: "bg-gold-soft text-gold-ink",
@@ -144,23 +108,22 @@ export function CapStatusPill({ status }: { status: CapStatus }) {
   );
 }
 
+export type DashboardCap = {
+  id: string;
+  title: string;
+  status: CapStatus;
+  term: string | null;
+  topics: string[];
+  partner_count: number;
+  confirmed_count: number;
+};
+
 export function MyCaps({ caps }: { caps: DashboardCap[] }) {
   const { t } = useT();
   return (
-    <Panel title={t("dashboard.myCaps")} action={caps.length > 0 && <ViewAll to="/app/caps" />}>
+    <Panel title={t("dashboard.myCaps")} action={<ViewAll to="/app/caps" />}>
       {caps.length === 0 ? (
-        <EmptyState
-          title={t("dashboard.myCapsEmptyTitle")}
-          body={t("dashboard.myCapsEmptyBody")}
-          action={
-            <Button asChild>
-              <Link to="/app/caps/new">
-                <Plus aria-hidden="true" />
-                {t("caps.list.new")}
-              </Link>
-            </Button>
-          }
-        />
+        <EmptyState title={t("dashboard.myCapsEmptyTitle")} body={t("dashboard.myCapsEmptyBody")} />
       ) : (
         <ul className="grid gap-2">
           {caps.map((cap) => (
@@ -187,112 +150,86 @@ export function MyCaps({ caps }: { caps: DashboardCap[] }) {
   );
 }
 
-// ---------- recently added ----------
+// ---------- resources ----------
 
-export function RecentPeople({ people }: { people: RecentPerson[] }) {
-  const { t, locale } = useT();
+export type ResourceRow = ResourcePerson & {
+  title: string | null;
+  organization_name: string | null;
+  skills: string[];
+  saved: boolean;
+};
+
+/** People as resources: name, role, a few skills, and View, Contact or Introduction, Save. */
+export function ResourceList({ people, empty }: { people: ResourceRow[]; empty: string }) {
+  if (!people.length) return <p className="py-2 text-sm text-smoke">{empty}</p>;
   return (
-    <Panel title={t("dashboard.recentPeople")} action={people.length > 0 && <ViewAll to="/app/people" />}>
-      {people.length === 0 ? (
-        <EmptyState title={t("dashboard.recentPeopleEmpty")} />
-      ) : (
-        <>
-          {/* Wide screens: a clean CRM table. */}
-          <div className="hidden rounded-2xl bg-canvas px-2 md:block">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-stone hover:bg-transparent">
-                  <TableHead className="text-smoke">{t("dashboard.colName")}</TableHead>
-                  <TableHead className="text-smoke">{t("common.field.contributions")}</TableHead>
-                  <TableHead className="text-smoke">{t("common.field.status")}</TableHead>
-                  <TableHead className="text-right text-smoke">{t("dashboard.colAdded")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {people.map((p) => (
-                  <TableRow key={p.id} className="border-stone">
-                    <TableCell className="py-3">
-                      <div className="flex items-center gap-3">
-                        <PersonAvatar name={p.full_name} />
-                        <div className="min-w-0">
-                          <Link to={`/app/people/${p.id}`} className={linkClass}>
-                            {p.full_name}
-                          </Link>
-                          {roleLine(p) && <p className="truncate text-xs text-smoke">{roleLine(p)}</p>}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="whitespace-normal">
-                      <ContributionChips types={p.contribution_types} />
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={p.status} />
-                    </TableCell>
-                    <TableCell className="text-right text-xs text-smoke">{shortDate(p.created_at, locale)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          {/* Phones: stacked cards. */}
-          <ul className="grid gap-2 md:hidden">
-            {people.map((p) => (
-              <li key={p.id} className="grid gap-2 rounded-2xl border border-stone bg-canvas p-3.5">
-                <div className="flex items-start gap-3">
-                  <PersonAvatar name={p.full_name} />
-                  <div className="min-w-0 flex-1">
-                    <Link to={`/app/people/${p.id}`} className={linkClass}>
-                      {p.full_name}
-                    </Link>
-                    {roleLine(p) && <p className="text-xs text-smoke">{roleLine(p)}</p>}
-                  </div>
-                  <StatusBadge status={p.status} />
-                </div>
-                <ContributionChips types={p.contribution_types} />
-                <p className="text-xs text-smoke">
-                  {t("dashboard.colAdded")}: {shortDate(p.created_at, locale)}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-    </Panel>
+    <ul className="grid gap-2">
+      {people.map((p) => {
+        const role = [p.title, p.organization_name].filter(Boolean).join(", ");
+        return (
+          <li key={p.id} className="grid gap-3 rounded-2xl border border-stone bg-canvas p-3.5">
+            <div className="flex min-w-0 items-start gap-3">
+              <PersonAvatar name={p.full_name} className="size-9" />
+              <div className="min-w-0 flex-1">
+                <Link to={`/app/people/${p.id}`} className={linkClass}>
+                  {p.full_name}
+                </Link>
+                {role && <p className="truncate text-xs text-smoke">{role}</p>}
+                {p.skills.length > 0 && <p className="mt-1 truncate text-xs text-graphite">{p.skills.slice(0, 4).join(", ")}</p>}
+              </div>
+            </div>
+            <ResourceActions person={p} saved={p.saved} compact />
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
-// ---------- recent activity ----------
+// ---------- confirmed engagements ----------
 
-export function RecentActivity({ items }: { items: RecentEngagement[] }) {
+export type EngagementRow = {
+  id: string;
+  need: string;
+  status: "open" | "arranged" | "completed" | "canceled";
+  preferred_date: string | null;
+  timeframe: string | null;
+  requester_name: string;
+  cap_title: string | null;
+  people: { id: string; full_name: string }[];
+};
+
+/** Arranged staff requests with a date ahead (listUpcomingArranged). */
+export function UpcomingEngagements({ items, showRequester = false }: { items: EngagementRow[]; showRequester?: boolean }) {
   const { t, locale } = useT();
   return (
-    <Panel title={t("dashboard.recentActivity")}>
+    <Panel title={t("dashboard.engagements.title")}>
       {items.length === 0 ? (
-        <EmptyState title={t("dashboard.activityEmpty")} />
+        <p className="py-2 text-sm text-smoke">{t("dashboard.engagements.empty")}</p>
       ) : (
-        <ul className="grid gap-2">
-          {items.map((e) => (
-            <li key={e.id} className="flex items-start gap-3 rounded-2xl border border-stone bg-canvas p-3.5">
-              <PersonAvatar name={e.person_name} className="size-8" />
-              <div className="min-w-0 flex-1 text-sm">
-                <Link to={`/app/people/${e.person_id}`} className={linkClass}>
-                  {e.person_name}
-                </Link>
-                <p className="text-xs text-smoke">
-                  {[
-                    t(`common.engagement.${e.kind}`),
-                    e.cap_title ? t("dashboard.activityForCap", { cap: e.cap_title }) : null,
-                    e.user_name ? t("dashboard.activityBy", { name: e.user_name }) : null,
-                  ]
-                    .filter(Boolean)
-                    .join(", ")}
-                </p>
-              </div>
-              <time dateTime={e.happened_on} className="shrink-0 text-xs text-smoke">
-                {shortDate(e.happened_on, locale)}
-              </time>
-            </li>
-          ))}
+        <ul className="divide-y divide-stone">
+          {items.map((r) => {
+            const names = r.people.map((p) => p.full_name).join(", ");
+            return (
+              <li key={r.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+                <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-blue-soft text-blue-ink" aria-hidden="true">
+                  <CalendarCheck className="size-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <Link to={`/app/requests/${r.id}`} className={linkClass}>
+                    {r.need}
+                  </Link>
+                  <p className="flex flex-wrap gap-x-3 text-xs text-smoke">
+                    <span className="font-medium text-graphite">{requestWhen(r, locale)}</span>
+                    {names && <span>{t("requests.item.with", { names })}</span>}
+                    {r.cap_title && <span>{r.cap_title}</span>}
+                    {showRequester && <span>{t("dashboard.engagements.from", { name: r.requester_name })}</span>}
+                  </p>
+                </div>
+                <RequestStatusBadge status={r.status} />
+              </li>
+            );
+          })}
         </ul>
       )}
     </Panel>

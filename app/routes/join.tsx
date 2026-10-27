@@ -64,6 +64,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   recordIntakeAttempt(ip);
   try {
+    // Saved for admin review only: no contact is created and nothing reaches staff until an admin approves it.
     await processIntake(result.payload, locale);
   } catch (error) {
     // Log the failure kind only: the payload is personal data.
@@ -240,11 +241,9 @@ export default function Join() {
             {/* c. Tell us more: only the questions that fit what they picked. */}
             {types.length > 0 && (
               <FormSection legend={t("intake.section.share")} hint={t("intake.section.shareHint")}>
-                {picked("skills_lesson", "after_school") && (
-                  <Field label={t("intake.skillsLabel")} htmlFor="skills" hint={t("intake.skillsHint")} error={err("skills")}>
-                    <Input id="skills" name="skills" maxLength={500} defaultValue={v?.skills} className={FILLED} />
-                  </Field>
-                )}
+                <Field label={t("intake.skillsLabel")} htmlFor="skills" optional hint={t("intake.skillsHint")} error={err("skills")}>
+                  <Input id="skills" name="skills" maxLength={500} defaultValue={v?.skills} className={FILLED} />
+                </Field>
                 {picked("other") && (
                   <Field label={<Req>{t("intake.otherHelpLabel")}</Req>} htmlFor="other_help" error={err("other_help")}>
                     <Textarea
@@ -260,19 +259,17 @@ export default function Join() {
                     />
                   </Field>
                 )}
-                {picked("skills_lesson", "classroom_volunteer", "after_school") && (
-                  <Field label={t("intake.availabilityLabel")} htmlFor="availability" optional error={err("availability")}>
-                    <Textarea
-                      id="availability"
-                      name="availability"
-                      rows={2}
-                      maxLength={500}
-                      placeholder={t("intake.availabilityPlaceholder")}
-                      defaultValue={v?.availability}
-                      className={FILLED_AREA}
-                    />
-                  </Field>
-                )}
+                <Field label={t("intake.availabilityLabel")} htmlFor="availability" optional error={err("availability")}>
+                  <Textarea
+                    id="availability"
+                    name="availability"
+                    rows={2}
+                    maxLength={500}
+                    placeholder={t("intake.availabilityPlaceholder")}
+                    defaultValue={v?.availability}
+                    className={FILLED_AREA}
+                  />
+                </Field>
               </FormSection>
             )}
 

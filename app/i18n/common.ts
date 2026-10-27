@@ -69,6 +69,10 @@ export default defineMessages(
     "action.close": "Close",
     "action.copy": "Copy",
     "action.copied": "Copied",
+    "action.undo": "Undo",
+    "sidebar.toggle": "Show or hide the menu",
+    "sidebar.title": "Menu",
+    "sidebar.description": "Pages in Village Partners",
     "action.export": "Export CSV",
     "action.filter": "Filter",
 
@@ -350,6 +354,10 @@ export default defineMessages(
     "action.close": "Cerrar",
     "action.copy": "Copiar",
     "action.copied": "Copiado",
+    "action.undo": "Deshacer",
+    "sidebar.toggle": "Mostrar u ocultar el menú",
+    "sidebar.title": "Menú",
+    "sidebar.description": "Páginas de Socios de la Aldea",
     "action.export": "Exportar CSV",
     "action.filter": "Filtrar",
 

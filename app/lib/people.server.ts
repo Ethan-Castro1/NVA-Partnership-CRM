@@ -143,9 +143,9 @@ const STOPWORDS = new Set(
   (
     "a an and are at be by can could for from has have i in is it me my need of on or our someone somebody " +
     "teach teaches teacher that the their them they this to us we who with would anyone people person " +
-    "partner partners help find looking about " +
+    "partner partners help find looking about students student " +
     "un una unos unas el la los las y o de del en con para por que quien quién alguien persona personas " +
-    "necesito buscar busco sobre nuestro nuestra ayuda"
+    "necesito buscar busco sobre nuestro nuestra ayuda ayudar enseñar estudiantes"
   ).split(" "),
 );
 

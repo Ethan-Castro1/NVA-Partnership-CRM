@@ -100,6 +100,12 @@ export async function action({ request }: Route.ActionArgs) {
         writer.write({ type: "text-delta", id: "answer", delta: result.answer });
         writer.write({ type: "text-end", id: "answer" });
       }
+      // An answer that searched the web ends with a link to those leads in Connections.
+      if (result.closing) {
+        writer.write({ type: "text-start", id: "closing" });
+        writer.write({ type: "text-delta", id: "closing", delta: result.closing });
+        writer.write({ type: "text-end", id: "closing" });
+      }
       const people = await peopleForCards(result.personIds, user, result.reasons);
       if (people.length) writer.write({ type: "data-people", data: { people } });
     },

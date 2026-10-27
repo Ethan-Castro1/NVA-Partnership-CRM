@@ -11,8 +11,8 @@
  */
 import Anthropic from "@anthropic-ai/sdk";
 import type { AssistantPerson, ChatTurn } from "~/components/assistant/types";
-import { makeT, type Locale, type MessageKey } from "~/i18n";
-import { CONTRIBUTION_TYPES, type ContributionType } from "~/lib/constants";
+import { makeT, type Locale } from "~/i18n";
+import type { ContributionType } from "~/lib/constants";
 import { findConnectorsForNeed, getPeopleByIds, type MatchReason } from "~/lib/people.server";
 import { hasSearchIntent, parseSearch } from "~/lib/search-language";
 import type { Viewer } from "~/lib/permissions.server";
@@ -21,7 +21,7 @@ import type { SessionUser } from "~/lib/types";
 import { APICallError, isStepCount, jsonSchema, streamText, tool, type ToolSet } from "ai";
 import { aiModel, aiProvider, getAnthropic, getOpenRouterModel, isAiConfigured, usesAnthropicDirectly } from "./client.server";
 import { isWebSearchConfigured } from "./exa.server";
-import { describePath, describeReasons, executeTool, toolsFor, type ToolOutcome } from "./tools.server";
+import { executeTool, toolsFor, type ToolOutcome } from "./tools.server";
 
 type BetaMessageParam = Anthropic.Beta.Messages.BetaMessageParam;
 type BetaToolResultBlockParam = Anthropic.Beta.Messages.BetaToolResultBlockParam;
@@ -40,6 +40,8 @@ export type AssistantResult =
       mode: "ai" | "fallback";
       /** Why each person matched, from the searches that found them (for the cards). */
       reasons?: Record<string, MatchReason[]>;
+      /** A line to add after the answer (a link to the web leads, when the answer searched the web without one). */
+      closing?: string;
     }
   | { ok: false; error: AssistantErrorKey };
 
@@ -62,8 +64,8 @@ const SHARED_WORK = `- Always use the tools before answering anything about peop
 - Explain second-degree paths in words, for example: "Rosa Delgado (board) knows Lucía Herrera, who knows Mei Lin." Board members and staff can make the introduction.
 - People with status "lead" were referred by someone and have not been contacted yet. Say so when you recommend one.
 - Always write each person's name as a link, [Full Name](/app/people/<id>), using the id from the tool results (for example [Lucía Herrera](/app/people/abc123)). Never write a person's name in bold instead of a link. Link CAPs as [Title](/app/caps/<id>). Use no other links.
-- Be brief and easy to scan: one short sentence first, then at most one bullet per person (under 25 words: why they fit, and how to reach them). The page shows a card for each person you link, with buttons to view the profile, contact them or request an introduction, so don't repeat their skills list, email or phone unless asked. End with one short offer only when it helps. Use **bold** sparingly. No headings, tables or HTML. Never use em dashes; use a colon, comma or period instead.
-- In outreach messages, sound like NVA: warm, direct, community-minded. Use NVA's own phrases where they fit, exactly as written: "Annapolis is our classroom" (Spanish: "Annapolis es nuestra aula"), "High school done differently" ("La secundaria hecha diferente"), "Real-world learning" ("Aprendizaje en el mundo real"), "We are the village" ("Somos la aldea"). Sign off with the staff member's name and "New Village Academy".
+- Be brief and easy to scan: one short sentence first, then at most one bullet per person (under 25 words: why they fit, and how to reach them). The page shows a card for each person you link, with buttons to view the profile, contact them or request an introduction, so don't repeat their skills list, email or phone unless asked. Don't end with offers or questions such as "Want me to draft an email?": the cards and pages hold the next steps. Use **bold** sparingly. No headings, tables or HTML. Never use em dashes; use a colon, comma or period instead.
+- Only if the staff member asks you to write a message: sound like NVA: warm, direct, community-minded. Use NVA's own phrases where they fit, exactly as written: "Annapolis is our classroom" (Spanish: "Annapolis es nuestra aula"), "High school done differently" ("La secundaria hecha diferente"), "Real-world learning" ("Aprendizaje en el mundo real"), "We are the village" ("Somos la aldea"). Sign off with the staff member's name and "New Village Academy".
 - Answer in the staff member's interface language (given below) unless they write to you in the other language (English or Spanish); then answer in the language they wrote in.`;
 
 const SHARED_SAFETY = `Safety and privacy:
@@ -76,7 +78,7 @@ export const STAFF_SYSTEM_PROMPT = `${INTRO} You help NVA teachers and staff fin
 How to work:
 ${SHARED_WORK}
 - Prefer people whose ways_to_help fit the request: skills_lesson (shown to staff as "Practical skills"), classroom_volunteer ("School volunteer"), guest_speaker, mentoring, after_school, internship ("Internships"), cap_partner, other. Use the staff-facing names in answers.
-- Each person has contact "direct" or "introduction". For direct contacts, the staff member can reach out themselves: offer to draft a short, warm message in the person's preferred language. For introduction contacts, no contact details are shared: say to use Request Introduction (on the person's card or profile) so an NVA administrator can connect them. Never guess an email or phone number.
+- Each person has contact "direct" or "introduction". For direct contacts, the staff member can reach out themselves with Contact (on the person's card or profile). For introduction contacts, no contact details are shared: say to use Request Introduction (on the person's card or profile) so an NVA administrator can connect them. Never guess an email or phone number.
 - When nobody matches, say so plainly and suggest next steps: broaden the search, browse People and Skills, or submit a request so an NVA administrator can help find someone.
 ${SHARED_SAFETY}
 - Share contact details only with the staff member asking, and only for people relevant to their request.`;
@@ -91,7 +93,7 @@ ${SHARED_WORK}
 - list_follow_ups and list_opportunities are read-only views of the CRM. Use them when the admin asks what is due, what to do next with someone, or where an opportunity stands. Link follow-ups to [Follow-ups](/app/follow-ups) and opportunities as [Title](/app/opportunities/<id>). You cannot change records: point the admin to the person's profile to update them.
 - in_staff_directory false means staff cannot see this person. Say so when it matters (for example before suggesting a teacher contact them).
 - When nobody matches, say so plainly and suggest next steps: broaden the search, ask a board member who is on a path to someone close, or use the Connections page (/app/connections) to search the web for new partners.
-- If the search_web tool is available, use it only after the database tools, when they find nobody suitable or the admin asks to look beyond NVA's records. Put web finds in a separate short section headed "From the web (not in our records yet)", give each page address as plain text (not a link), and never present them as NVA contacts.
+- If the search_web tool is available, use it only after the database tools, when they find nobody suitable or the admin asks to look beyond NVA's records. Put web finds in a separate short section headed "From the web (not in our records yet)" (in Spanish: "De la web (todavía no están en nuestros registros)"). Describe each find in a few words, without page addresses, and never present them as NVA contacts. End the section with a link to review and save them: [See web leads in Connections](/app/connections?q=<the need in a few words, URL-encoded>) (in Spanish: "Ver contactos de la web en Conexiones").
 ${SHARED_SAFETY.replace("(bios, summaries, relationship descriptions)", "(bios, summaries, notes, sign-up answers, relationship descriptions)")}
 - Share contact details only with the admin asking, and only for people relevant to their request.`;
 
@@ -107,6 +109,22 @@ function contextBlock(locale: Locale, user: SessionUser): string {
 }
 
 // ---------- the AI path ----------
+
+/**
+ * Web finds aren't NVA contacts yet, so an answer that searched the web ends
+ * with a link to review them in Connections. Returns that line when the
+ * answer doesn't already link there.
+ */
+export function webLeadsClosing(answer: string, webQuery: string | null, locale: Locale): string | undefined {
+  if (!webQuery || answer.includes("/app/connections")) return undefined;
+  return makeT(locale)("assistant.webLeadsLink", { query: encodeURIComponent(webQuery.trim().slice(0, 120)) });
+}
+
+const webQueryOf = (name: string, input: unknown): string | null => {
+  if (name !== "search_web" || !input || typeof input !== "object") return null;
+  const q = (input as { query?: unknown }).query;
+  return typeof q === "string" && q.trim() ? q.trim() : null;
+};
 
 /** Pulls /app/people/<id> links out of an answer, in order, without repeats. */
 export function referencedPersonIds(answer: string): string[] {
@@ -173,6 +191,7 @@ async function runWithClaude(
   const tools = toolsFor({ web: isWebSearchConfigured(), strict: direct, user });
   const texts: string[] = [];
   let textCount = 0;
+  let webQuery: string | null = null;
 
   try {
     for (let i = 0; i < MAX_ITERATIONS; i++) {
@@ -231,6 +250,7 @@ async function runWithClaude(
         const results = await Promise.all(
           calls.map(async (call): Promise<BetaToolResultBlockParam> => {
             const step: ToolStep = { id: call.id, name: call.name, input: call.input };
+            webQuery = webQueryOf(call.name, call.input) ?? webQuery;
             events.toolStart?.(step);
             const outcome = await executeTool(call.name, call.input, { user });
             outcome.personIds.forEach((id) => seen.add(id));
@@ -247,7 +267,7 @@ async function runWithClaude(
       const answer = texts.join("\n\n") || t("assistant.emptyAnswer");
       // Only show cards for people a tool actually returned (so a made-up id never becomes a card).
       const personIds = referencedPersonIds(answer).filter((id) => seen.has(id));
-      return { ok: true, answer, personIds, mode: "ai", reasons };
+      return { ok: true, answer, personIds, mode: "ai", reasons, closing: webLeadsClosing(answer, webQuery, locale) };
     }
     return { ok: true, answer: t("assistant.tooManySteps"), personIds: [], mode: "ai" };
   } catch (error) {
@@ -270,6 +290,7 @@ async function runWithOpenRouter(
   const t = makeT(locale);
   const seen = new Set<string>();
   const reasons: Record<string, MatchReason[]> = {};
+  let webQuery: string | null = null;
   const tools: ToolSet = Object.fromEntries(
     toolsFor({ web: isWebSearchConfigured(), strict: false, user }).map((def) => [
       def.name,
@@ -278,6 +299,7 @@ async function runWithOpenRouter(
         inputSchema: jsonSchema(def.input_schema as Parameters<typeof jsonSchema>[0]),
         execute: async (input: unknown, { toolCallId }: { toolCallId: string }) => {
           const step: ToolStep = { id: toolCallId, name: def.name, input };
+          webQuery = webQueryOf(def.name, input) ?? webQuery;
           events.toolStart?.(step);
           const outcome = await executeTool(def.name, input, { user });
           outcome.personIds.forEach((id) => seen.add(id));
@@ -330,7 +352,14 @@ async function runWithOpenRouter(
     return { ok: false, error: "assistant.errorGeneric" };
   }
   const answer = texts.join("\n\n") || t("assistant.emptyAnswer");
-  return { ok: true, answer, personIds: await mentionedPeople(answer, seen, user), mode: "ai", reasons };
+  return {
+    ok: true,
+    answer,
+    personIds: await mentionedPeople(answer, seen, user),
+    mode: "ai",
+    reasons,
+    closing: webLeadsClosing(answer, webQuery, locale),
+  };
 }
 
 /**
@@ -430,14 +459,17 @@ export function interpretQuestion(question: string): {
 
 const bullet = (text: string) => `- ${text}`;
 
-/** A deterministic, translated answer from the connection finder. */
+/**
+ * A deterministic, translated answer from the connection finder: one short
+ * line ("3 people match."), and the people as cards under it. When nobody
+ * matches, a few next steps (web search only when it is set up, and only for admins).
+ */
 export async function fallbackAnswer(
   question: string,
   locale: Locale,
   viewer: Viewer,
 ): Promise<{ answer: string; personIds: string[]; reasons: Record<string, MatchReason[]> }> {
   const t = makeT(locale);
-  const quoted = question.replace(/\s+/g, " ").trim().slice(0, 120);
   // Same search as People & Skills: the question as typed, read by parseSearch (words, synonyms, and the
   // kind of help as a boost, not a filter). Only "speaks Spanish" becomes a filter, like the language box.
   const { spanish } = interpretQuestion(question);
@@ -449,53 +481,18 @@ export async function fallbackAnswer(
   const matches = await findConnectorsForNeed({ q, language: spanish ? "es" : undefined, limit: 25 }, viewer);
 
   if (!matches.length) {
-    const tips = [
-      t("assistant.fallbackTipBroader"),
-      t("assistant.fallbackTipBoard"),
-      t("assistant.fallbackTipBrowse"),
-      // Web search for new leads is admin-only; staff can ask an admin through a request.
-      viewer.role === "admin" ? t("assistant.fallbackTipWeb") : t("assistant.fallbackTipRequest"),
-    ];
-    return {
-      answer: [t("assistant.fallbackNone", { q: quoted }), tips.map(bullet).join("\n")].join("\n\n"),
-      personIds: [],
-      reasons: {},
-    };
+    const tips = [t("assistant.fallbackTipBroader"), t("assistant.fallbackTipBrowse")];
+    // Staff can ask an admin through a request. Admins get the web tip only when web search is set up.
+    if (viewer.role !== "admin") tips.push(t("assistant.fallbackTipRequest"));
+    else if (isWebSearchConfigured()) tips.push(t("assistant.fallbackTipWeb"));
+    return { answer: [t("assistant.fallbackNone"), tips.map(bullet).join("\n")].join("\n\n"), personIds: [], reasons: {} };
   }
 
   const shown = matches.slice(0, 6);
-  const lines = shown.map(({ person, direct, paths }) => {
-    const parts = [`[${person.full_name}](/app/people/${person.id})`];
-    const role =
-      person.title && person.organization_name
-        ? t("assistant.roleAt", { title: person.title, org: person.organization_name })
-        : person.title || person.organization_name;
-    if (role) parts.push(t("assistant.fallbackRole", { role }));
-    const ways = CONTRIBUTION_TYPES.filter((type) => person.contribution_types.includes(type)).map((type) =>
-      t(`common.contribution.${type}` as MessageKey),
-    );
-    if (ways.length) parts.push(t("assistant.fallbackWays", { list: ways.join(", ") }));
-    // Why they match (from fields this viewer may see), or the matching tags when there is no reason.
-    const why = describeReasons(person.reasons, locale);
-    const matched = [...new Set(person.matched)].slice(0, 4);
-    if (why) parts.push(t("assistant.fallbackWhy", { why }));
-    else if (matched.length) parts.push(t("assistant.fallbackMatched", { list: matched.join(", ") }));
-    if (person.status === "lead") parts.push(t("assistant.fallbackLead"));
-    if (direct) parts.push(t("assistant.fallbackDirect"));
-    else if (paths.length) parts.push(t("assistant.fallbackReach", { path: describePath(paths[0], locale) }));
-    else parts.push(t("assistant.fallbackNoPath"));
-    return bullet(parts.join(" "));
-  });
-
-  const blocks = [t("assistant.fallbackIntro", { q: quoted }), lines.join("\n")];
-  if (shown.some((m) => m.person.status === "lead")) blocks.push(t("assistant.fallbackLeadNote"));
-  if (matches.length > shown.length) {
-    blocks.push(
-      t("assistant.fallbackMore", { shown: shown.length, total: matches.length, query: encodeURIComponent(q.trim()) }),
-    );
-  }
+  const count = matches.length === 1 ? t("assistant.fallbackCountOne") : t("assistant.fallbackCount", { count: matches.length });
+  const more = matches.length > shown.length ? ` ${t("assistant.fallbackMore", { query: encodeURIComponent(q.trim()) })}` : "";
   return {
-    answer: blocks.join("\n\n"),
+    answer: count + more,
     personIds: shown.map((m) => m.person.id),
     reasons: Object.fromEntries(shown.map((m) => [m.person.id, m.person.reasons])),
   };

@@ -1,6 +1,6 @@
 /**
- * "Ask the village" as a full page: saved chats in a slim left column (a
- * "Past chats" menu on phones), the conversation filling the rest. It shows the same chat as the side panel
+ * "Ask the village" as a full page: saved chats with their dates in a left
+ * column (a "Past chats" menu on smaller screens), the conversation filling the rest. It shows the same chat as the side panel
  * (AssistantProvider), so a conversation can move between the two.
  * /app/ask?q=... asks that question in a new chat.
  */
@@ -43,10 +43,10 @@ export default function Ask() {
     navigate("/app/ask", { replace: true, preventScrollReset: true });
   }, [q, ask, navigate]);
 
-  // A chat layout: the page fills the window below the top bar (less the main padding and
-  // the one-line footer), the messages scroll inside it and the question box stays at the bottom.
+  // A chat layout: the page fills the window below the top bar (less the main padding; this page
+  // has no footer line), the messages scroll inside it and the question box stays at the bottom.
   return (
-    <div className="flex h-[calc(100dvh-10.5rem)] min-h-[26rem] min-w-0 flex-col gap-4">
+    <div className="flex h-[calc(100dvh-7rem)] min-h-[26rem] min-w-0 flex-col gap-4 md:h-[calc(100dvh-8rem)]">
       <div className="flex shrink-0 items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <Button asChild variant="ghost" size="icon-sm" className="-ml-2 max-md:hidden">
@@ -64,7 +64,7 @@ export default function Ask() {
           </Button>
         </div>
       </div>
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-[200px_minmax(0,1fr)]">
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-[240px_minmax(0,1fr)]">
         <aside className="hidden min-h-0 overflow-y-auto border-r border-stone pr-3 lg:block">
           <ChatHistoryList />
         </aside>

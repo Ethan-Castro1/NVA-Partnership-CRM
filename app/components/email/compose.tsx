@@ -6,7 +6,7 @@
  */
 import { useId, useState } from "react";
 import { Form, Link, useNavigation } from "react-router";
-import { CircleAlert, ListChecks, Send, Trash2 } from "lucide-react";
+import { CircleAlert, ListChecks, Send, Sparkles, Trash2 } from "lucide-react";
 import type { EmailAccountView } from "~/lib/email/accounts.server";
 import { DRAFT_PURPOSES } from "~/lib/email/purposes";
 import type { DraftView } from "~/lib/email/store.server";
@@ -46,9 +46,10 @@ export function ComposeStart({ aiOn, defaultLanguage }: { aiOn: boolean; default
           {t("email.compose.blank")}
         </Button>
       </Form>
-      {aiOn && (
+      {aiOn ? (
         <MoreDetails label={t("email.compose.draftToggle")}>
           <Form method="post" className="grid gap-4">
+            <p className="text-sm text-smoke">{t("email.compose.grounding")}</p>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label={t("email.compose.purpose")} htmlFor={`${uid}-purpose`}>
                 <Select name="purpose" value={purpose} onValueChange={(v) => setPurpose(v as typeof purpose)}>
@@ -76,7 +77,7 @@ export function ComposeStart({ aiOn, defaultLanguage }: { aiOn: boolean; default
                 </Select>
               </Field>
             </div>
-            <Field label={t("email.compose.stated")} htmlFor={`${uid}-stated`} optional>
+            <Field label={t("email.compose.stated")} htmlFor={`${uid}-stated`} hint={t("email.compose.statedHint")} optional>
               <Textarea
                 id={`${uid}-stated`}
                 name="statedPurpose"
@@ -93,6 +94,8 @@ export function ComposeStart({ aiOn, defaultLanguage }: { aiOn: boolean; default
             </div>
           </Form>
         </MoreDetails>
+      ) : (
+        <p className="text-sm text-smoke">{t("email.compose.aiOff")}</p>
       )}
     </div>
   );
@@ -130,9 +133,15 @@ export function DraftEditor({
     <div className="grid gap-4">
       <Form method="post" id={formId} className="grid gap-4">
         <input type="hidden" name="draftId" value={draft.id} />
-        <p className="text-xs text-smoke">
+        <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-smoke">
+          {draft.ai_generated && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-gold-soft px-2 py-0.5 font-medium text-gold-ink">
+              <Sparkles className="size-3" aria-hidden="true" />
+              {t("email.draft.aiBadge")}
+            </span>
+          )}
           <span className="font-medium text-graphite">{t(`email.purpose.${draft.purpose}`)}</span>
-          {draft.ai_generated && <> · {t("email.draft.review")}</>}
+          {draft.ai_generated && <span>· {t("email.draft.review")}</span>}
         </p>
 
         {(otherFlags.length > 0 || figureFlags.length > 0) && (

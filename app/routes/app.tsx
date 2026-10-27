@@ -76,7 +76,10 @@ function AppShell() {
         <main id="main" className="mx-auto w-full max-w-[1280px] flex-1 px-4 py-6 md:px-8 md:py-8">
           <Outlet />
         </main>
-        <footer className="mx-auto w-full max-w-[1280px] px-4 pb-6 text-xs text-smoke md:px-8">{t("common.footer.privacy")}</footer>
+        {/* The Ask page says the same thing under its question box. */}
+        {location.pathname !== "/app/ask" && (
+          <footer className="mx-auto w-full max-w-[1280px] px-4 pb-6 text-xs text-smoke md:px-8">{t("common.footer.privacy")}</footer>
+        )}
       </SidebarInset>
       <AssistantPanel />
     </SidebarProvider>

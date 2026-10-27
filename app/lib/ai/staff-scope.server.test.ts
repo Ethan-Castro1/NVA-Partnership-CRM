@@ -257,6 +257,11 @@ describe("the assistant", () => {
     expect(STAFF_SYSTEM_PROMPT).not.toMatch(/notes|funding|funder|origin|owner|opportunit|follow-up|web|intake|sign-up|hidden|private/i);
     expect(ADMIN_SYSTEM_PROMPT).toMatch(/search_web/);
     for (const prompt of [STAFF_SYSTEM_PROMPT, ADMIN_SYSTEM_PROMPT, STAFF_MCP_INSTRUCTIONS]) expect(prompt).not.toContain("—");
+    // Answers don't end by offering to draft messages; the cards hold the next steps.
+    for (const prompt of [STAFF_SYSTEM_PROMPT, ADMIN_SYSTEM_PROMPT]) expect(prompt).not.toMatch(/offer to draft|short offer/i);
+    // Web finds point to Connections instead of bare page addresses.
+    expect(ADMIN_SYSTEM_PROMPT).toContain("/app/connections?q=");
+    expect(ADMIN_SYSTEM_PROMPT).not.toMatch(/page address as plain text/);
   });
 
   it("falls back to plain search, scoped to staff, with reasons and no web tip", async () => {
@@ -272,8 +277,12 @@ describe("the assistant", () => {
       const cards = await peopleForCards(result.personIds, staff, result.reasons);
       expectStaffSafe(JSON.stringify(cards));
     }
-    const { answer } = await fallbackAnswer("someone to teach financial literacy", "en", staff);
-    expect(answer).toMatch(/Why: .*(banking|budgeting) background/);
+    const { answer, personIds, reasons } = await fallbackAnswer("someone to teach financial literacy", "en", staff);
+    expect(answer).toMatch(/^\d+ (people match|person matches)\.$/);
+    // Why they match rides along for the cards ("banking background"), never "mentions teaches".
+    const why = personIds.flatMap((id) => reasons[id] ?? []);
+    expect(why.some((r) => /banking|budgeting/i.test(r.value))).toBe(true);
+    expect(why.some((r) => r.kind === "bio" && /^teach/i.test(r.value))).toBe(false);
   });
 
   it("cards carry contact mode, contact details as staff may see them, and saved state", async () => {

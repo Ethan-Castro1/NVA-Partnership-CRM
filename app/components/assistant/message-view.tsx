@@ -1,7 +1,7 @@
 /**
  * One chat message, drawn the same way in the side panel, the full page and
  * the scripted example: what was looked up (one plain line per step), the
- * answer, then cards for the people in it.
+ * answer (with a Copy button), then cards for the people in it.
  */
 import type { DynamicToolUIPart } from "ai";
 import {
@@ -10,6 +10,7 @@ import {
   Check,
   ChevronDown,
   CircleAlert,
+  Copy,
   FolderKanban,
   Globe,
   Loader2,
@@ -18,8 +19,9 @@ import {
   UserRound,
   Users,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { VillageMark } from "~/components/nva";
+import { Button } from "~/components/ui/button";
 import { useT, type MessageKey } from "~/i18n";
 import { cn } from "~/lib/utils";
 import type { AskMessage, StepOutput } from "./chat-types";
@@ -89,11 +91,10 @@ function Step({ part }: { part: DynamicToolUIPart }) {
   );
 }
 
-/** All lookups as one quiet line ("Looked in 2 places · 14 found"); open it to see each step. */
+/** All lookups as one quiet line ("Looked in 2 places"); open it to see each step and what it found. */
 function Steps({ steps }: { steps: DynamicToolUIPart[] }) {
   const { t } = useT();
   const working = steps.find((p) => p.state === "input-streaming" || p.state === "input-available");
-  const found = steps.reduce((sum, p) => sum + (p.state === "output-available" ? ((p.output as StepOutput | undefined)?.found ?? 0) : 0), 0);
   return (
     <details className="group text-sm">
       <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 rounded-full text-xs text-smoke hover:text-graphite [&::-webkit-details-marker]:hidden">
@@ -102,8 +103,8 @@ function Steps({ steps }: { steps: DynamicToolUIPart[] }) {
           {working
             ? t("assistant.stepsWorking", { step: stepLabel(working, t) })
             : steps.length === 1
-              ? t("assistant.stepsSummaryOne", { found })
-              : t("assistant.stepsSummary", { count: steps.length, found })}
+              ? t("assistant.stepsSummaryOne")
+              : t("assistant.stepsSummary", { count: steps.length })}
         </span>
         <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" aria-hidden="true" />
       </summary>
@@ -113,6 +114,33 @@ function Steps({ steps }: { steps: DynamicToolUIPart[] }) {
         ))}
       </ol>
     </details>
+  );
+}
+
+/** The answer as plain text, for the clipboard: link labels without their addresses, no bold markers. */
+export function plainAnswer(text: string): string {
+  return text.replace(/\[([^\]\n]+)\]\([^)\s]+\)/g, "$1").replace(/\*\*/g, "");
+}
+
+function CopyAnswer({ text }: { text: string }) {
+  const { t } = useT();
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="-my-1 -ml-3 w-fit font-normal text-smoke hover:text-ink max-md:h-10"
+      onClick={() => void navigator.clipboard?.writeText(plainAnswer(text)).then(() => setCopied(true))}
+    >
+      {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+      {copied ? t("common.action.copied") : t("common.action.copy")}
+    </Button>
   );
 }
 
@@ -160,12 +188,13 @@ export function AskMessageView({ message, busy = false }: { message: AskMessage;
         ) : (
           busy &&
           !steps.length && (
-            <p role="status" className="flex items-center gap-2 text-sm text-smoke">
+            <p className="flex items-center gap-2 text-sm text-smoke">
               <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
               {t("assistant.pending")}
             </p>
           )
         )}
+        {text && !busy && notice !== "example" && <CopyAnswer text={text} />}
         {people && people.people.length > 0 && (
           <ul aria-label={t("assistant.peopleMentioned")} className="grid gap-1.5">
             {people.people.map((p) => (

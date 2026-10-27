@@ -8,7 +8,7 @@ export default defineMessages(
     noAddress: "There's no email address for {name}. Add one on their profile to send email.",
     noMailbox: "No mailbox is connected yet, so you can draft but not send.",
     connectMailbox: "Connect a mailbox",
-    demoOff: "Email is turned off in demo mode. You can still try drafting.",
+    demoOff: "Sending is turned off in demo mode. You can still write and save drafts.",
     mailboxNeedsReconnect: "{mailbox} needs to be connected again.",
 
     "compose.title": "Write an email",
@@ -131,7 +131,7 @@ export default defineMessages(
     noAddress: "No hay correo electrónico de {name}. Agrégalo en su perfil para enviarle correos.",
     noMailbox: "Todavía no hay un buzón conectado: puedes escribir borradores, pero no enviarlos.",
     connectMailbox: "Conectar un buzón",
-    demoOff: "El correo está desactivado en el modo de demostración. Puedes probar los borradores.",
+    demoOff: "El envío está desactivado en el modo de demostración. Puedes escribir y guardar borradores.",
     mailboxNeedsReconnect: "Hay que volver a conectar {mailbox}.",
 
     "compose.title": "Escribir un correo",

@@ -46,7 +46,11 @@ export default defineMessages(
     "connect.created": "Made {date}",
     "connect.lastUsed": "last used {date}",
     "connect.neverUsed": "not used yet",
+    "connect.trust":
+      "The link is read-only: it sees the same people you see in this app, and what it finds goes to your own Claude or ChatGPT account.",
     "connect.revoke": "Turn off",
+    "connect.revokeTitle": "Turn off {label}?",
+    "connect.revokeBody": "It stops working in Claude or ChatGPT right away. You can make a new link any time.",
     "connect.revoked": "Link turned off",
     "connect.tooMany": "You have the most links allowed. Turn one off first.",
 
@@ -78,7 +82,7 @@ export default defineMessages(
     "error.invalid": "Esa solicitud no se veía bien. Inténtalo de nuevo.",
     "error.demoLocked": "Esta es una cuenta de demostración compartida, así que su contraseña no se puede cambiar.",
     "connect.title": "Usar en Claude o ChatGPT",
-    "connect.description": "Busque socios de NVA desde su propio Claude o ChatGPT.",
+    "connect.description": "Busca socios de NVA desde tu propio Claude o ChatGPT.",
     "connect.setUp": "Configurar",
     "connect.create": "Crear mi enlace de conector",
     "connect.labelField": "Ponle un nombre",
@@ -95,7 +99,11 @@ export default defineMessages(
     "connect.created": "Creado el {date}",
     "connect.lastUsed": "usado por última vez el {date}",
     "connect.neverUsed": "sin usar todavía",
+    "connect.trust":
+      "El enlace es de solo lectura: ve a las mismas personas que ves en esta aplicación, y lo que encuentra va a tu propia cuenta de Claude o ChatGPT.",
     "connect.revoke": "Desactivar",
+    "connect.revokeTitle": "¿Desactivar {label}?",
+    "connect.revokeBody": "Deja de funcionar en Claude o ChatGPT de inmediato. Puedes crear un enlace nuevo cuando quieras.",
     "connect.revoked": "Enlace desactivado",
     "connect.tooMany": "Tienes el máximo de enlaces. Desactiva uno primero.",
 

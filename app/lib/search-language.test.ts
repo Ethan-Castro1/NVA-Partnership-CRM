@@ -154,6 +154,15 @@ describe("explainMatch", () => {
     ]);
   });
 
+  it("never explains a match with a vague word like teaches or students", () => {
+    const tutor: ExplainInput = { ...banker, skills: [], shared_summary: "She teaches students on weekends." };
+    const words = explainMatch(tutor, parseSearch("Who can teach a lesson?")).map((r) => r.value);
+    expect(words).not.toContain("teaches");
+    expect(words).not.toContain("students");
+    const es = explainMatch({ ...tutor, shared_summary: "Le gusta enseñar a estudiantes." }, parseSearch("alguien para enseñar"));
+    expect(es.map((r) => r.value)).not.toContain("enseñar");
+  });
+
   it("uses private notes only when they are passed (admins)", () => {
     const q = parseSearch("launchpad");
     expect(explainMatch(banker, q)).toEqual([]);

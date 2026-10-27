@@ -97,7 +97,7 @@ export default defineMessages(
   {
     title: "Conexiones",
     eyebrow: "¿Quién nos puede llevar ahí?",
-    description: "Encuentre personas que pueden ayudar y quién se las puede presentar.",
+    description: "Encuentra personas que pueden ayudar y quién te las puede presentar.",
     backToCap: "Volver a {title}",
 
     "search.label": "¿Qué necesitas?",
@@ -169,7 +169,7 @@ export default defineMessages(
 
     "leads.titleCount": "Contactos de la web ({count})",
     "leads.unverified": "De la web, sin verificar",
-    "leads.unverifiedHelp": "Revise las fuentes antes de comunicarse.",
+    "leads.unverifiedHelp": "Revisa las fuentes antes de comunicarte.",
     "leads.whyRelevant": "Por qué podría ayudar",
     "leads.sources": "Fuentes",
     "leads.via": "Posible camino: {name}",

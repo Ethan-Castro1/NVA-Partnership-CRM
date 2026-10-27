@@ -64,6 +64,7 @@ const STOPWORDS = new Set(
   (
     "a an and are at be by can could for from has have i in is it me my need needs needed needing of on or our " +
     "someone somebody anyone anybody who whom that the their them they this these those to us we with would " +
+    "teach teaches " +
     "people person partner partners help helps helping find finding looking look search searching about " +
     "want wants wanted like get give provide offer offers do does did how what when where which why will " +
     "should might may just really very also some any more most other into over through than then there " +
@@ -77,9 +78,23 @@ const STOPWORDS = new Set(
     "persona personas necesito necesitamos buscar busco buscamos sobre nuestro nuestra nuestros nuestras ayuda " +
     "ayudar mi mis su sus es son como cómo qué más muy también hay tiene tenga puede pueda podría quiere " +
     "estudiantes alumnos jóvenes chicos niños escuela clase clases básico básica próximo próxima trabaja " +
-    "trabajo apoya apoyar comunidad educación aprender algo"
+    "trabajo apoya apoyar comunidad educación aprender algo enseñar"
   ).split(" "),
 );
+
+/**
+ * Words too general to explain a match ("mentions teaches", "mentions students"):
+ * a free-text reason built on one of these is left out. English and Spanish.
+ */
+const REASON_STOPWORDS = new Set(
+  (
+    "teach teaches teaching taught help helps helping helped need needs needed someone somebody student students " +
+    "kid kids people person class classes school lesson lessons " +
+    "enseñar enseña enseñan enseñe enseñando ayuda ayudar ayudan necesito necesita necesitamos alguien " +
+    "estudiante estudiantes alumno alumnos persona personas clase clases escuela lección lecciones"
+  ).split(" "),
+);
+const vagueReason = (word: string) => REASON_STOPWORDS.has(word) || REASON_STOPWORDS.has(singular(word));
 
 type Rule = {
   /** Words or phrases that trigger the rule. A trailing * matches a word prefix ("enseñ*"). */
@@ -485,14 +500,15 @@ export function explainMatch(
   if (person.organization_name && (org || orgCategory)) add("organization", person.organization_name, org?.term);
 
   const about = findIn(person.shared_summary, fresh(terms)) ?? findIn(person.bio, fresh(terms));
-  if (about && !reasons.some((r) => r.value.toLowerCase().includes(about.word))) add("bio", about.word, about.term);
+  if (about && !vagueReason(about.word) && !reasons.some((r) => r.value.toLowerCase().includes(about.word)))
+    add("bio", about.word, about.term);
 
   const free = fresh(terms);
   if (person.availability && findIn(person.availability, free)) add("availability", person.availability);
   if (person.location && findIn(person.location, free)) add("location", person.location);
 
   const priv = findIn(person.private, fresh(terms));
-  if (priv) add("notes", priv.word, priv.term);
+  if (priv && !vagueReason(priv.word)) add("notes", priv.word, priv.term);
 
   return reasons;
 }

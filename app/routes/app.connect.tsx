@@ -10,6 +10,16 @@ import { toast } from "sonner";
 import type { Route } from "./+types/app.connect";
 import { Field, PageHeader, Panel, Sheet } from "~/components/nva";
 import { Button } from "~/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import { makeT, useT } from "~/i18n";
 import { requireUser } from "~/lib/auth.server";
@@ -60,6 +70,7 @@ export default function Connect() {
         </Link>
       </Button>
       <PageHeader title={t("account.connect.title")} description={t("account.connect.description")} />
+      <p className="-mt-3 max-w-2xl text-sm text-graphite">{t("account.connect.trust")}</p>
 
       {created ? (
         <Sheet className="grid gap-3 ring-2 ring-gold">
@@ -123,19 +134,55 @@ export default function Connect() {
                     {key.last_used_at ? t("account.connect.lastUsed", { date: date(key.last_used_at) }) : t("account.connect.neverUsed")}
                   </p>
                 </div>
-                <fetcher.Form method="post">
-                  <input type="hidden" name="intent" value="revoke" />
-                  <input type="hidden" name="id" value={key.id} />
-                  <Button type="submit" variant="ghost" size="sm">
-                    <Trash2 aria-hidden="true" />
-                    {t("account.connect.revoke")}
-                  </Button>
-                </fetcher.Form>
+                <RevokeLink id={key.id} label={key.label} />
               </li>
             ))}
           </ul>
         )}
       </Panel>
     </div>
+  );
+}
+
+/** "Turn off" asks first: the link stops working in Claude or ChatGPT right away. */
+function RevokeLink({ id, label }: { id: string; label: string }) {
+  const { t } = useT();
+  const fetcher = useFetcher<ActionResult>();
+  const [open, setOpen] = useState(false);
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button type="button" variant="ghost" size="sm" className="max-md:h-10">
+          <Trash2 aria-hidden="true" />
+          {t("account.connect.revoke")}
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("account.connect.revokeTitle", { label })}</DialogTitle>
+          <DialogDescription>{t("account.connect.revokeBody")}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="outline">
+              {t("common.action.cancel")}
+            </Button>
+          </DialogClose>
+          <fetcher.Form
+            method="post"
+            onSubmit={() => {
+              setOpen(false);
+              toast.success(t("account.connect.revoked"));
+            }}
+          >
+            <input type="hidden" name="intent" value="revoke" />
+            <input type="hidden" name="id" value={id} />
+            <Button type="submit" variant="destructive" disabled={fetcher.state !== "idle"}>
+              {t("account.connect.revoke")}
+            </Button>
+          </fetcher.Form>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

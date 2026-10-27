@@ -1,5 +1,6 @@
 import * as React from "react"
 import { cn } from "~/lib/utils"
+import { useT } from "~/i18n"
 import { Dialog as SheetPrimitive } from "radix-ui"
 
 import { Button } from "~/components/ui/button"
@@ -75,7 +76,7 @@ function SheetContent({
             >
               <XIcon
               />
-              <span className="sr-only">Close</span>
+              <CloseLabel />
             </Button>
           </SheetPrimitive.Close>
         )}
@@ -142,4 +143,10 @@ export {
   SheetFooter,
   SheetTitle,
   SheetDescription,
+}
+
+/** The close button's name, in the page language. */
+function CloseLabel() {
+  const { t } = useT()
+  return <span className="sr-only">{t("common.action.close")}</span>
 }

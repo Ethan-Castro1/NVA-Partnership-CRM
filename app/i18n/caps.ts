@@ -285,7 +285,7 @@ export default defineMessages(
 
     "suggest.title": "Posibles socios",
     "suggest.description": "Personas cuyas habilidades y temas coinciden con lo que necesita este CAP.",
-    "suggest.empty": "Todavía no hay coincidencias. Agregue temas o la ayuda que necesita.",
+    "suggest.empty": "Todavía no hay coincidencias. Agrega temas o la ayuda que necesita.",
     "suggest.add": "Agregar",
     "detail.more": "Más acciones",
     "form.more": "Más detalles",

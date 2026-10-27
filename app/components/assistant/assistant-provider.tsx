@@ -21,6 +21,7 @@ type AssistantContextValue = {
   /** Starts a fresh chat (keeps the current one if it's still empty). */
   newChat: () => void;
   openChat: (id: string) => Promise<void>;
+  /** Hides a chat at once and deletes it when the "Chat deleted" toast closes, unless Undo is clicked. */
   deleteChat: (id: string) => void;
   /** Asks a question in a new chat and opens the panel (used by "Ask" buttons around the app). */
   ask: (text: string, options?: { inPanel?: boolean }) => void;
@@ -34,8 +35,10 @@ const newChatId = () =>
 export function AssistantProvider({ children }: { children: ReactNode }) {
   const { t } = useT();
   const historyFetcher = useFetcher<{ chats: ChatSummary[] }>();
-  const deleteFetcher = useFetcher();
   const refreshRef = useRef<() => void>(() => {});
+  /** Chats deleted from the list whose toast is still up (Undo brings them back). */
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
+  const pendingDeletes = useRef(new Set<string>());
 
   const makeChat = useCallback(
     (id: string, messages: AskMessage[] = []) =>
@@ -86,19 +89,61 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     [chat, makeChat, t],
   );
 
+  const chatRef = useRef(chat);
+  chatRef.current = chat;
+
+  /** Sends the delete. keepalive lets it finish even if the page is closing. */
+  const commitDelete = useCallback((id: string) => {
+    if (!pendingDeletes.current.delete(id)) return;
+    const body = new FormData();
+    body.set("intent", "delete");
+    body.set("id", id);
+    void fetch("/app/assistant/chats", { method: "POST", body, keepalive: true })
+      .catch(() => {})
+      .finally(() => refreshRef.current());
+  }, []);
+
   const deleteChat = useCallback(
     (id: string) => {
-      deleteFetcher.submit({ intent: "delete", id }, { method: "post", action: "/app/assistant/chats" });
-      if (id === chat.id) setChat(makeChat(newChatId()));
-      toast.success(t("assistant.chatDeleted"));
+      const previous = chatRef.current;
+      const wasCurrent = id === previous.id;
+      pendingDeletes.current.add(id);
+      setHidden((set) => new Set(set).add(id));
+      if (wasCurrent) {
+        previous.stop();
+        setChat(makeChat(newChatId()));
+      }
+      toast.success(t("assistant.chatDeleted"), {
+        action: {
+          label: t("common.action.undo"),
+          onClick: () => {
+            pendingDeletes.current.delete(id);
+            setHidden((set) => {
+              const next = new Set(set);
+              next.delete(id);
+              return next;
+            });
+            // Reopen it if it was showing and nothing new was asked since.
+            const now = chatRef.current;
+            if (wasCurrent && now.messages.length === 0 && now.status === "ready") setChat(previous);
+          },
+        },
+        onAutoClose: () => commitDelete(id),
+        onDismiss: () => commitDelete(id),
+      });
     },
-    [chat.id, deleteFetcher, makeChat, t],
+    [commitDelete, makeChat, t],
   );
 
-  // After a delete finishes, refresh the list.
+  // Deletes still waiting on their toast go through if the app is left or closed.
   useEffect(() => {
-    if (deleteFetcher.state === "idle" && deleteFetcher.data) refreshRef.current();
-  }, [deleteFetcher.state, deleteFetcher.data]);
+    const flush = () => [...pendingDeletes.current].forEach(commitDelete);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, [commitDelete]);
 
   const ask = useCallback(
     (text: string, options: { inPanel?: boolean } = {}) => {
@@ -118,7 +163,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AssistantContextValue>(
     () => ({
       chat,
-      history: historyFetcher.data?.chats ?? [],
+      history: (historyFetcher.data?.chats ?? []).filter((item) => !hidden.has(item.id)),
       loadingChatId,
       panelOpen,
       setPanelOpen,
@@ -127,7 +172,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       deleteChat,
       ask,
     }),
-    [chat, historyFetcher.data, loadingChatId, panelOpen, setPanelOpen, newChat, openChat, deleteChat, ask],
+    [chat, historyFetcher.data, hidden, loadingChatId, panelOpen, setPanelOpen, newChat, openChat, deleteChat, ask],
   );
 
   return <AssistantContext.Provider value={value}>{children}</AssistantContext.Provider>;

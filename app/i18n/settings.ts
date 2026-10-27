@@ -83,7 +83,7 @@ export default defineMessages(
     demoMode: "Esto es una demostración. Las conexiones de correo están desactivadas.",
 
     "email.title": "Correo",
-    "email.description": "Conecte el buzón de Google o Microsoft de NVA. La aplicación nunca ve su contraseña.",
+    "email.description": "Conecta el buzón de Google o Microsoft de NVA. La aplicación nunca ve tu contraseña.",
     "email.open": "Configuración de correo",
     "email.connectedAs": "Conectado: {mailbox}",
     "email.notConnected": "No hay un buzón conectado.",
@@ -145,7 +145,7 @@ export default defineMessages(
 
     "ai.title": "IA",
     "ai.on": "Encendida.",
-    "ai.off": "Apagada. Configure OPENROUTER_API_KEY o ANTHROPIC_API_KEY para activarla.",
+    "ai.off": "Apagada. Configura OPENROUTER_API_KEY o ANTHROPIC_API_KEY para activarla.",
     "ai.model": "Modelo: {model}",
 
     "staff.title": "Cuentas del personal",

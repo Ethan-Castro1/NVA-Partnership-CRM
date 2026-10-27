@@ -129,7 +129,8 @@ contacts, opportunities, follow-ups, staff requests, sign-up review, email). Spe
   seeded by `app/lib/cap-catalog.server.ts`. A CAP key doubles as a person's CAP topic tag.
 - **Assistant:** AI SDK `useChat` on the client (`app/components/assistant/*`), streaming route
   `app/routes/app.assistant.chat.ts`, Claude tool loop in `app/lib/ai/assistant.server.ts`. Chats are saved
-  per staff member (`assistant_chats`). The panel lives in the app layout so it stays open across pages.
+  per staff member (`assistant_chats`). The panel lives in the app layout: it docks beside the page from 2xl (1536px)
+  and stays open across pages; below that it is an overlay sheet (a dialog) that doesn't shift the page.
   The "Watch an example" walkthrough is scripted with `@shadcn/helpers/ai-sdk`.
 - **MCP connector:** `/mcp/<key>` (stateless Streamable HTTP, `app/lib/ai/mcp.server.ts`) exposes the same
   read-only tools to Claude or ChatGPT. Staff make personal keys at `/app/connect`.

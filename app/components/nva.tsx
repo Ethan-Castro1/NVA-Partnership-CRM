@@ -6,7 +6,7 @@
  */
 import { Form, Link, useLocation } from "react-router";
 import type { ReactNode } from "react";
-import { Languages, Sparkles } from "lucide-react";
+import { Languages } from "lucide-react";
 import { Label } from "~/components/ui/label";
 import { useT } from "~/i18n";
 import {
@@ -326,13 +326,3 @@ export function LanguageToggle({ className, variant = "pill" }: { className?: st
   );
 }
 
-/** Shown where an AI feature would be, when ANTHROPIC_API_KEY isn't set. */
-export function AiNotice({ className }: { className?: string }) {
-  const { t } = useT();
-  return (
-    <p className={cn("flex items-start gap-2 rounded-xl bg-gold-soft px-3.5 py-2.5 text-sm text-graphite", className)}>
-      <Sparkles className="mt-0.5 size-4 shrink-0 text-gold-ink" aria-hidden="true" />
-      {t("common.ai.notConfigured")}
-    </p>
-  );
-}

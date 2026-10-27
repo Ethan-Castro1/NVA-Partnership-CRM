@@ -25,7 +25,7 @@ import { useT } from "~/i18n";
 import { addDays } from "~/lib/dates";
 import type { NamedOption, PersonOption } from "~/lib/opportunities.server";
 import { cn } from "~/lib/utils";
-import { CrmSelect } from "./crm-bits";
+import { CrmSelect, MoreDetails } from "./crm-bits";
 import { FOLLOW_UP_ACTION, type FollowUpActionResult } from "./follow-up-list";
 
 export type QuickFollowUpFormProps = {
@@ -107,39 +107,43 @@ export function QuickFollowUpForm({
         />
       </Field>
 
-      <div className={cn("grid gap-4", (showOpportunities || showOwners) && "sm:grid-cols-2")}>
-        <Field label={t("crm.fu.form.dueOn")} htmlFor={`${uid}-due`} error={errors.dueOn && t(errors.dueOn)}>
-          <Input id={`${uid}-due`} type="date" name="dueOn" required defaultValue={addDays(today, 7)} className="h-10 bg-canvas" />
-        </Field>
-        {showOwners && (
-          <Field label={t("crm.fu.form.owner")} htmlFor={`${uid}-owner`}>
-            <CrmSelect
-              id={`${uid}-owner`}
-              name="ownerUserId"
-              defaultValue={defaultOwnerId}
-              placeholder={t("crm.fu.form.owner")}
-              options={owners.map((o) => ({ value: o.id, label: o.name }))}
-            />
-          </Field>
-        )}
-        {showOpportunities && (
-          <Field label={t("crm.fu.form.opportunity")} htmlFor={`${uid}-opp`} className={showOwners ? "sm:col-span-2" : undefined}>
-            <CrmSelect
-              id={`${uid}-opp`}
-              name="opportunityId"
-              defaultValue="none"
-              options={[{ value: "none", label: t("crm.fu.form.noOpportunity") }, ...opportunities.map((o) => ({ value: o.id, label: o.title }))]}
-            />
-          </Field>
-        )}
-      </div>
+      <Field label={t("crm.fu.form.dueOn")} htmlFor={`${uid}-due`} error={errors.dueOn && t(errors.dueOn)} className="sm:max-w-56">
+        <Input id={`${uid}-due`} type="date" name="dueOn" required defaultValue={addDays(today, 7)} className="h-10 bg-canvas" />
+      </Field>
 
-      <div className="flex items-center gap-2">
-        <Checkbox id={`${uid}-awaiting`} name="awaitingResponse" />
-        <Label htmlFor={`${uid}-awaiting`} className="text-sm font-normal text-graphite">
-          {t("crm.fu.form.awaiting")}
-        </Label>
-      </div>
+      <MoreDetails label={t("crm.moreDetails")}>
+        {(showOwners || showOpportunities) && (
+          <div className={cn("grid gap-4", showOpportunities && showOwners && "sm:grid-cols-2")}>
+            {showOwners && (
+              <Field label={t("crm.fu.form.owner")} htmlFor={`${uid}-owner`}>
+                <CrmSelect
+                  id={`${uid}-owner`}
+                  name="ownerUserId"
+                  defaultValue={defaultOwnerId}
+                  placeholder={t("crm.fu.form.owner")}
+                  options={owners.map((o) => ({ value: o.id, label: o.name }))}
+                />
+              </Field>
+            )}
+            {showOpportunities && (
+              <Field label={t("crm.fu.form.opportunity")} htmlFor={`${uid}-opp`}>
+                <CrmSelect
+                  id={`${uid}-opp`}
+                  name="opportunityId"
+                  defaultValue="none"
+                  options={[{ value: "none", label: t("crm.fu.form.noOpportunity") }, ...opportunities.map((o) => ({ value: o.id, label: o.title }))]}
+                />
+              </Field>
+            )}
+          </div>
+        )}
+        <div className="flex items-center gap-2">
+          <Checkbox id={`${uid}-awaiting`} name="awaitingResponse" />
+          <Label htmlFor={`${uid}-awaiting`} className="text-sm font-normal text-graphite">
+            {t("crm.fu.form.awaiting")}
+          </Label>
+        </div>
+      </MoreDetails>
 
       <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" variant={submitVariant} disabled={busy}>

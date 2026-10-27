@@ -2,13 +2,13 @@
 import { Link, useLoaderData } from "react-router";
 import { Plus } from "lucide-react";
 import type { Route } from "./+types/app.caps._index";
-import { CapCard } from "~/components/caps/cap-bits";
-import { EmptyState, PageHeader } from "~/components/nva";
+import { CapRows } from "~/components/caps/cap-bits";
+import { SegmentedLinks } from "~/components/crm/crm-bits";
+import { PageHeader, Sheet } from "~/components/nva";
 import { Button } from "~/components/ui/button";
 import { makeT, useT } from "~/i18n";
 import { requireUser } from "~/lib/auth.server";
 import { listCaps, listMyCaps } from "~/lib/caps.server";
-import { cn } from "~/lib/utils";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const locale = (matches[0]?.data as { locale?: "en" | "es" } | undefined)?.locale ?? "en";
@@ -49,11 +49,12 @@ export default function Caps() {
   ];
 
   return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-8">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <PageHeader
-        eyebrow={t("caps.eyebrow")}
         title={t("caps.title")}
-        description={t("caps.description")}
+        description={
+          <span className="font-medium text-graphite">{caps.length === 1 ? t("caps.list.countOne") : t("caps.list.count", { count: caps.length })}</span>
+        }
         actions={
           <Button asChild variant="brand" size="lg">
             <Link to="/app/caps/new">
@@ -64,58 +65,20 @@ export default function Caps() {
         }
       />
 
-      <div className="flex flex-wrap gap-3">
-        <Segmented label={t("caps.list.tabsLabel")} tabs={whose} />
-        <Segmented label={t("caps.list.stateLabel")} tabs={state} />
+      <div className="flex flex-wrap gap-2">
+        <SegmentedLinks label={t("caps.list.tabsLabel")} tabs={whose} />
+        <SegmentedLinks label={t("caps.list.stateLabel")} tabs={state} />
       </div>
 
       {caps.length ? (
-        <ul className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-          {caps.map((cap) => (
-            <li key={cap.id}>
-              <CapCard cap={cap} />
-            </li>
-          ))}
-        </ul>
-      ) : finished ? (
-        <EmptyState title={t("caps.list.emptyFinished")} />
+        <Sheet className="px-4 py-1 md:px-5">
+          <CapRows caps={caps} />
+        </Sheet>
       ) : (
-        <EmptyState
-          title={mine ? t("caps.list.emptyMine") : t("caps.list.empty")}
-          body={t("caps.list.emptyBody")}
-          action={
-            <Button asChild variant="outline">
-              <Link to="/app/caps/new">
-                <Plus aria-hidden="true" />
-                {t("caps.list.new")}
-              </Link>
-            </Button>
-          }
-        />
+        <p className="text-sm text-smoke">
+          {finished ? t("caps.list.emptyFinished") : mine ? t("caps.list.emptyMine") : t("caps.list.empty")}
+        </p>
       )}
     </div>
-  );
-}
-
-function Segmented({ label, tabs }: { label: string; tabs: { to: string; label: string; current: boolean }[] }) {
-  return (
-    <nav aria-label={label}>
-      <ul className="inline-flex rounded-full border border-stone bg-taupe p-1">
-        {tabs.map((tab) => (
-          <li key={tab.to}>
-            <Link
-              to={tab.to}
-              aria-current={tab.current ? "page" : undefined}
-              className={cn(
-                "inline-flex h-8 items-center rounded-full px-4 text-sm transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
-                tab.current ? "bg-canvas font-medium text-ink shadow-whisper" : "text-graphite hover:text-ink",
-              )}
-            >
-              {tab.label}
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </nav>
   );
 }

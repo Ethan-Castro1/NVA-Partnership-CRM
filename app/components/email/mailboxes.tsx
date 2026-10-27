@@ -4,7 +4,6 @@ import { Mail, RefreshCw, Unplug } from "lucide-react";
 import type { EmailAccountView } from "~/lib/email/accounts.server";
 import type { EmailProvider, ProviderSetup } from "~/lib/email/config.server";
 import { formatDateTime } from "~/components/admin/format";
-import { EmptyState } from "~/components/nva";
 import { Button } from "~/components/ui/button";
 import { useT } from "~/i18n";
 import { cn } from "~/lib/utils";
@@ -57,7 +56,7 @@ export function MailboxList({
   return (
     <div className="grid gap-4">
       {accounts.length === 0 ? (
-        <EmptyState title={t("settings.accounts.none")} />
+        <p className="text-sm text-smoke">{t("settings.accounts.none")}</p>
       ) : (
         <ul className="grid gap-3">
           {accounts.map((a) => (

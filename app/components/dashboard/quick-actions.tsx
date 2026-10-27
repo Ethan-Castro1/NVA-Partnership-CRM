@@ -1,20 +1,22 @@
 /**
- * Admin quick actions: add a contact (the screen's one gold button), record an
- * interaction, create a follow-up, draft an email, review staff requests.
+ * Admin quick actions: add a contact (the screen's one gold button) and a "New"
+ * menu for record an interaction, create a follow-up and draft an email.
  * Record and draft ask for the person, then the dashboard action sends you to
  * their profile's log form or their email page.
  */
 import { useId, useState } from "react";
 import { Form, Link, useActionData, useNavigation } from "react-router";
-import { CalendarPlus, ClipboardCheck, Mail, NotebookPen, UserPlus } from "lucide-react";
+import { CalendarPlus, ChevronDown, Mail, NotebookPen, Plus, UserPlus } from "lucide-react";
 import { CrmSelect, QuickFollowUpForm } from "~/components/crm";
 import { Button } from "~/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "~/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "~/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "~/components/ui/dropdown-menu";
 import { Label } from "~/components/ui/label";
 import { useT } from "~/i18n";
 import type { NamedOption, PersonOption } from "~/lib/opportunities.server";
 
 type PickIntent = "record" | "draft";
+type Open = null | PickIntent | "followUp";
 
 export function QuickActions({
   today,
@@ -28,63 +30,69 @@ export function QuickActions({
   defaultOwnerId: string;
 }) {
   const { t } = useT();
-  const [followUpOpen, setFollowUpOpen] = useState(false);
+  const [open, setOpen] = useState<Open>(null);
+  const close = (next: boolean) => !next && setOpen(null);
 
   return (
-    <section aria-label={t("dashboard.quick.label")}>
-      <ul className="flex flex-wrap gap-2">
-        <li>
-          <Button asChild variant="brand">
-            <Link to="/app/people/new">
-              <UserPlus aria-hidden="true" />
-              {t("dashboard.quick.addContact")}
-            </Link>
+    <div role="group" aria-label={t("dashboard.quick.label")} className="flex flex-wrap items-center gap-2">
+      <Button asChild variant="brand">
+        <Link to="/app/people/new">
+          <UserPlus aria-hidden="true" />
+          {t("dashboard.quick.addContact")}
+        </Link>
+      </Button>
+      {/* Not modal, so the dialog it opens gets focus cleanly when the menu closes. */}
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline">
+            <Plus aria-hidden="true" />
+            {t("dashboard.quick.new")}
+            <ChevronDown aria-hidden="true" />
           </Button>
-        </li>
-        <li>
-          <PersonPicker intent="record" people={people} />
-        </li>
-        <li>
-          <Dialog open={followUpOpen} onOpenChange={setFollowUpOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline">
-                <CalendarPlus aria-hidden="true" />
-                {t("dashboard.quick.followUp")}
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>{t("dashboard.quick.followUp")}</DialogTitle>
-                <DialogDescription>{t("dashboard.followUp.body")}</DialogDescription>
-              </DialogHeader>
-              <QuickFollowUpForm
-                today={today}
-                people={people}
-                owners={owners}
-                defaultOwnerId={defaultOwnerId}
-                onDone={() => setFollowUpOpen(false)}
-              />
-            </DialogContent>
-          </Dialog>
-        </li>
-        <li>
-          <PersonPicker intent="draft" people={people} />
-        </li>
-        <li>
-          <Button asChild variant="outline">
-            <Link to="/app/admin/requests">
-              <ClipboardCheck aria-hidden="true" />
-              {t("dashboard.quick.review")}
-            </Link>
-          </Button>
-        </li>
-      </ul>
-    </section>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuItem onSelect={() => setOpen("record")}>
+            <NotebookPen aria-hidden="true" />
+            {t("dashboard.quick.record")}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setOpen("followUp")}>
+            <CalendarPlus aria-hidden="true" />
+            {t("dashboard.quick.followUp")}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setOpen("draft")}>
+            <Mail aria-hidden="true" />
+            {t("dashboard.quick.draft")}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <Dialog open={open === "followUp"} onOpenChange={close}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("dashboard.quick.followUp")}</DialogTitle>
+            <DialogDescription className="sr-only">{t("dashboard.followUp.body")}</DialogDescription>
+          </DialogHeader>
+          <QuickFollowUpForm today={today} people={people} owners={owners} defaultOwnerId={defaultOwnerId} onDone={() => setOpen(null)} />
+        </DialogContent>
+      </Dialog>
+      <PersonPicker intent="record" people={people} open={open === "record"} onOpenChange={close} />
+      <PersonPicker intent="draft" people={people} open={open === "draft"} onOpenChange={close} />
+    </div>
   );
 }
 
-/** A button that opens "choose a person", then posts to the dashboard action, which redirects. */
-function PersonPicker({ intent, people }: { intent: PickIntent; people: PersonOption[] }) {
+/** "Choose a person", then posts to the dashboard action, which redirects. */
+function PersonPicker({
+  intent,
+  people,
+  open,
+  onOpenChange,
+}: {
+  intent: PickIntent;
+  people: PersonOption[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const { t } = useT();
   const id = useId();
   const navigation = useNavigation();
@@ -94,13 +102,7 @@ function PersonPicker({ intent, people }: { intent: PickIntent; people: PersonOp
   const title = intent === "record" ? t("dashboard.quick.record") : t("dashboard.quick.draft");
 
   return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button variant="outline">
-          {intent === "record" ? <NotebookPen aria-hidden="true" /> : <Mail aria-hidden="true" />}
-          {title}
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>

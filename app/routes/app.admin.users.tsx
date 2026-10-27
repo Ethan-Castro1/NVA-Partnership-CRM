@@ -1,18 +1,17 @@
 /** Staff accounts: create, change role, deactivate/reactivate, reset password. */
 import { useEffect, useRef, useState } from "react";
 import { data, useFetcher, useLoaderData } from "react-router";
-import { UserPlus } from "lucide-react";
+import { UserPlus, X } from "lucide-react";
 import { z } from "zod";
 import type { Route } from "./+types/app.admin.users";
 import { formatDate } from "~/components/admin/format";
 import { StaffActions, TempPasswordField, type StaffActionResult } from "~/components/admin/staff";
-import { Field, PageHeader, Panel, PersonAvatar, Sheet } from "~/components/nva";
+import { Field, PageHeader, PersonAvatar, Sheet } from "~/components/nva";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "~/components/ui/table";
 import { makeT, useT } from "~/i18n";
-import { changeStaffAccount, emailTaken, getStaff, listStaff, type StaffRow } from "~/lib/admin.server";
+import { changeStaffAccount, emailTaken, getStaff, listStaff } from "~/lib/admin.server";
 import {
   MIN_PASSWORD_LENGTH,
   createUser,
@@ -104,100 +103,60 @@ export async function action({ request }: Route.ActionArgs) {
 export default function StaffAccounts() {
   const { users, meId, minLength } = useLoaderData<typeof loader>();
   const { t } = useT();
+  const [adding, setAdding] = useState(false);
 
   return (
-    <div className="space-y-6">
-      <PageHeader eyebrow={t("common.nav.adminSection")} title={t("admin.users.title")} description={t("admin.users.description")} />
+    <div className="mx-auto grid w-full max-w-4xl min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
+      <PageHeader
+        title={t("admin.users.title")}
+        actions={
+          adding ? (
+            <Button variant="outline" size="lg" onClick={() => setAdding(false)}>
+              <X aria-hidden="true" />
+              {t("common.action.cancel")}
+            </Button>
+          ) : (
+            <Button variant="brand" size="lg" onClick={() => setAdding(true)}>
+              <UserPlus aria-hidden="true" />
+              {t("admin.users.new")}
+            </Button>
+          )
+        }
+      />
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
-        <Panel title={t("admin.users.listTitle")} className="min-w-0">
-          <Sheet className="p-0">
-            <div className="hidden lg:block">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="pl-5">{t("admin.col.name")}</TableHead>
-                    <TableHead>{t("admin.col.account")}</TableHead>
-                    <TableHead>{t("admin.col.lastSignIn")}</TableHead>
-                    <TableHead className="pr-5">{t("admin.col.actions")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {users.map((u) => (
-                    <TableRow key={u.id} className={cn(!u.active && "bg-taupe/50")}>
-                      <TableCell className="pl-5">
-                        <UserCell user={u} isSelf={u.id === meId} />
-                      </TableCell>
-                      <TableCell>
-                        <ActiveBadge active={u.active} />
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-smoke">
-                        <LastSignIn iso={u.last_login_at} />
-                      </TableCell>
-                      <TableCell className="pr-5 whitespace-normal">
-                        <StaffActions user={u} isSelf={u.id === meId} minLength={minLength} />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            <ul className="divide-y divide-stone lg:hidden">
-              {users.map((u) => (
-                <li key={u.id} className={cn("grid gap-3 p-4", !u.active && "bg-taupe/50")}>
-                  <UserCell user={u} isSelf={u.id === meId} />
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-smoke">
-                    <ActiveBadge active={u.active} />
-                    <span>
-                      {t("admin.col.lastSignIn")}: <LastSignIn iso={u.last_login_at} />
+      {adding && <CreateAccount minLength={minLength} />}
+
+      <Sheet className="px-4 py-1 md:px-5">
+        <ul className="divide-y divide-stone">
+          {users.map((u) => (
+            <li key={u.id} className={cn("flex items-center gap-3 py-3", !u.active && "opacity-70")}>
+              <PersonAvatar name={u.name} className="hidden sm:flex" />
+              <div className="grid min-w-0 flex-1 gap-0.5">
+                <span className="flex min-w-0 items-center gap-2 font-medium">
+                  <span className="truncate">{u.name}</span>
+                  {u.id === meId && <span className="shrink-0 rounded-full bg-gold-soft px-2 text-[0.7rem] font-medium text-gold-ink">{t("admin.users.you")}</span>}
+                  {!u.active && (
+                    <span className="inline-flex h-5 shrink-0 items-center rounded-full bg-stone px-2 text-[0.7rem] font-medium text-smoke">
+                      {t("admin.users.inactive")}
                     </span>
-                  </div>
-                  <StaffActions user={u} isSelf={u.id === meId} minLength={minLength} />
-                </li>
-              ))}
-            </ul>
-          </Sheet>
-        </Panel>
-
-        <CreateAccount minLength={minLength} />
-      </div>
+                  )}
+                </span>
+                <span className="truncate text-xs text-smoke">
+                  {u.email} · <LastSignIn iso={u.last_login_at} />
+                </span>
+              </div>
+              <StaffActions user={u} isSelf={u.id === meId} minLength={minLength} />
+            </li>
+          ))}
+        </ul>
+      </Sheet>
     </div>
-  );
-}
-
-function UserCell({ user, isSelf }: { user: StaffRow; isSelf: boolean }) {
-  const { t } = useT();
-  return (
-    <div className="flex min-w-0 items-center gap-3">
-      <PersonAvatar name={user.name} />
-      <div className="grid min-w-0">
-        <span className="flex items-center gap-2 truncate font-medium">
-          {user.name}
-          {isSelf && <span className="rounded-full bg-gold-soft px-2 text-[0.7rem] font-medium text-gold-ink">{t("admin.users.you")}</span>}
-        </span>
-        <span className="truncate text-xs text-smoke">{user.email}</span>
-      </div>
-    </div>
-  );
-}
-
-function ActiveBadge({ active }: { active: boolean }) {
-  const { t } = useT();
-  return (
-    <span
-      className={cn(
-        "inline-flex h-5 items-center rounded-full px-2 text-[0.7rem] font-medium",
-        active ? "bg-sage-soft text-sage-ink" : "bg-stone text-smoke",
-      )}
-    >
-      {active ? t("admin.users.active") : t("admin.users.inactive")}
-    </span>
   );
 }
 
 function LastSignIn({ iso }: { iso: string | null }) {
   const { t, locale } = useT();
-  return iso ? <time dateTime={iso}>{formatDate(iso, locale)}</time> : <span>{t("admin.users.never")}</span>;
+  return iso ? <>{t("admin.users.lastSignIn", { date: formatDate(iso, locale) })}</> : <>{t("admin.users.neverSignedIn")}</>;
 }
 
 function CreateAccount({ minLength }: { minLength: number }) {
@@ -221,10 +180,8 @@ function CreateAccount({ minLength }: { minLength: number }) {
   }, [result]);
 
   return (
-    <Panel title={t("admin.users.create")} className="h-fit">
-      <p className="-mt-2 mb-4 text-sm text-smoke">{t("admin.users.createHint")}</p>
-      <Sheet>
-        <fetcher.Form method="post" ref={formRef} className="grid gap-4" noValidate>
+    <Sheet className="p-5 md:p-6">
+        <fetcher.Form method="post" ref={formRef} className="grid gap-4 sm:grid-cols-2" noValidate>
           <input type="hidden" name="intent" value="create" />
           <Field label={t("common.field.name")} htmlFor="new-name" error={fieldError("name")}>
             <Input id="new-name" name="name" required maxLength={120} autoComplete="off" aria-invalid={fieldError("name") ? true : undefined} />
@@ -262,21 +219,20 @@ function CreateAccount({ minLength }: { minLength: number }) {
             error={fieldError("password")}
           />
           {result && !result.ok && !result.field && (
-            <p role="alert" className="rounded-xl bg-rust-soft px-3.5 py-2.5 text-sm text-rust-ink">
+            <p role="alert" className="rounded-xl bg-rust-soft px-3.5 py-2.5 text-sm text-rust-ink sm:col-span-2">
               {t(result.error)}
             </p>
           )}
           {result?.ok && result.done === "created" && (
-            <p role="status" className="rounded-xl bg-sage-soft px-3.5 py-2.5 text-sm text-sage-ink">
+            <p role="status" className="rounded-xl bg-sage-soft px-3.5 py-2.5 text-sm text-sage-ink sm:col-span-2">
               {t("admin.users.created", { name: result.name ?? "" })}
             </p>
           )}
-          <Button type="submit" variant="brand" disabled={busy} className="w-full sm:w-fit">
+          <Button type="submit" disabled={busy} className="w-full sm:col-span-2 sm:w-fit">
             <UserPlus aria-hidden="true" />
             {busy ? t("admin.users.creating") : t("admin.users.createSubmit")}
           </Button>
         </fetcher.Form>
-      </Sheet>
-    </Panel>
+    </Sheet>
   );
 }

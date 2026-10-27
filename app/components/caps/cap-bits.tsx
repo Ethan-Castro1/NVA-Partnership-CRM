@@ -115,3 +115,35 @@ export function CapCard({ cap }: { cap: CapSummary }) {
     </Sheet>
   );
 }
+
+/** CAPs as a compact list, two lines a row: title and partners, then teacher, blocks and labels. */
+export function CapRows({ caps }: { caps: CapSummary[] }) {
+  const { t } = useT();
+  return (
+    <ul className="divide-y divide-stone">
+      {caps.map((cap) => {
+        const days = cap.blocks.map((b) => `${t("caps.block.name", { block: b })} ${t(`caps.days.${BLOCK_DAYS[b]}`)}`).join(", ");
+        const meta = [cap.teacher || cap.owner_name, days, ...cap.labels.map((l) => t(`caps.label.${l}`))].filter(Boolean);
+        return (
+          <li key={cap.id} className="grid grid-cols-[minmax(0,1fr)] gap-0.5 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <Link to={`/app/caps/${cap.id}`} className="min-w-0 font-medium underline-offset-4 hover:underline">
+                {cap.title}
+              </Link>
+              {cap.status !== "active" ? (
+                <CapStatusBadge status={cap.status} className="mt-0.5 shrink-0" />
+              ) : (
+                <span className={cn("shrink-0 text-xs", cap.confirmed_count ? "text-sage-ink" : "text-smoke")}>
+                  {cap.partner_count
+                    ? t("caps.card.partnersShort", { confirmed: cap.confirmed_count, total: cap.partner_count })
+                    : t("caps.card.noPartners")}
+                </span>
+              )}
+            </div>
+            <p className="truncate text-xs text-smoke">{meta.join(" · ")}</p>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}

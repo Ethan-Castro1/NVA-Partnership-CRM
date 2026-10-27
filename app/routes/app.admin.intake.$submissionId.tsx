@@ -7,7 +7,7 @@
 import { TopicList } from "~/components/caps/cap-bits";
 import { data, Link, redirect, useFetcher, useLoaderData } from "react-router";
 import type { ReactNode } from "react";
-import { Archive, ArrowLeft, ExternalLink, Pencil, RotateCcw, UserRound } from "lucide-react";
+import { Archive, ArrowLeft, ExternalLink, Pencil, RotateCcw } from "lucide-react";
 import { z } from "zod";
 import type { Route } from "./+types/app.admin.intake.$submissionId";
 import { IntakeStatusBadge, formatDate, formatDateTime } from "~/components/admin/format";
@@ -24,7 +24,6 @@ import {
 import {
   ContributionChip,
   ContributionChips,
-  EmptyState,
   PageHeader,
   Panel,
   PersonAvatar,
@@ -38,6 +37,7 @@ import { decidedIntakeName as decidedName, getIntakeSubmission, nextNewIntake, s
 import { requireAdmin } from "~/lib/auth.server";
 import { approveIntake, linkIntake, readIntakeEdits, rejectIntake, saveIntakeEdits } from "~/lib/intake.server";
 import type { IntakePayload } from "~/lib/intake-types";
+import { cn } from "~/lib/utils";
 
 export const meta: Route.MetaFunction = ({ matches, data: loaderData }) => {
   const locale = (matches[0]?.data as { locale?: "en" | "es" } | undefined)?.locale ?? "en";
@@ -133,13 +133,14 @@ export default function IntakeDetailPage() {
       </Button>
 
       <PageHeader
-        eyebrow={t("admin.detail.eyebrow")}
         title={p.full_name || "?"}
         description={
-          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <IntakeStatusBadge status={s.status} />
-            <span>{t("admin.detail.submittedOn", { date: formatDateTime(s.submitted_at, locale) })}</span>
-            <span>{t("admin.detail.formLanguage", { language: t(s.locale === "es" ? "common.lang.es" : "common.lang.en") })}</span>
+            <span>
+              {formatDateTime(s.submitted_at, locale)}
+              {s.locale === "es" && <> · {t("admin.detail.formLanguage", { language: t("common.lang.es") })}</>}
+            </span>
           </span>
         }
         actions={
@@ -187,10 +188,7 @@ export default function IntakeDetailPage() {
         <Panel title={t("admin.detail.decide")}>
           <div className="grid gap-6">
             <section aria-labelledby="matches-title" className="grid gap-3">
-              <div>
-                <h3 id="matches-title" className="font-medium">{t("admin.detail.matches.title")}</h3>
-                {s.duplicates.length > 0 && <p className="text-sm text-smoke">{t("admin.detail.matches.hint")}</p>}
-              </div>
+              <h3 id="matches-title" className="font-medium">{t("admin.detail.matches.title")}</h3>
               <MatchList duplicates={s.duplicates} primaryId={linkFirst ? strongest.id : null} />
             </section>
             <div className="border-t border-stone pt-5">
@@ -203,10 +201,10 @@ export default function IntakeDetailPage() {
         <DecisionSummary submission={s} />
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+      <div className={cn("grid gap-6", (person || p.referred_by) && "lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]")}>
         <div className="min-w-0 space-y-6">
           <Panel title={t("admin.detail.shared")}>
-            <p className="-mt-2 mb-4 text-sm text-smoke">{s.original ? t("admin.detail.edited") : t("admin.detail.asTyped")}</p>
+            {s.original && <p className="-mt-2 mb-4 text-sm text-smoke">{t("admin.detail.edited")}</p>}
             <Sheet>
               <PayloadDetails payload={p} />
             </Sheet>
@@ -222,8 +220,9 @@ export default function IntakeDetailPage() {
             )}
           </Panel>
 
+          {s.referrals.length > 0 && (
           <Panel title={t("admin.detail.referrals")}>
-            {s.referrals.length ? (
+            {(
               <ul className="grid gap-3">
                 {s.referrals.map(({ referral, match }, i) => (
                   <li key={i}>
@@ -250,10 +249,9 @@ export default function IntakeDetailPage() {
                   </li>
                 ))}
               </ul>
-            ) : (
-              <EmptyState title={t("admin.detail.noReferrals")} />
             )}
           </Panel>
+          )}
         </div>
 
         <div className="min-w-0 space-y-6">
@@ -263,7 +261,9 @@ export default function IntakeDetailPage() {
                   <div className="flex items-center gap-3">
                     <PersonAvatar name={person.full_name} className="size-11" />
                     <div className="grid min-w-0">
-                      <span className="truncate font-medium">{person.full_name}</span>
+                      <Link to={`/app/people/${person.id}`} className="truncate font-medium underline-offset-4 hover:underline">
+                        {person.full_name}
+                      </Link>
                       {(person.title || person.organization_name) && (
                         <span className="truncate text-xs text-smoke">
                           {[person.title, person.organization_name].filter(Boolean).join(", ")}
@@ -278,12 +278,6 @@ export default function IntakeDetailPage() {
                   <VisibilityNote visible={person.directory_visible} />
                   <div className="flex flex-wrap gap-2">
                     <Button variant="outline" size="sm" asChild>
-                      <Link to={`/app/people/${person.id}`}>
-                        <UserRound aria-hidden="true" />
-                        {t("admin.detail.viewProfile")}
-                      </Link>
-                    </Button>
-                    <Button variant="ghost" size="sm" asChild>
                       <Link to={`/app/people/${person.id}/edit`}>
                         <Pencil aria-hidden="true" />
                         {t("admin.detail.editProfile")}
@@ -294,8 +288,9 @@ export default function IntakeDetailPage() {
             </Panel>
           )}
 
+          {p.referred_by && (
           <Panel title={t("admin.detail.referredBy")}>
-            {p.referred_by ? (
+            {(
               <Sheet className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-3">
                   <PersonAvatar name={p.referred_by.name} />
@@ -306,16 +301,16 @@ export default function IntakeDetailPage() {
                 </div>
                 <MatchLink match={s.referredBy} />
               </Sheet>
-            ) : (
-              <p className="text-sm text-smoke">{t("admin.detail.noReferrer")}</p>
             )}
           </Panel>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
+/** What the form held; fields they left empty are left out. */
 function PayloadDetails({ payload: p, showName }: { payload: IntakePayload; showName?: boolean }) {
   const { t } = useT();
   return (
@@ -325,41 +320,53 @@ function PayloadDetails({ payload: p, showName }: { payload: IntakePayload; show
           {p.full_name}
         </Item>
       )}
-      <Item label={t("common.field.email")}>
-        {p.email ? (
+      {p.email && (
+        <Item label={t("common.field.email")}>
           <a href={`mailto:${p.email}`} className="break-all underline decoration-stone decoration-2 underline-offset-4 hover:decoration-gold">
             {p.email}
           </a>
-        ) : (
-          <NotGiven />
-        )}
-      </Item>
-      <Item label={t("common.field.phone")}>{p.phone ? <a href={`tel:${p.phone}`}>{p.phone}</a> : <NotGiven />}</Item>
+        </Item>
+      )}
+      {p.phone && (
+        <Item label={t("common.field.phone")}>
+          <a href={`tel:${p.phone}`}>{p.phone}</a>
+        </Item>
+      )}
       <Item label={t("common.field.language")}>{t(`common.language.${p.preferred_language}`)}</Item>
-      <Item label={t("common.field.organization")}>{p.organization ?? <NotGiven />}</Item>
-      <Item label={t("common.field.title")}>{p.title ?? <NotGiven />}</Item>
-      <Item label={t("common.field.affiliations")}>
-        {p.affiliations.length ? p.affiliations.map((a) => t(`common.affiliation.${a}`)).join(", ") : <NotGiven />}
-      </Item>
-      <Item label={t("common.field.contributions")} wide>
-        {p.contribution_types.length ? (
+      {p.organization && <Item label={t("common.field.organization")}>{p.organization}</Item>}
+      {p.title && <Item label={t("common.field.title")}>{p.title}</Item>}
+      {p.affiliations.length > 0 && (
+        <Item label={t("common.field.affiliations")}>{p.affiliations.map((a) => t(`common.affiliation.${a}`)).join(", ")}</Item>
+      )}
+      {p.contribution_types.length > 0 && (
+        <Item label={t("common.field.contributions")} wide>
           <div className="flex flex-wrap gap-1.5">
             {p.contribution_types.map((type) => (
               <ContributionChip key={type} type={type} long />
             ))}
           </div>
-        ) : (
-          <NotGiven />
-        )}
-      </Item>
-      <Item label={t("common.field.skills")}>{p.skills.length ? <TagList tags={p.skills} /> : <NotGiven />}</Item>
-      <Item label={t("common.field.capTopics")}>{p.cap_topics.length ? <TopicList topics={p.cap_topics} /> : <NotGiven />}</Item>
-      <Item label={t("common.field.availability")} wide>
-        {p.availability ? <p className="whitespace-pre-wrap">{p.availability}</p> : <NotGiven />}
-      </Item>
-      <Item label={t("common.field.bio")} wide>
-        {p.bio ? <p className="whitespace-pre-wrap">{p.bio}</p> : <NotGiven />}
-      </Item>
+        </Item>
+      )}
+      {p.skills.length > 0 && (
+        <Item label={t("common.field.skills")}>
+          <TagList tags={p.skills} />
+        </Item>
+      )}
+      {p.cap_topics.length > 0 && (
+        <Item label={t("common.field.capTopics")}>
+          <TopicList topics={p.cap_topics} />
+        </Item>
+      )}
+      {p.availability && (
+        <Item label={t("common.field.availability")} wide>
+          <p className="whitespace-pre-wrap">{p.availability}</p>
+        </Item>
+      )}
+      {p.bio && (
+        <Item label={t("common.field.bio")} wide>
+          <p className="whitespace-pre-wrap">{p.bio}</p>
+        </Item>
+      )}
       <Item label={t("admin.detail.consent")} wide>
         {p.consent ? t("admin.detail.consentYes") : t("admin.detail.consentNo")}
       </Item>
@@ -404,21 +411,19 @@ function Item({ label, wide, children }: { label: string; wide?: boolean; childr
   );
 }
 
-function NotGiven() {
-  const { t } = useT();
-  return <span className="text-smoke">{t("admin.detail.notGiven")}</span>;
-}
-
 function MatchLink({ match }: { match: MatchedPerson }) {
   const { t } = useT();
   if (!match) return <span className="text-xs text-smoke">{t("admin.detail.noMatch")}</span>;
   return (
     <span className="flex items-center gap-2">
       <StatusBadge status={match.status} />
-      <Button variant="outline" size="sm" asChild>
-        <Link to={`/app/people/${match.id}`} aria-label={t("admin.detail.viewProfileOf", { name: match.full_name })}>
+      <Button variant="ghost" size="icon-sm" asChild>
+        <Link
+          to={`/app/people/${match.id}`}
+          aria-label={t("admin.detail.viewProfileOf", { name: match.full_name })}
+          title={t("admin.detail.viewProfileOf", { name: match.full_name })}
+        >
           <ExternalLink aria-hidden="true" />
-          {t("admin.detail.viewProfile")}
         </Link>
       </Button>
     </span>

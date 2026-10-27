@@ -2,7 +2,7 @@
 import { Link } from "react-router";
 import { Plus } from "lucide-react";
 import type { Route } from "./+types/app.requests._index";
-import { EmptyState, PageHeader, Panel } from "~/components/nva";
+import { PageHeader, Panel } from "~/components/nva";
 import { RequestRows } from "~/components/requests";
 import { Button } from "~/components/ui/button";
 import { makeT, useT } from "~/i18n";
@@ -33,7 +33,6 @@ export default function MyRequests({ loaderData }: Route.ComponentProps) {
     <div className="mx-auto grid min-w-0 grid-cols-[minmax(0,1fr)] w-full max-w-3xl gap-6">
       <PageHeader
         title={t("requests.index.title")}
-        description={t("requests.index.description")}
         actions={
           <>
             {isAdmin && (
@@ -51,7 +50,7 @@ export default function MyRequests({ loaderData }: Route.ComponentProps) {
         }
       />
       {active.length === 0 && past.length === 0 ? (
-        <EmptyState title={t("requests.index.empty.title")} body={t("requests.index.empty.body")} />
+        <p className="text-sm text-smoke">{t("requests.index.empty.title")}</p>
       ) : (
         <>
           {active.length > 0 && (

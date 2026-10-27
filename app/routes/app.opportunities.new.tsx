@@ -63,7 +63,7 @@ export default function NewOpportunity() {
         <ArrowLeft className="size-4" aria-hidden="true" />
         {personId ? people.find((p) => p.id === personId)?.full_name : t("crm.opps.back")}
       </Link>
-      <PageHeader eyebrow={t("crm.eyebrow")} title={t("crm.opps.new.title")} description={t("crm.opps.new.description")} />
+      <PageHeader title={t("crm.opps.new.title")} />
       <Sheet className="p-6 md:p-8">
         <OpportunityForm
           people={people}

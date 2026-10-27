@@ -6,12 +6,13 @@
  * request and also reply, assign people, share and set the status.
  */
 import { Form, Link, data, useNavigation } from "react-router";
-import { ArrowLeft, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, X } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Route } from "./+types/app.requests.$requestId";
 import { Field, PageHeader, Panel, Sheet } from "~/components/nva";
 import { formatDate } from "~/components/people/format";
-import { IntroTag, NativeSelect, RequestForm, RequestStatusBadge, SharedTag, requestWhen } from "~/components/requests";
+import { MoreDetails } from "~/components/crm/crm-bits";
+import { NativeSelect, RequestForm, RequestStatusBadge, requestWhen } from "~/components/requests";
 import { ResourceActions } from "~/components/resources/resource-actions";
 import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
@@ -182,19 +183,20 @@ export default function RequestDetail({ loaderData, actionData }: Route.Componen
       </Link>
 
       <PageHeader
-        eyebrow={
-          <span className="inline-flex items-center gap-2 normal-case">
-            <RequestStatusBadge status={r.status} />
-            {r.kind === "introduction" && <IntroTag />}
-            {access === "shared" && <SharedTag name={r.requester_name} />}
-          </span>
-        }
         title={r.need}
         description={
-          <>
-            {!isMine && <>{t("requests.detail.from", { name: r.requester_name })} · </>}
-            {t("requests.detail.sent", { date: formatDate(r.created_at, locale) })}
-          </>
+          <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+            <RequestStatusBadge status={r.status} />
+            <span>
+              {[
+                r.kind === "introduction" ? t("requests.item.intro") : null,
+                !isMine ? t("requests.detail.from", { name: r.requester_name }) : null,
+                t("requests.detail.sent", { date: formatDate(r.created_at, locale) }),
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+          </span>
         }
       />
 
@@ -220,8 +222,8 @@ export default function RequestDetail({ loaderData, actionData }: Route.Componen
         </p>
       )}
 
-      <Sheet className="grid gap-5 p-6">
-        <dl className="grid gap-4 sm:grid-cols-4">
+      <Sheet className="grid gap-5 p-5 md:p-6">
+        <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           <Fact label={t("requests.detail.when")}>{when || <span className="text-smoke">{t("requests.detail.noDate")}</span>}</Fact>
           {r.participant_count != null && <Fact label={t("requests.detail.participants")}>{r.participant_count}</Fact>}
           {r.cap_title && (
@@ -249,24 +251,31 @@ export default function RequestDetail({ loaderData, actionData }: Route.Componen
 
       {r.people.length > 0 && (
         <Panel title={t("requests.detail.people")}>
-          <ul className="grid gap-3">
+          <ul className="grid grid-cols-[minmax(0,1fr)] gap-3">
             {r.people.map((p) => (
-              <li key={p.id} className="flex flex-col gap-2 rounded-card bg-canvas p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <p className="text-xs text-smoke">{t(`requests.role.${p.request_role}`)}</p>
-                  <p className="font-medium">{p.full_name}</p>
-                  {(p.title || p.organization_name) && (
-                    <p className="text-sm text-smoke">{[p.title, p.organization_name].filter(Boolean).join(", ")}</p>
-                  )}
+              <li key={p.id} className="flex min-w-0 items-center justify-between gap-3 rounded-card bg-canvas px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <Link to={`/app/people/${p.id}`} className="font-medium underline-offset-4 hover:underline">
+                    {p.full_name}
+                  </Link>
+                  <p className="truncate text-xs text-smoke">
+                    {[t(`requests.role.${p.request_role}`), p.title, p.organization_name].filter(Boolean).join(" · ")}
+                  </p>
                 </div>
-                <div className="flex flex-wrap items-center gap-1.5">
+                <div className="flex shrink-0 items-center gap-1">
                   <ResourceActions person={p} saved={savedIds.has(p.id)} compact hideRequest />
                   {admin && (
                     <Form method="post">
                       <input type="hidden" name="intent" value="remove-person" />
                       <input type="hidden" name="personId" value={p.id} />
-                      <Button type="submit" variant="ghost" size="xs" aria-label={t("requests.admin.remove", { name: p.full_name })}>
-                        {t("requests.admin.removeShort")}
+                      <Button
+                        type="submit"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={t("requests.admin.remove", { name: p.full_name })}
+                        title={t("requests.admin.remove", { name: p.full_name })}
+                      >
+                        <X aria-hidden="true" />
                       </Button>
                     </Form>
                   )}
@@ -277,13 +286,15 @@ export default function RequestDetail({ loaderData, actionData }: Route.Componen
         </Panel>
       )}
 
-      <Panel title={t("requests.detail.reply")}>
-        {r.response ? (
-          <p className="text-sm whitespace-pre-line">{r.response}</p>
-        ) : (
-          <p className="text-sm text-smoke">{t("requests.detail.noReply")}</p>
-        )}
-      </Panel>
+      {(r.response || !admin) && (
+        <Panel title={t("requests.detail.reply")}>
+          {r.response ? (
+            <p className="text-sm whitespace-pre-line">{r.response}</p>
+          ) : (
+            <p className="text-sm text-smoke">{t("requests.detail.noReply")}</p>
+          )}
+        </Panel>
+      )}
 
       {(canManage || r.shared_with.length > 0) && (
         <Panel title={t("requests.share.title")}>
@@ -306,30 +317,33 @@ export default function RequestDetail({ loaderData, actionData }: Route.Componen
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-smoke">
-                {isMine ? t("requests.share.none") : t("requests.share.noneAdmin", { name: r.requester_name })}
-              </p>
+              !(canManage && shareOptions.length > 0) && (
+                <p className="text-sm text-smoke">
+                  {isMine ? t("requests.share.none") : t("requests.share.noneAdmin", { name: r.requester_name })}
+                </p>
+              )
             )}
             {canManage && shareOptions.length > 0 && (
               <Form method="post" className="grid gap-2">
                 <input type="hidden" name="intent" value="share" />
-                <Field label={t("requests.share.label")} htmlFor="share-user" hint={t("requests.share.hint")}>
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <NativeSelect id="share-user" name="userId" required defaultValue="" key={r.shared_with.length}>
-                      <option value="" disabled>
-                        {t("requests.share.pick")}
+                <label htmlFor="share-user" className="sr-only">
+                  {t("requests.share.label")}
+                </label>
+                <div className="flex gap-2">
+                  <NativeSelect id="share-user" name="userId" required defaultValue="" key={r.shared_with.length}>
+                    <option value="" disabled>
+                      {t("requests.share.pick")}
+                    </option>
+                    {shareOptions.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name}
                       </option>
-                      {shareOptions.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.name}
-                        </option>
-                      ))}
-                    </NativeSelect>
-                    <Button type="submit" variant="outline" disabled={busy}>
-                      {t("requests.share.submit")}
-                    </Button>
-                  </div>
-                </Field>
+                    ))}
+                  </NativeSelect>
+                  <Button type="submit" variant="outline" disabled={busy}>
+                    {t("requests.share.submit")}
+                  </Button>
+                </div>
               </Form>
             )}
           </div>
@@ -388,9 +402,11 @@ export default function RequestDetail({ loaderData, actionData }: Route.Componen
                   placeholder={t("requests.admin.replyPlaceholder")}
                 />
               </Field>
-              <Field label={t("requests.admin.completeNote")} htmlFor="admin-note" optional>
-                <Textarea id="admin-note" name="note" rows={2} maxLength={1000} placeholder={t("requests.complete.notePlaceholder")} />
-              </Field>
+              <MoreDetails label={t("requests.form.more")}>
+                <Field label={t("requests.admin.completeNote")} htmlFor="admin-note" optional>
+                  <Textarea id="admin-note" name="note" rows={2} maxLength={1000} placeholder={t("requests.complete.notePlaceholder")} />
+                </Field>
+              </MoreDetails>
               <div>
                 <Button type="submit" variant="brand" disabled={busy}>
                   {t("requests.admin.save")}
@@ -402,7 +418,7 @@ export default function RequestDetail({ loaderData, actionData }: Route.Componen
               <input type="hidden" name="intent" value="add-person" />
               <input type="hidden" name="role" value="assigned" />
               <Field label={t("requests.admin.addPerson")} htmlFor="add-person">
-                <div className="flex flex-col gap-2 sm:flex-row">
+                <div className="flex gap-2">
                   <NativeSelect id="add-person" name="personId" required defaultValue="">
                     <option value="" disabled>
                       {t("requests.admin.addPersonPick")}
@@ -428,9 +444,8 @@ export default function RequestDetail({ loaderData, actionData }: Route.Componen
       {canManage && (active || r.status === "canceled") && (
         <div className="flex flex-wrap items-center gap-2">
           {active && canManage && (
-            <details className="w-full rounded-card border border-stone p-4 [&_summary]:cursor-pointer">
-              <summary className="text-sm font-medium">{t("requests.detail.edit")}</summary>
-              <div className="pt-4">
+            <MoreDetails label={t("requests.detail.edit")} className="w-full" open={!!result?.errors}>
+              <div className="rounded-card bg-canvas p-5 shadow-whisper">
                 <RequestForm
                   caps={caps}
                   intent="edit"
@@ -450,7 +465,7 @@ export default function RequestDetail({ loaderData, actionData }: Route.Componen
                   cancelTo={`/app/requests/${r.id}`}
                 />
               </div>
-            </details>
+            </MoreDetails>
           )}
           {(isMine || admin) && (
             <Form method="post">

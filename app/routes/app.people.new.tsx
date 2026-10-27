@@ -150,7 +150,7 @@ export default function QuickAdd() {
 
   return (
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] max-w-3xl gap-6">
-      <PageHeader eyebrow={t("directory.adminTitle")} title={t("directory.quick.title")} description={t("directory.quick.description")} />
+      <PageHeader title={t("directory.quick.title")} />
 
       <Form method="post" className="grid gap-5" noValidate>
         <Panel bodyClassName="grid gap-4">
@@ -161,10 +161,10 @@ export default function QuickAdd() {
             <Input id="qa-org" name="organization_name" maxLength={200} defaultValue={v ? value("organization_name") : organization} autoComplete="off" />
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label={t("directory.quick.email")} htmlFor="qa-email" error={e("email")} hint={t("directory.quick.contactHint")}>
+            <Field label={t("directory.quick.email")} htmlFor="qa-email" error={e("email")} hint={t("directory.quick.contactHint")} className="content-start">
               <Input id="qa-email" name="email" defaultValue={value("email")} type="email" maxLength={254} autoComplete="off" aria-invalid={!!errors.email || undefined} />
             </Field>
-            <Field label={t("directory.quick.phone")} htmlFor="qa-phone" error={e("phone")}>
+            <Field label={t("directory.quick.phone")} htmlFor="qa-phone" error={e("phone")} className="content-start">
               <Input id="qa-phone" name="phone" defaultValue={value("phone")} type="tel" maxLength={40} autoComplete="off" />
             </Field>
           </div>
@@ -237,8 +237,15 @@ export default function QuickAdd() {
           </details>
         </Panel>
 
-        <Panel title={t("directory.quick.followUp")} bodyClassName="grid gap-4">
-          <p className="-mt-2 text-sm text-smoke">{t("directory.quick.followUpHint")}</p>
+        <Panel
+          title={
+            <>
+              {t("directory.quick.followUp")}{" "}
+              <span className="text-sm font-normal text-smoke">({t("common.state.optional")})</span>
+            </>
+          }
+          bodyClassName="grid gap-4"
+        >
           <div className="grid gap-4 sm:grid-cols-[12rem_1fr]">
             <Field label={t("directory.quick.followUpOn")} htmlFor="qa-fu-on" error={e("follow_up_on")}>
               <Input id="qa-fu-on" name="follow_up_on" defaultValue={value("follow_up_on")} type="date" min={today} aria-invalid={!!errors.follow_up_on || undefined} />

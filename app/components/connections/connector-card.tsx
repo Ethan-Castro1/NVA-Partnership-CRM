@@ -5,7 +5,7 @@
  */
 import { Link, useFetcher } from "react-router";
 import { Check, CircleDashed, Loader2, MessageCircle, Plus } from "lucide-react";
-import { ContributionChips, PersonAvatar, Sheet, StatusBadge, TagList } from "~/components/nva";
+import { PersonAvatar, Sheet, TagList } from "~/components/nva";
 import { MatchReasons } from "~/components/resources/match-reasons";
 import { ResourceActions } from "~/components/resources/resource-actions";
 import { Button } from "~/components/ui/button";
@@ -14,7 +14,7 @@ import type { ConnectorResult } from "~/lib/connections.server";
 import { useTopicLabel } from "~/components/caps/cap-bits";
 import { PathChain } from "./path-chain";
 
-const VISIBLE_PATHS = 2;
+const VISIBLE_PATHS = 1;
 
 export function ConnectorCard({
   result,
@@ -49,12 +49,11 @@ export function ConnectorCard({
             >
               {person.full_name}
             </Link>
-            <StatusBadge status={person.status} />
           </h3>
           {subtitle && <p className="text-sm text-smoke">{subtitle}</p>}
         </div>
         {direct && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-gold px-3 py-1 text-xs font-bold text-ink">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-gold-soft px-3 py-1 text-xs font-medium text-gold-ink">
             <MessageCircle className="size-3.5" aria-hidden="true" />
             {t("connections.results.askDirectly")}
           </span>
@@ -74,21 +73,16 @@ export function ConnectorCard({
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <ContributionChips types={person.contribution_types} />
-        {matched.length > 0 && !person.reasons.length && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs text-smoke">{t("connections.results.matched")}:</span>
-            <TagList tags={matched} highlight={matched} />
-          </div>
-        )}
-      </div>
-      <MatchReasons reasons={person.reasons} />
+      {matched.length > 0 && !person.reasons.length && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs text-smoke">{t("connections.results.matched")}:</span>
+          <TagList tags={matched} highlight={matched} max={3} />
+        </div>
+      )}
+      <MatchReasons reasons={person.reasons} max={2} />
       <ResourceActions person={person} saved={saved} compact />
 
-      {direct ? (
-        <p className="text-sm text-smoke">{t("connections.results.askDirectlyHelp")}</p>
-      ) : paths.length ? (
+      {direct ? null : paths.length ? (
         <div className="grid gap-3 border-t border-stone pt-4">
           <p className="sr-only">{t("connections.results.pathsLabel", { name: person.full_name })}</p>
           {shown.map((path) => (
@@ -110,10 +104,7 @@ export function ConnectorCard({
       ) : (
         <div className="flex items-start gap-2 border-t border-stone pt-4 text-sm text-smoke">
           <CircleDashed className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          <p>
-            <span className="font-medium text-graphite">{t("connections.results.noPath")}.</span>{" "}
-            {t(admin ? "connections.results.noPathHelp" : "connections.results.noPathHelpStaff")}
-          </p>
+          <p>{t("connections.results.noPath")}</p>
         </div>
       )}
     </Sheet>

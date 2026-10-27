@@ -1,8 +1,8 @@
 /** Pieces both dashboards use: the search box, CAP cards, resource rows and confirmed engagements. */
 import { Form, Link } from "react-router";
 import { ArrowRight, CalendarCheck, Search } from "lucide-react";
-import { EmptyState, Panel, PersonAvatar } from "~/components/nva";
-import { RequestStatusBadge, requestWhen } from "~/components/requests";
+import { Panel, PersonAvatar } from "~/components/nva";
+import { requestWhen } from "~/components/requests";
 import { ResourceActions, type ResourcePerson } from "~/components/resources/resource-actions";
 import { Button } from "~/components/ui/button";
 import { useT, type MessageKey } from "~/i18n";
@@ -11,6 +11,9 @@ import { cn } from "~/lib/utils";
 
 export const linkClass =
   "rounded-sm font-medium text-ink hover:underline hover:decoration-gold hover:decoration-2 hover:underline-offset-4 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none";
+
+/** On phones, a dashboard list shows its first three rows; "View all" has the rest. */
+export const MOBILE_LIMIT = "max-sm:[&>li:nth-child(n+4)]:hidden";
 
 export function ViewAll({ to, label }: { to: string; label?: string }) {
   const { t } = useT();
@@ -28,24 +31,14 @@ export function ViewAll({ to, label }: { to: string; label?: string }) {
 
 const EXAMPLES = ["carpentry", "healthcare", "event", "environment", "internships"] as const;
 
-/**
- * "What do you need help with?" Submits to /app/people?q=. The examples are
- * one-click searches. `prominent` is the staff hero; admins get a quieter one.
- */
-export function NeedSearch({ prominent = false, brand = false }: { prominent?: boolean; brand?: boolean }) {
+/** The staff hero: "What do you need help with?" Submits to /app/people?q=; the examples are one-click searches. */
+export function NeedSearch() {
   const { t } = useT();
-  const inputId = prominent ? "need-search" : "need-search-admin";
+  const inputId = "need-search";
   return (
-    <section
-      aria-labelledby={`${inputId}-label`}
-      className={cn("rounded-card bg-canvas shadow-whisper", prominent ? "p-5 md:p-8" : "p-4 md:p-5")}
-    >
+    <section aria-labelledby={`${inputId}-label`} className="rounded-card bg-canvas p-5 shadow-whisper md:p-8">
       <Form method="get" action="/app/people" role="search" className="grid gap-3">
-        <label
-          id={`${inputId}-label`}
-          htmlFor={inputId}
-          className={cn(prominent ? "text-heading" : "text-section")}
-        >
+        <label id={`${inputId}-label`} htmlFor={inputId} className="text-heading">
           {t("dashboard.search.title")}
         </label>
         <div className="flex flex-col gap-2 sm:flex-row">
@@ -58,13 +51,10 @@ export function NeedSearch({ prominent = false, brand = false }: { prominent?: b
               required
               maxLength={200}
               placeholder={t("dashboard.search.placeholder")}
-              className={cn(
-                "w-full rounded-full border border-stone bg-taupe pr-4 pl-12 outline-none placeholder:text-smoke focus-visible:border-gold focus-visible:bg-canvas focus-visible:ring-3 focus-visible:ring-ring/40",
-                prominent ? "h-14 text-base" : "h-11 text-sm",
-              )}
+              className="h-14 w-full rounded-full border border-stone bg-taupe pr-4 pl-12 text-base outline-none placeholder:text-smoke focus-visible:border-gold focus-visible:bg-canvas focus-visible:ring-3 focus-visible:ring-ring/40"
             />
           </div>
-          <Button type="submit" variant={brand ? "brand" : "default"} size={prominent ? "lg" : "default"} className={prominent ? "h-14" : "h-11"}>
+          <Button type="submit" variant="brand" size="lg" className="h-14">
             {t("dashboard.search.button")}
           </Button>
         </div>
@@ -78,7 +68,7 @@ export function NeedSearch({ prominent = false, brand = false }: { prominent?: b
               <li key={key}>
                 <Link
                   to={`/app/people?q=${encodeURIComponent(text)}`}
-                  className="inline-flex min-h-8 items-center rounded-full border border-stone bg-canvas px-3 py-1 text-left text-sm text-graphite transition-colors hover:border-gold hover:text-ink focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+                  className="inline-flex min-h-10 items-center rounded-full border border-stone bg-canvas px-3 py-1 text-left text-sm text-graphite transition-colors hover:border-gold hover:text-ink focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
                 >
                   {text}
                 </Link>
@@ -118,34 +108,32 @@ export type DashboardCap = {
   confirmed_count: number;
 };
 
+/** The viewer's CAPs; nothing at all when they have none. */
 export function MyCaps({ caps }: { caps: DashboardCap[] }) {
   const { t } = useT();
+  if (caps.length === 0) return null;
   return (
     <Panel title={t("dashboard.myCaps")} action={<ViewAll to="/app/caps" />}>
-      {caps.length === 0 ? (
-        <EmptyState title={t("dashboard.myCapsEmptyTitle")} body={t("dashboard.myCapsEmptyBody")} />
-      ) : (
-        <ul className="grid gap-2">
-          {caps.map((cap) => (
-            <li key={cap.id} className="rounded-2xl border border-stone bg-canvas p-4">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <Link to={`/app/caps/${cap.id}`} className={cn(linkClass, "min-w-0 flex-1")}>
-                  {cap.title}
-                </Link>
-                <CapStatusPill status={cap.status} />
-              </div>
-              <p className="mt-1 text-sm text-smoke">
-                {cap.topics.length ? cap.topics.slice(0, 3).join(", ") : t("dashboard.capNoTopics")}
-                {cap.term ? ` (${cap.term})` : ""}
-              </p>
-              <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-graphite">
-                <span>{t("dashboard.capPartners", { count: cap.partner_count })}</span>
-                <span>{t("dashboard.capConfirmed", { count: cap.confirmed_count })}</span>
-              </p>
-            </li>
-          ))}
-        </ul>
-      )}
+      <ul className={cn("grid gap-2", MOBILE_LIMIT)}>
+        {caps.map((cap) => (
+          <li key={cap.id} className="rounded-2xl border border-stone bg-canvas p-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <Link to={`/app/caps/${cap.id}`} className={cn(linkClass, "min-w-0 flex-1")}>
+                {cap.title}
+              </Link>
+              <CapStatusPill status={cap.status} />
+            </div>
+            <p className="mt-1 text-sm text-smoke">
+              {cap.topics.length ? cap.topics.slice(0, 3).join(", ") : t("dashboard.capNoTopics")}
+              {cap.term ? ` (${cap.term})` : ""}
+            </p>
+            <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-graphite">
+              <span>{t("dashboard.capPartners", { count: cap.partner_count })}</span>
+              <span>{t("dashboard.capConfirmed", { count: cap.confirmed_count })}</span>
+            </p>
+          </li>
+        ))}
+      </ul>
     </Panel>
   );
 }
@@ -159,26 +147,23 @@ export type ResourceRow = ResourcePerson & {
   saved: boolean;
 };
 
-/** People as resources: name, role, a few skills, and View, Contact or Introduction, Save. */
-export function ResourceList({ people, empty }: { people: ResourceRow[]; empty: string }) {
-  if (!people.length) return <p className="py-2 text-sm text-smoke">{empty}</p>;
+/** People as compact rows: name (links to the profile), their role, then Contact or Request intro and Save. */
+export function ResourceList({ people, empty }: { people: ResourceRow[]; empty?: string }) {
+  if (!people.length) return empty ? <p className="py-2 text-sm text-smoke">{empty}</p> : null;
   return (
-    <ul className="grid gap-2">
+    <ul className={cn("divide-y divide-stone", MOBILE_LIMIT)}>
       {people.map((p) => {
         const role = [p.title, p.organization_name].filter(Boolean).join(", ");
         return (
-          <li key={p.id} className="grid gap-3 rounded-2xl border border-stone bg-canvas p-3.5">
-            <div className="flex min-w-0 items-start gap-3">
-              <PersonAvatar name={p.full_name} className="size-9" />
-              <div className="min-w-0 flex-1">
-                <Link to={`/app/people/${p.id}`} className={linkClass}>
-                  {p.full_name}
-                </Link>
-                {role && <p className="truncate text-xs text-smoke">{role}</p>}
-                {p.skills.length > 0 && <p className="mt-1 truncate text-xs text-graphite">{p.skills.slice(0, 4).join(", ")}</p>}
-              </div>
+          <li key={p.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+            <PersonAvatar name={p.full_name} className="size-9" />
+            <div className="min-w-0 flex-1">
+              <Link to={`/app/people/${p.id}`} className={linkClass}>
+                {p.full_name}
+              </Link>
+              {role && <p className="truncate text-xs text-smoke">{role}</p>}
             </div>
-            <ResourceActions person={p} saved={p.saved} compact />
+            <ResourceActions person={p} saved={p.saved} compact className="shrink-0 flex-nowrap" />
           </li>
         );
       })}
@@ -199,15 +184,26 @@ export type EngagementRow = {
   people: { id: string; full_name: string }[];
 };
 
-/** Arranged staff requests with a date ahead (listUpcomingArranged). */
-export function UpcomingEngagements({ items, showRequester = false }: { items: EngagementRow[]; showRequester?: boolean }) {
+/** Arranged staff requests with a date ahead (listUpcomingArranged). All are arranged, so no status badge. */
+export function UpcomingEngagements({
+  items,
+  showRequester = false,
+  hideWhenEmpty = false,
+  className,
+}: {
+  items: EngagementRow[];
+  showRequester?: boolean;
+  hideWhenEmpty?: boolean;
+  className?: string;
+}) {
   const { t, locale } = useT();
+  if (hideWhenEmpty && items.length === 0) return null;
   return (
-    <Panel title={t("dashboard.engagements.title")}>
+    <Panel title={t("dashboard.engagements.title")} className={className}>
       {items.length === 0 ? (
         <p className="py-2 text-sm text-smoke">{t("dashboard.engagements.empty")}</p>
       ) : (
-        <ul className="divide-y divide-stone">
+        <ul className={cn("divide-y divide-stone", MOBILE_LIMIT)}>
           {items.map((r) => {
             const names = r.people.map((p) => p.full_name).join(", ");
             return (
@@ -222,11 +218,9 @@ export function UpcomingEngagements({ items, showRequester = false }: { items: E
                   <p className="flex flex-wrap gap-x-3 text-xs text-smoke">
                     <span className="font-medium text-graphite">{requestWhen(r, locale)}</span>
                     {names && <span>{t("requests.item.with", { names })}</span>}
-                    {r.cap_title && <span>{r.cap_title}</span>}
                     {showRequester && <span>{t("dashboard.engagements.from", { name: r.requester_name })}</span>}
                   </p>
                 </div>
-                <RequestStatusBadge status={r.status} />
               </li>
             );
           })}

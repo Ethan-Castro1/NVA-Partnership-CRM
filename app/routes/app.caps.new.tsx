@@ -36,7 +36,7 @@ export default function NewCap() {
         <ArrowLeft className="size-4" aria-hidden="true" />
         {t("caps.detail.backToList")}
       </Link>
-      <PageHeader eyebrow={t("caps.eyebrow")} title={t("caps.new.title")} description={t("caps.new.description")} />
+      <PageHeader title={t("caps.new.title")} />
       <Sheet className="p-6 md:p-8">
         <CapForm
           errors={actionData?.errors}

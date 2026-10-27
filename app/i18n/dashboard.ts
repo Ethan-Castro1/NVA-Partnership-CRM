@@ -9,7 +9,7 @@ export default defineMessages(
     examplesLabel: "Try one of these",
     viewAll: "View all",
 
-    // Search box (staff, and admin too)
+    // Search box (staff)
     "search.title": "What do you need help with?",
     "search.placeholder": "Describe what your class or activity needs",
     "search.button": "Search",
@@ -19,19 +19,8 @@ export default defineMessages(
     "search.example.environment": "Find a community organization that supports environmental education.",
     "search.example.internships": "Find someone who could host students for internships.",
 
-    // Search, Connect, Arrange
-    "steps.label": "How it works",
-    "steps.search": "Search",
-    "steps.searchBody": "Describe what you need.",
-    "steps.connect": "Connect",
-    "steps.connectBody": "Contact them or ask for an introduction.",
-    "steps.arrange": "Arrange",
-    "steps.arrangeBody": "Send a request and we help set it up.",
-
     // Staff panels
     myCaps: "My CAPs",
-    myCapsEmptyTitle: "No CAPs yet",
-    myCapsEmptyBody: "CAPs you teach or start show up here.",
     capPartners: "Partners: {count}",
     capConfirmed: "Confirmed: {count}",
     capNoTopics: "No topics yet",
@@ -41,16 +30,14 @@ export default defineMessages(
     "recent.title": "Recently added to the village",
     "recent.empty": "No one new yet.",
     "saved.title": "Saved",
-    "saved.empty": "Save people from search to find them here.",
 
     // Admin
-    "admin.description": "What needs your attention today.",
     "quick.label": "Quick actions",
     "quick.addContact": "Add a contact",
+    "quick.new": "New",
     "quick.record": "Record an interaction",
     "quick.followUp": "Create a follow-up",
     "quick.draft": "Draft an email",
-    "quick.review": "Review staff requests",
     "pick.label": "Person",
     "pick.placeholder": "Choose a person",
     "pick.recordBody": "Choose who it was with. Their profile opens where you log it.",
@@ -60,24 +47,14 @@ export default defineMessages(
     "pick.noPeople": "Add a contact first.",
     "followUp.body": "What needs to happen, and by when.",
 
-    statsHeading: "Today at a glance",
-    "stat.overdue": "Overdue follow-ups",
-    "stat.today": "Due today",
-    "stat.awaiting": "Awaiting a reply",
-    "stat.requests": "Open staff requests",
-    "stat.signups": "New sign-ups",
-
     "fu.title": "Follow-ups",
     "fu.dueNow": "Overdue and due today",
     "fu.upcoming": "Coming up",
-    "fu.emptyDue": "Nothing overdue or due today.",
-    "fu.emptyUpcoming": "Nothing scheduled.",
-    "awaiting.title": "Awaiting responses",
-    "awaiting.empty": "No one to wait on.",
+    "fu.awaiting": "Waiting on a reply",
+    "fu.empty": "No open follow-ups.",
 
     "activity.title": "Recent contact activity",
     "activity.empty": "No contact history yet.",
-    "activity.by": "by {name}",
 
     "opps.title": "Open opportunities",
     "opps.empty": "No open opportunities.",
@@ -108,17 +85,7 @@ export default defineMessages(
     "search.example.environment": "Busca una organización comunitaria que apoye la educación ambiental.",
     "search.example.internships": "Busca a alguien que pueda recibir estudiantes en pasantías.",
 
-    "steps.label": "Cómo funciona",
-    "steps.search": "Busca",
-    "steps.searchBody": "Describe lo que necesitas.",
-    "steps.connect": "Conecta",
-    "steps.connectBody": "Contáctalos o pide una presentación.",
-    "steps.arrange": "Organiza",
-    "steps.arrangeBody": "Envía una solicitud y te ayudamos a coordinarlo.",
-
     myCaps: "Mis CAPs",
-    myCapsEmptyTitle: "Todavía no hay CAPs",
-    myCapsEmptyBody: "Aquí aparecen los CAPs que enseñas o creas.",
     capPartners: "Socios: {count}",
     capConfirmed: "Confirmados: {count}",
     capNoTopics: "Todavía sin temas",
@@ -128,15 +95,13 @@ export default defineMessages(
     "recent.title": "Recién llegados a la aldea",
     "recent.empty": "Todavía no hay nadie nuevo.",
     "saved.title": "Guardados",
-    "saved.empty": "Guarda personas desde la búsqueda para encontrarlas aquí.",
 
-    "admin.description": "Lo que necesita tu atención hoy.",
     "quick.label": "Acciones rápidas",
     "quick.addContact": "Agregar un contacto",
+    "quick.new": "Nuevo",
     "quick.record": "Registrar una interacción",
     "quick.followUp": "Crear un seguimiento",
     "quick.draft": "Redactar un correo",
-    "quick.review": "Revisar solicitudes del personal",
     "pick.label": "Persona",
     "pick.placeholder": "Elige una persona",
     "pick.recordBody": "Elige con quién fue. Se abre su perfil donde lo registras.",
@@ -146,24 +111,14 @@ export default defineMessages(
     "pick.noPeople": "Primero agrega un contacto.",
     "followUp.body": "Qué hay que hacer y para cuándo.",
 
-    statsHeading: "Hoy de un vistazo",
-    "stat.overdue": "Seguimientos atrasados",
-    "stat.today": "Para hoy",
-    "stat.awaiting": "Esperando respuesta",
-    "stat.requests": "Solicitudes abiertas del personal",
-    "stat.signups": "Nuevas inscripciones",
-
     "fu.title": "Seguimientos",
     "fu.dueNow": "Atrasados y para hoy",
     "fu.upcoming": "Próximos",
-    "fu.emptyDue": "Nada atrasado ni para hoy.",
-    "fu.emptyUpcoming": "Nada programado.",
-    "awaiting.title": "Esperando respuesta",
-    "awaiting.empty": "No hay respuestas pendientes.",
+    "fu.awaiting": "Esperando respuesta",
+    "fu.empty": "No hay seguimientos abiertos.",
 
     "activity.title": "Actividad reciente con contactos",
     "activity.empty": "Todavía no hay historial de contacto.",
-    "activity.by": "por {name}",
 
     "opps.title": "Oportunidades abiertas",
     "opps.empty": "No hay oportunidades abiertas.",

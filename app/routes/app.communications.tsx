@@ -3,17 +3,16 @@
  * sent from the app) and drafts waiting for review. Admins only.
  */
 import { Link, data, useActionData, useLoaderData, useSearchParams } from "react-router";
-import { FilePen, Inbox, Send } from "lucide-react";
 import type { Route } from "./+types/app.communications";
 import { SyncButton } from "~/components/email/mailboxes";
 import { DraftList, EmailMessageList } from "~/components/email/message-list";
-import { PageHeader, Panel, StatTile } from "~/components/nva";
+import { PageHeader, Panel } from "~/components/nva";
 import { Button } from "~/components/ui/button";
 import { makeT, useT, type MessageKey } from "~/i18n";
 import { requireAdmin } from "~/lib/auth.server";
 import { activeAccounts } from "~/lib/email/accounts.server";
 import { emailSetup } from "~/lib/email/config.server";
-import { emailCounts, listOpenDrafts, listRecentMessages } from "~/lib/email/store.server";
+import { listOpenDrafts, listRecentMessages } from "~/lib/email/store.server";
 import { syncAllAccounts, syncIfStale } from "~/lib/email/sync.server";
 import { cn } from "~/lib/utils";
 
@@ -32,13 +31,12 @@ export async function loader({ request }: Route.LoaderArgs) {
   const show: Show = (SHOWS as readonly string[]).includes(raw ?? "") ? (raw as Show) : "all";
   // Keep history fresh without waiting for it (refuses in demo mode).
   void syncIfStale().catch(() => undefined);
-  const [accounts, drafts, messages, counts] = await Promise.all([
+  const [accounts, drafts, messages] = await Promise.all([
     activeAccounts(),
     listOpenDrafts(20),
     listRecentMessages({ direction: show === "all" ? undefined : show, limit: 60 }),
-    emailCounts(),
   ]);
-  return { mailboxes: accounts.map((a) => a.email_address), drafts, messages, counts, show, demoMode: emailSetup().demoMode };
+  return { mailboxes: accounts.map((a) => a.email_address), drafts, messages, show, demoMode: emailSetup().demoMode };
 }
 
 type ActionResult = { ok: true; count: number } | { ok: false; error: MessageKey };
@@ -54,7 +52,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function Communications() {
-  const { mailboxes, drafts, messages, counts, show, demoMode } = useLoaderData<typeof loader>();
+  const { mailboxes, drafts, messages, show, demoMode } = useLoaderData<typeof loader>();
   const result = useActionData<typeof action>();
   const [params] = useSearchParams();
   const { t } = useT();
@@ -68,11 +66,9 @@ export default function Communications() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <PageHeader
-        eyebrow={t("common.nav.adminSection")}
         title={t("email.comms.title")}
-        description={t("email.comms.description")}
         actions={mailboxes.length > 0 ? <SyncButton disabled={demoMode} /> : undefined}
       />
 
@@ -91,12 +87,6 @@ export default function Communications() {
         </p>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <StatTile label={t("email.comms.drafts")} value={counts.drafts} icon={<FilePen />} />
-        <StatTile label={t("email.comms.sent30")} value={counts.sent30} icon={<Send />} accent="classroom_volunteer" />
-        <StatTile label={t("email.comms.received30")} value={counts.received30} icon={<Inbox />} accent="internship" />
-      </div>
-
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <Panel
           title={t("email.comms.recentTitle")}
@@ -108,7 +98,7 @@ export default function Communications() {
                   to={showHref(s)}
                   aria-current={s === show ? "page" : undefined}
                   className={cn(
-                    "rounded-full px-3 py-1 text-xs font-medium",
+                    "inline-flex h-8 items-center rounded-full px-3 text-xs font-medium",
                     s === show ? "bg-ink text-canvas" : "bg-canvas text-graphite hover:bg-stone",
                   )}
                 >
@@ -121,10 +111,7 @@ export default function Communications() {
           <EmailMessageList messages={messages} showPeople empty={t("email.comms.recentNone")} />
         </Panel>
         <Panel title={t("email.comms.draftsTitle")}>
-          <div className="grid gap-3">
-            <DraftList drafts={drafts} showPerson hrefFor={(d) => `/app/people/${d.person_id}/email?draft=${d.id}`} />
-            <p className="text-xs text-smoke">{t("email.comms.compose")}</p>
-          </div>
+          <DraftList drafts={drafts} showPerson hrefFor={(d) => `/app/people/${d.person_id}/email?draft=${d.id}`} />
         </Panel>
       </div>
     </div>

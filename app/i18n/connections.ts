@@ -5,7 +5,7 @@ export default defineMessages(
   {
     title: "Connections",
     eyebrow: "Who can get us there?",
-    description: "Find people who can help, and the board members and staff who can introduce you.",
+    description: "Find people who can help, and who can introduce you.",
     backToCap: "Back to {title}",
 
     "search.label": "What do you need?",
@@ -54,7 +54,7 @@ export default defineMessages(
     "map.empty": "No one to draw yet. Add people and connections to see the map.",
 
     "web.summary": "Can't find anyone? Search the web",
-    "web.description": "We search the web for people and organizations around Annapolis and Anne Arundel County who could help. You get leads to check, not verified contacts.",
+    "web.description": "You get leads to check, not verified contacts.",
     "web.needLabel": "What are you looking for?",
     "web.needPlaceholder": "A marine biologist who could visit our CAP showcase",
     "web.viaLabel": "Through someone we know",
@@ -77,7 +77,7 @@ export default defineMessages(
 
     "leads.titleCount": "Leads from the web ({count})",
     "leads.unverified": "From the web, not verified",
-    "leads.unverifiedHelp": "Check the sources before you reach out. Saving a lead adds them as a contact to follow up with.",
+    "leads.unverifiedHelp": "Check the sources before you reach out.",
     "leads.whyRelevant": "Why they might help",
     "leads.sources": "Sources",
     "leads.via": "Possible way in: {name}",
@@ -97,7 +97,7 @@ export default defineMessages(
   {
     title: "Conexiones",
     eyebrow: "¿Quién nos puede llevar ahí?",
-    description: "Encuentra personas que pueden ayudar y a los miembros de la junta y del personal que te las pueden presentar.",
+    description: "Encuentre personas que pueden ayudar y quién se las puede presentar.",
     backToCap: "Volver a {title}",
 
     "search.label": "¿Qué necesitas?",
@@ -146,7 +146,7 @@ export default defineMessages(
     "map.empty": "Todavía no hay nada que dibujar. Agrega personas y conexiones para ver el mapa.",
 
     "web.summary": "¿No encuentras a nadie? Busca en la web",
-    "web.description": "Buscamos en la web personas y organizaciones de Annapolis y el condado de Anne Arundel que podrían ayudar. Recibes contactos para revisar, no contactos verificados.",
+    "web.description": "Recibe pistas para revisar, no contactos verificados.",
     "web.needLabel": "¿Qué estás buscando?",
     "web.needPlaceholder": "Una bióloga marina que pueda visitar la muestra de nuestro CAP",
     "web.viaLabel": "A través de alguien que conocemos",
@@ -169,7 +169,7 @@ export default defineMessages(
 
     "leads.titleCount": "Contactos de la web ({count})",
     "leads.unverified": "De la web, sin verificar",
-    "leads.unverifiedHelp": "Revisa las fuentes antes de escribirles. Al guardar un contacto, se agrega para darle seguimiento.",
+    "leads.unverifiedHelp": "Revise las fuentes antes de comunicarse.",
     "leads.whyRelevant": "Por qué podría ayudar",
     "leads.sources": "Fuentes",
     "leads.via": "Posible camino: {name}",

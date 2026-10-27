@@ -65,8 +65,8 @@ export default function EmailSettings() {
   const { t } = useT();
 
   return (
-    <div className="space-y-6">
-      <PageHeader eyebrow={t("settings.title")} title={t("settings.email.title")} description={t("settings.email.description")} />
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
+      <PageHeader title={t("settings.email.title")} description={t("settings.email.description")} />
 
       {setup.demoMode && <p className="rounded-xl bg-gold-soft px-3.5 py-2.5 text-sm text-graphite">{t("settings.demoMode")}</p>}
       {connected && (
@@ -92,9 +92,7 @@ export default function EmailSettings() {
         <div className="grid content-start gap-6">
           <Panel title={t("settings.accounts.title")}>
             <MailboxList accounts={accounts} providers={setup.providers} demoMode={setup.demoMode} />
-          </Panel>
-          <Panel title={t("settings.email.keeps")}>
-            <p className="text-sm text-graphite">{t("settings.email.keepsBody")}</p>
+            <p className="mt-4 text-xs text-smoke">{t("settings.email.keepsBody")}</p>
           </Panel>
         </div>
         <Panel title={t("settings.checklist.title")}>

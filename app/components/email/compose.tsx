@@ -1,14 +1,16 @@
 /**
- * Writing an email to one contact: start a draft (with AI or by hand), edit
+ * Writing an email to one contact: start a draft (by hand, or a first draft
+ * tucked behind a toggle when drafting is on), edit
  * it, and send it only after an explicit click and confirmation. After a
  * send, offer to create a follow-up.
  */
 import { useId, useState } from "react";
 import { Form, Link, useNavigation } from "react-router";
-import { CircleAlert, ListChecks, Send, Sparkles, Trash2 } from "lucide-react";
+import { CircleAlert, ListChecks, Send, Trash2 } from "lucide-react";
 import type { EmailAccountView } from "~/lib/email/accounts.server";
 import { DRAFT_PURPOSES } from "~/lib/email/purposes";
 import type { DraftView } from "~/lib/email/store.server";
+import { MoreDetails } from "~/components/crm/crm-bits";
 import { Field } from "~/components/nva";
 import { Button } from "~/components/ui/button";
 import {
@@ -39,65 +41,58 @@ export function ComposeStart({ aiOn, defaultLanguage }: { aiOn: boolean; default
 
   return (
     <div className="grid gap-4">
-      {aiOn ? (
-        <Form method="post" className="grid gap-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label={t("email.compose.purpose")} htmlFor={`${uid}-purpose`}>
-              <Select name="purpose" value={purpose} onValueChange={(v) => setPurpose(v as typeof purpose)}>
-                <SelectTrigger id={`${uid}-purpose`} className="h-10 w-full bg-canvas">
-                  <SelectValue>{t(`email.purpose.${purpose}`)}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {DRAFT_PURPOSES.map((p) => (
-                    <SelectItem key={p} value={p}>
-                      {t(`email.purpose.${p}`)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+      <Form method="post">
+        <Button type="submit" name="intent" value="blank" variant="brand" disabled={drafting}>
+          {t("email.compose.blank")}
+        </Button>
+      </Form>
+      {aiOn && (
+        <MoreDetails label={t("email.compose.draftToggle")}>
+          <Form method="post" className="grid gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label={t("email.compose.purpose")} htmlFor={`${uid}-purpose`}>
+                <Select name="purpose" value={purpose} onValueChange={(v) => setPurpose(v as typeof purpose)}>
+                  <SelectTrigger id={`${uid}-purpose`} className="h-10 w-full bg-canvas">
+                    <SelectValue>{t(`email.purpose.${purpose}`)}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DRAFT_PURPOSES.map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {t(`email.purpose.${p}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label={t("email.compose.language")} htmlFor={`${uid}-language`}>
+                <Select name="language" value={language} onValueChange={(v) => setLanguage(v === "es" ? "es" : "en")}>
+                  <SelectTrigger id={`${uid}-language`} className="h-10 w-full bg-canvas">
+                    <SelectValue>{t(`common.lang.${language}`)}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="en">{t("common.lang.en")}</SelectItem>
+                    <SelectItem value="es">{t("common.lang.es")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            </div>
+            <Field label={t("email.compose.stated")} htmlFor={`${uid}-stated`} optional>
+              <Textarea
+                id={`${uid}-stated`}
+                name="statedPurpose"
+                rows={3}
+                maxLength={800}
+                placeholder={t("email.compose.statedPlaceholder")}
+                className="bg-canvas"
+              />
             </Field>
-            <Field label={t("email.compose.language")} htmlFor={`${uid}-language`}>
-              <Select name="language" value={language} onValueChange={(v) => setLanguage(v === "es" ? "es" : "en")}>
-                <SelectTrigger id={`${uid}-language`} className="h-10 w-full bg-canvas">
-                  <SelectValue>{t(`common.lang.${language}`)}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="en">{t("common.lang.en")}</SelectItem>
-                  <SelectItem value="es">{t("common.lang.es")}</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
-          </div>
-          <Field label={t("email.compose.stated")} htmlFor={`${uid}-stated`} hint={t("email.compose.statedHint")} optional>
-            <Textarea
-              id={`${uid}-stated`}
-              name="statedPurpose"
-              rows={3}
-              maxLength={800}
-              placeholder={t("email.compose.statedPlaceholder")}
-              className="bg-canvas"
-            />
-          </Field>
-          <p className="text-xs text-smoke">{t("email.compose.grounding")}</p>
-          <div className="flex flex-wrap gap-2">
-            <Button type="submit" name="intent" value="draft" variant="brand" disabled={drafting}>
-              <Sparkles aria-hidden="true" />
-              {drafting ? t("email.compose.drafting") : t("email.compose.draftAi")}
-            </Button>
-            <Button type="submit" name="intent" value="blank" variant="outline" disabled={drafting}>
-              {t("email.compose.blank")}
-            </Button>
-          </div>
-        </Form>
-      ) : (
-        <div className="grid gap-3">
-          <p className="text-sm text-smoke">{t("email.compose.aiOff")}</p>
-          <Form method="post">
-            <Button type="submit" name="intent" value="blank" variant="outline">
-              {t("email.compose.blank")}
-            </Button>
+            <div>
+              <Button type="submit" name="intent" value="draft" variant="outline" disabled={drafting}>
+                {drafting ? t("email.compose.drafting") : t("email.compose.draftAi")}
+              </Button>
+            </div>
           </Form>
-        </div>
+        </MoreDetails>
       )}
     </div>
   );
@@ -135,16 +130,10 @@ export function DraftEditor({
     <div className="grid gap-4">
       <Form method="post" id={formId} className="grid gap-4">
         <input type="hidden" name="draftId" value={draft.id} />
-        <div className="flex flex-wrap items-center gap-2 text-xs text-smoke">
+        <p className="text-xs text-smoke">
           <span className="font-medium text-graphite">{t(`email.purpose.${draft.purpose}`)}</span>
-          {draft.ai_generated && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-gold-soft px-2 py-0.5 font-medium text-gold-ink">
-              <Sparkles className="size-3" aria-hidden="true" />
-              {t("email.draft.aiBadge")}
-            </span>
-          )}
-          {draft.ai_generated && <span>{t("email.draft.review")}</span>}
-        </div>
+          {draft.ai_generated && <> · {t("email.draft.review")}</>}
+        </p>
 
         {(otherFlags.length > 0 || figureFlags.length > 0) && (
           <div className="grid gap-1.5 rounded-xl bg-rust-soft px-3.5 py-3 text-sm text-rust-ink" role="note">

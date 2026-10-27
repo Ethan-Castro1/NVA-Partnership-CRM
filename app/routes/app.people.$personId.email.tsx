@@ -12,7 +12,7 @@ import type { Route } from "./+types/app.people.$personId.email";
 import { formatDay } from "~/components/admin/format";
 import { ComposeStart, DraftEditor, FollowUpOffer, type SendBlock } from "~/components/email/compose";
 import { DraftList, EmailMessageList, ManualEmailNotes } from "~/components/email/message-list";
-import { PageHeader, Panel, PersonAvatar } from "~/components/nva";
+import { PageHeader, Panel } from "~/components/nva";
 import { Button } from "~/components/ui/button";
 import { makeT, useT, type Locale, type MessageKey } from "~/i18n";
 import { generateDraft } from "~/lib/ai/drafts.server";
@@ -212,21 +212,15 @@ export default function PersonEmail() {
   const subtitle = [d.person.title, d.person.organization_name].filter(Boolean).join(", ");
 
   return (
-    <div className="space-y-6">
-      <Button asChild variant="ghost" size="sm" className="-ml-2">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
+      <Button asChild variant="ghost" size="sm" className="-ml-2 w-fit">
         <Link to={`/app/people/${d.person.id}`}>
           <ArrowLeft aria-hidden="true" />
           {t("email.backToProfile")}
         </Link>
       </Button>
       <PageHeader
-        eyebrow={t("email.eyebrow")}
-        title={
-          <span className="flex items-center gap-3">
-            <PersonAvatar name={d.person.full_name} className="size-11" />
-            {d.person.full_name}
-          </span>
-        }
+        title={d.person.full_name}
         description={[subtitle, d.to].filter(Boolean).join(" · ") || undefined}
       />
 
@@ -290,19 +284,19 @@ export default function PersonEmail() {
             </Panel>
           )}
 
-          <Panel title={t("email.draft.listTitle")}>
-            <DraftList drafts={d.drafts} currentId={d.current?.id} hrefFor={(x) => (x.status === "draft" ? `${base}?draft=${x.id}` : base)} />
-          </Panel>
+          {d.drafts.length > 0 && (
+            <Panel title={t("email.draft.listTitle")}>
+              <DraftList drafts={d.drafts} currentId={d.current?.id} hrefFor={(x) => (x.status === "draft" ? `${base}?draft=${x.id}` : base)} />
+            </Panel>
+          )}
         </div>
 
         <div className="grid content-start gap-6">
           <Panel title={t("email.history.title")}>
-            <p className="mb-3 text-xs text-smoke">{t("email.history.description")}</p>
             <EmailMessageList messages={d.messages} />
           </Panel>
           {d.notes.length > 0 && (
             <Panel title={t("email.notes.title")}>
-              <p className="mb-3 text-xs text-smoke">{t("email.notes.description")}</p>
               <ManualEmailNotes notes={d.notes} />
             </Panel>
           )}

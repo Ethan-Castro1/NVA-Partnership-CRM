@@ -29,7 +29,7 @@ import { useT, type MessageKey } from "~/i18n";
 import { addDays } from "~/lib/dates";
 import type { FollowUpItem } from "~/lib/follow-ups.server";
 import { cn } from "~/lib/utils";
-import { crmDate, daysOverdue } from "./crm-bits";
+import { crmDate, daysOverdue, useMyId } from "./crm-bits";
 
 export const FOLLOW_UP_ACTION = "/app/follow-ups/action";
 
@@ -63,6 +63,11 @@ export function FollowUpList({ items, today, showPerson = true, showOpportunity 
   );
 }
 
+/** Non-empty parts joined with " · ". */
+function joinDots(parts: ReactNode[]): ReactNode[] {
+  return parts.filter(Boolean).flatMap((part, i) => (i ? [" · ", part] : [part]));
+}
+
 function DueLabel({ item, today }: { item: FollowUpItem; today: string }) {
   const { t, locale } = useT();
   if (item.status === "completed") return null;
@@ -90,6 +95,7 @@ function FollowUpRow({
   showOpportunity: boolean;
 }) {
   const { t, locale } = useT();
+  const me = useMyId();
   const complete = useFetcher<FollowUpActionResult>();
   const other = useFetcher<FollowUpActionResult>();
   const [mode, setMode] = useState<null | "reschedule" | "next">(null);
@@ -140,37 +146,35 @@ function FollowUpRow({
 
         <div className="min-w-0 flex-1">
           <p className={cn("text-[0.95rem] leading-snug", done ? "text-graphite" : "font-medium text-ink")}>{item.action}</p>
-          <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-smoke">
-            {showPerson && (
-              <Link to={`/app/people/${item.person_id}`} className="font-medium text-graphite underline-offset-4 hover:text-ink hover:underline">
-                {item.person_name}
-                {item.organization_name && <span className="font-normal text-smoke">, {item.organization_name}</span>}
-              </Link>
-            )}
-            {showOpportunity && item.opportunity_id && item.opportunity_title && (
-              <Link to={`/app/opportunities/${item.opportunity_id}`} className="underline-offset-4 hover:text-ink hover:underline">
-                {t("crm.fu.row.for", { title: item.opportunity_title })}
-              </Link>
-            )}
-            {done ? (
-              <span>
-                {item.completed_by_name
-                  ? t("crm.fu.row.doneBy", { date: crmDate(item.completed_at, locale, today), name: item.completed_by_name })
-                  : t("crm.fu.row.doneOn", { date: crmDate(item.completed_at, locale, today) })}
+          <p className="mt-0.5 truncate text-xs text-smoke">
+            {item.awaiting_response && !done && (
+              <span className="mr-2 inline-flex items-center gap-1 font-medium text-purple-ink">
+                <Hourglass className="size-3" aria-hidden="true" />
+                {t("crm.fu.row.awaiting")}
               </span>
-            ) : (
-              item.owner_name && <span>{item.owner_name}</span>
             )}
+            {joinDots([
+              showPerson && (
+                <Link key="p" to={`/app/people/${item.person_id}`} className="font-medium text-graphite underline-offset-4 hover:text-ink hover:underline">
+                  {item.person_name}
+                  {item.organization_name && <span className="font-normal text-smoke">, {item.organization_name}</span>}
+                </Link>
+              ),
+              showOpportunity && item.opportunity_id && item.opportunity_title && (
+                <Link key="o" to={`/app/opportunities/${item.opportunity_id}`} className="underline-offset-4 hover:text-ink hover:underline">
+                  {item.opportunity_title}
+                </Link>
+              ),
+              done
+                ? item.completed_by_name
+                  ? t("crm.fu.row.doneBy", { date: crmDate(item.completed_at, locale, today), name: item.completed_by_name })
+                  : t("crm.fu.row.doneOn", { date: crmDate(item.completed_at, locale, today) })
+                : item.owner_user_id !== me && item.owner_name,
+            ])}
           </p>
         </div>
 
         <div className="flex shrink-0 items-center gap-2 text-xs">
-          {item.awaiting_response && !done && (
-            <span className="inline-flex h-6 items-center gap-1 rounded-full bg-purple-soft px-2 text-purple-ink">
-              <Hourglass className="size-3" aria-hidden="true" />
-              {t("crm.fu.row.awaiting")}
-            </span>
-          )}
           <DueLabel item={item} today={today} />
           {!done && (
             <DropdownMenu>

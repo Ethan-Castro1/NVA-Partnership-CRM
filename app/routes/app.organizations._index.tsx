@@ -29,9 +29,13 @@ export default function Organizations() {
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <PageHeader
         title={t("directory.orgs.title")}
-        description={t("directory.orgs.description")}
+        description={
+          <span className="font-medium text-graphite">
+            {organizations.length === 1 ? t("directory.orgs.countOne") : t("directory.orgs.countMany", { count: organizations.length })}
+          </span>
+        }
         actions={
-          <Button asChild variant="outline">
+          <Button asChild variant="ghost">
             <Link to="/app/people">
               <Users aria-hidden="true" />
               {t("directory.adminTitle")}
@@ -39,7 +43,7 @@ export default function Organizations() {
           </Button>
         }
       />
-      <Form method="get" role="search" className="flex flex-col gap-2 rounded-card bg-taupe p-4 sm:flex-row md:p-5">
+      <Form method="get" role="search" className="flex flex-col gap-2 sm:flex-row">
         <div className="relative flex-1">
           <label htmlFor="orgs-q" className="sr-only">
             {t("directory.orgs.searchLabel")}

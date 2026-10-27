@@ -1,15 +1,16 @@
 /** The administrator's dashboard: what to act on today, in one calm page. */
 import { Link } from "react-router";
-import { AlarmClock, CalendarClock, ClipboardList, Hourglass, Mail, PenLine, Workflow, Users } from "lucide-react";
-import { FollowUpList, StageBadge } from "~/components/crm";
-import { ContributionChips, PageHeader, Panel, PersonAvatar, StatTile } from "~/components/nva";
+import { Mail, Workflow } from "lucide-react";
+import { StageBadge } from "~/components/crm";
+import { ContributionChips, PageHeader, Panel, PersonAvatar } from "~/components/nva";
 import { RequestRows } from "~/components/requests";
 import { useT } from "~/i18n";
 import type { AdminDashboard as AdminData, DashboardActivity } from "~/lib/dashboard.server";
 import type { OpportunityTrack } from "~/lib/constants";
 import { cn } from "~/lib/utils";
+import { DashboardFollowUps } from "./follow-up-rows";
 import { shortDate } from "./format";
-import { NeedSearch, UpcomingEngagements, ViewAll, linkClass } from "./panels";
+import { MOBILE_LIMIT, UpcomingEngagements, ViewAll, linkClass } from "./panels";
 import { QuickActions } from "./quick-actions";
 
 export function AdminDashboard({
@@ -24,55 +25,40 @@ export function AdminDashboard({
   userId: string;
 }) {
   const { t, locale } = useT();
-  const { followUpCounts: fu, attention } = data;
+  const { attention } = data;
 
   return (
     <div className="grid gap-6 md:gap-8">
-      <PageHeader eyebrow={todayLabel} title={t("dashboard.greeting", { name: firstName })} description={t("dashboard.admin.description")} />
+      <PageHeader
+        eyebrow={todayLabel}
+        title={t("dashboard.greeting", { name: firstName })}
+        actions={<QuickActions today={data.today} people={data.people} owners={data.owners} defaultOwnerId={userId} />}
+      />
 
-      <QuickActions today={data.today} people={data.people} owners={data.owners} defaultOwnerId={userId} />
-
-      <section aria-labelledby="stats-heading">
-        <h2 id="stats-heading" className="sr-only">
-          {t("dashboard.statsHeading")}
-        </h2>
-        <ul className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-          <li>
-            <StatTile label={t("dashboard.stat.overdue")} value={fu.overdue} icon={<AlarmClock />} accent={fu.overdue ? "skills_lesson" : "gold"} to="/app/follow-ups?view=overdue" />
-          </li>
-          <li>
-            <StatTile label={t("dashboard.stat.today")} value={fu.today} icon={<CalendarClock />} to="/app/follow-ups?view=today" />
-          </li>
-          <li>
-            <StatTile label={t("dashboard.stat.awaiting")} value={fu.awaiting} icon={<Hourglass />} to="/app/follow-ups?view=awaiting" />
-          </li>
-          <li>
-            <StatTile label={t("dashboard.stat.requests")} value={attention.open} icon={<ClipboardList />} to="/app/admin/requests" />
-          </li>
-          <li className="col-span-2 md:col-span-1">
-            <StatTile label={t("dashboard.stat.signups")} value={data.signupCount} icon={<Users />} to="/app/admin/intake" />
-          </li>
-        </ul>
-      </section>
-
+      {/*
+        Two columns on wide screens. On narrow ones the column wrappers dissolve
+        ("contents") so the panels stack in this order: follow-ups, staff requests,
+        sign-ups, activity, engagements, opportunities.
+      */}
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
-        <div className="grid min-w-0 gap-6">
-          <Panel title={t("dashboard.fu.title")} action={<ViewAll to="/app/follow-ups" />}>
-            <h3 className="text-eyebrow text-smoke">{t("dashboard.fu.dueNow")}</h3>
-            <FollowUpList items={data.dueNow} today={data.today} empty={t("dashboard.fu.emptyDue")} className="mt-1" />
-            <h3 className="mt-5 text-eyebrow text-smoke">{t("dashboard.fu.upcoming")}</h3>
-            <FollowUpList items={data.upcoming} today={data.today} empty={t("dashboard.fu.emptyUpcoming")} className="mt-1" />
+        <div className="contents lg:grid lg:min-w-0 lg:gap-6">
+          <Panel title={t("dashboard.fu.title")} action={<ViewAll to="/app/follow-ups" />} className="order-1 min-w-0">
+            <DashboardFollowUps
+              today={data.today}
+              empty={t("dashboard.fu.empty")}
+              groups={[
+                { key: "due", label: t("dashboard.fu.dueNow"), items: data.dueNow },
+                { key: "upcoming", label: t("dashboard.fu.upcoming"), items: data.upcoming },
+                { key: "awaiting", label: t("dashboard.fu.awaiting"), items: data.awaiting },
+              ]}
+            />
           </Panel>
 
-          <Panel title={t("dashboard.awaiting.title")} action={fu.awaiting > 0 && <ViewAll to="/app/follow-ups?view=awaiting" />}>
-            <FollowUpList items={data.awaiting} today={data.today} empty={t("dashboard.awaiting.empty")} />
-          </Panel>
-
-          <Panel title={t("dashboard.activity.title")} action={<ViewAll to="/app/communications" />}>
+          <Panel title={t("dashboard.activity.title")} action={<ViewAll to="/app/communications" />} className="order-4 min-w-0">
             {data.activity.length === 0 ? (
               <p className="py-2 text-sm text-smoke">{t("dashboard.activity.empty")}</p>
             ) : (
-              <ul className="divide-y divide-stone">
+              <ul className={cn("divide-y divide-stone", MOBILE_LIMIT)}>
                 {data.activity.map((item) => (
                   <ActivityRow key={item.id} item={item} />
                 ))}
@@ -81,10 +67,11 @@ export function AdminDashboard({
           </Panel>
         </div>
 
-        <div className="grid min-w-0 gap-6">
+        <div className="contents lg:grid lg:min-w-0 lg:gap-6">
           <Panel
             title={t("dashboard.requests.title")}
             action={attention.open > 0 && <ViewAll to="/app/admin/requests" />}
+            className="order-2 min-w-0"
           >
             {attention.introductions > 0 && (
               <p className="-mt-1 mb-3 text-sm font-medium text-gold-ink">
@@ -96,15 +83,19 @@ export function AdminDashboard({
             {attention.items.length === 0 ? (
               <p className="py-2 text-sm text-smoke">{t("dashboard.requests.empty")}</p>
             ) : (
-              <RequestRows requests={attention.items} showRequester />
+              <RequestRows requests={attention.items} showRequester className={MOBILE_LIMIT} />
             )}
           </Panel>
 
-          <Panel title={t("dashboard.signups.title")} action={data.signupCount > 0 && <ViewAll to="/app/admin/intake" />}>
+          <Panel
+            title={t("dashboard.signups.title")}
+            action={data.signupCount > 0 && <ViewAll to="/app/admin/intake" />}
+            className="order-3 min-w-0"
+          >
             {data.signups.length === 0 ? (
               <p className="py-2 text-sm text-smoke">{t("dashboard.signups.empty")}</p>
             ) : (
-              <ul className="divide-y divide-stone">
+              <ul className={cn("divide-y divide-stone", MOBILE_LIMIT)}>
                 {data.signups.map((s) => (
                   <li key={s.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
                     <PersonAvatar name={s.full_name || "?"} className="size-8" />
@@ -123,9 +114,9 @@ export function AdminDashboard({
             )}
           </Panel>
 
-          <UpcomingEngagements items={data.engagements} showRequester />
+          <UpcomingEngagements items={data.engagements} showRequester className="order-5 min-w-0" />
 
-          <Panel title={t("dashboard.opps.title")} action={<ViewAll to="/app/opportunities" />}>
+          <Panel title={t("dashboard.opps.title")} action={<ViewAll to="/app/opportunities" />} className="order-6 min-w-0">
             {data.stages.length === 0 ? (
               <p className="py-2 text-sm text-smoke">{t("dashboard.opps.empty")}</p>
             ) : (
@@ -158,45 +149,32 @@ export function AdminDashboard({
               </div>
             )}
           </Panel>
-
-          <NeedSearch />
         </div>
       </div>
     </div>
   );
 }
 
-const ORIGIN_STYLE: Record<DashboardActivity["origin"], string> = {
-  email: "border-blue/40 bg-blue-soft text-blue-ink",
-  manual: "border-stone bg-canvas text-graphite",
-  system: "border-transparent bg-taupe text-smoke",
-  staff_request: "border-transparent bg-sage-soft text-sage-ink",
-};
-
-/** One history row. Email activity carries a blue "From email" tag; manual entries say "Added by hand". */
+/** One history row: who and what, a one-line note, and a small "From email" badge for email. */
 function ActivityRow({ item }: { item: DashboardActivity }) {
   const { t, locale } = useT();
-  const Icon = item.origin === "email" ? Mail : PenLine;
   return (
     <li className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
       <PersonAvatar name={item.person_name} className="size-8" />
-      <div className="grid min-w-0 flex-1 gap-1 text-sm">
+      <div className="min-w-0 flex-1 text-sm">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <Link to={`/app/people/${item.person_id}`} className={linkClass}>
             {item.person_name}
           </Link>
           <span className="text-graphite">{t(`common.engagement.${item.kind}`)}</span>
+          {item.origin === "email" && (
+            <span className="inline-flex h-5 items-center gap-1 rounded-full border border-blue/40 bg-blue-soft px-2 text-[0.7rem] font-medium text-blue-ink">
+              <Mail className="size-3" aria-hidden="true" />
+              {t("common.historyOrigin.email")}
+            </span>
+          )}
         </div>
-        {item.summary && <p className="line-clamp-2 text-xs text-smoke">{item.summary}</p>}
-        <div className="flex flex-wrap items-center gap-2 text-xs text-smoke">
-          <span
-            className={cn("inline-flex h-5 items-center gap-1 rounded-full border px-2 text-[0.7rem] font-medium", ORIGIN_STYLE[item.origin])}
-          >
-            {(item.origin === "email" || item.origin === "manual") && <Icon className="size-3" aria-hidden="true" />}
-            {t(`common.historyOrigin.${item.origin}`)}
-          </span>
-          {item.user_name && <span>{t("dashboard.activity.by", { name: item.user_name })}</span>}
-        </div>
+        {item.summary && <p className="mt-0.5 truncate text-xs text-smoke">{item.summary}</p>}
       </div>
       <time dateTime={item.happened_on} className="shrink-0 text-xs text-smoke">
         {shortDate(item.happened_on, locale)}

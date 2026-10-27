@@ -54,15 +54,7 @@ export default function PeopleDirectory() {
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <PageHeader
         title={isAdmin ? t("directory.adminTitle") : t("directory.staffTitle")}
-        description={
-          isAdmin ? (
-            <span className="font-medium text-graphite">{count}</span>
-          ) : (
-            <>
-              {t("directory.staffDescription")} <span className="font-medium text-graphite">{count}</span>
-            </>
-          )
-        }
+        description={<span className="font-medium text-graphite">{count}</span>}
         actions={
           isAdmin && (
             <>

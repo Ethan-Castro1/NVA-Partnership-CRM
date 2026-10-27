@@ -1,13 +1,12 @@
 /** My Connections: people the signed-in user saved, requested or worked with (only people they can still see). */
 import { Link } from "react-router";
 import type { Route } from "./+types/app.my-connections";
-import { EmptyState, PageHeader, PersonAvatar } from "~/components/nva";
+import { EmptyState, PageHeader, PersonAvatar, Sheet } from "~/components/nva";
 import { ResourceActions } from "~/components/resources/resource-actions";
 import { Button } from "~/components/ui/button";
 import { makeT, useT } from "~/i18n";
 import { requireUser } from "~/lib/auth.server";
 import { listMyConnections } from "~/lib/requests.server";
-import { cn } from "~/lib/utils";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const locale = (matches[0]?.data as { locale?: "en" | "es" } | undefined)?.locale ?? "en";
@@ -20,17 +19,41 @@ export async function loader({ request }: Route.LoaderArgs) {
   return { connections: await listMyConnections(user) };
 }
 
-function Reason({ children, tone }: { children: string; tone: "gold" | "blue" | "sage" }) {
-  const styles = { gold: "bg-gold-soft text-gold-ink", blue: "bg-blue-soft text-blue-ink", sage: "bg-sage-soft text-sage-ink" };
-  return <span className={cn("inline-flex h-5 items-center rounded-full px-2 text-[0.7rem] font-medium", styles[tone])}>{children}</span>;
+/** Why someone is here, as quiet text; links to the last request when there is one. */
+function ReasonText({ c }: { c: Route.ComponentProps["loaderData"]["connections"][number] }) {
+  const { t } = useT();
+  const reasons = [
+    c.worked_with && t("requests.connections.reason.workedWith"),
+    c.requested && !c.worked_with && t("requests.connections.reason.requested"),
+    c.saved && !c.worked_with && !c.requested && t("requests.connections.reason.saved"),
+  ].filter(Boolean) as string[];
+  if (!reasons.length) return null;
+  const text = reasons.join(", ");
+  if (c.last_request_id && c.last_request_need) {
+    return (
+      <Link
+        to={`/app/requests/${c.last_request_id}`}
+        title={t("requests.connections.lastRequest", { need: c.last_request_need })}
+        aria-label={t("requests.connections.lastRequest", { need: c.last_request_need })}
+        className="relative z-10 underline decoration-stone underline-offset-4 hover:text-ink hover:decoration-gold"
+      >
+        {text}
+      </Link>
+    );
+  }
+  return <span>{text}</span>;
 }
 
 export default function MyConnections({ loaderData }: Route.ComponentProps) {
   const { t } = useT();
   const { connections } = loaderData;
+  const count = connections.length === 1 ? t("directory.countOne") : t("directory.countMany", { count: connections.length });
   return (
-    <div className="mx-auto grid min-w-0 grid-cols-[minmax(0,1fr)] w-full max-w-3xl gap-6">
-      <PageHeader title={t("requests.connections.title")} description={t("requests.connections.description")} />
+    <div className="mx-auto grid w-full max-w-3xl min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
+      <PageHeader
+        title={t("requests.connections.title")}
+        description={connections.length ? <span className="font-medium text-graphite">{count}</span> : undefined}
+      />
       {connections.length === 0 ? (
         <EmptyState
           title={t("requests.connections.empty.title")}
@@ -42,34 +65,38 @@ export default function MyConnections({ loaderData }: Route.ComponentProps) {
           }
         />
       ) : (
-        <ul className="grid gap-3">
-          {connections.map((c) => (
-            <li key={c.id} className="flex flex-col gap-3 rounded-card border border-stone bg-canvas p-4">
-              <div className="flex items-start gap-3">
-                <PersonAvatar name={c.full_name} />
-                <div className="grid min-w-0 gap-1">
-                  <Link to={`/app/people/${c.id}`} className="font-medium underline-offset-4 hover:underline">
-                    {c.full_name}
-                  </Link>
-                  {(c.title || c.organization_name) && (
-                    <p className="text-sm text-smoke">{[c.title, c.organization_name].filter(Boolean).join(", ")}</p>
-                  )}
-                  <div className="flex flex-wrap gap-1.5">
-                    {c.worked_with && <Reason tone="sage">{t("requests.connections.reason.workedWith")}</Reason>}
-                    {c.requested && !c.worked_with && <Reason tone="blue">{t("requests.connections.reason.requested")}</Reason>}
-                    {c.saved && <Reason tone="gold">{t("requests.connections.reason.saved")}</Reason>}
+        <Sheet className="p-0">
+          <ul className="divide-y divide-stone">
+            {connections.map((c) => {
+              const subtitle = [c.title, c.organization_name].filter(Boolean).join(", ");
+              return (
+                <li
+                  key={c.id}
+                  className="relative flex flex-col gap-2 px-4 py-3 hover:bg-taupe/60 focus-within:bg-taupe/60 sm:flex-row sm:items-center sm:gap-3 sm:px-5"
+                >
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <PersonAvatar name={c.full_name} className="size-8" />
+                    <div className="min-w-0">
+                      <Link
+                        to={`/app/people/${c.id}`}
+                        prefetch="intent"
+                        className="block truncate text-sm font-medium text-ink after:absolute after:inset-0 hover:underline focus-visible:outline-none"
+                      >
+                        {c.full_name}
+                      </Link>
+                      <p className="truncate text-xs text-smoke">
+                        {subtitle}
+                        {subtitle && <span aria-hidden="true"> · </span>}
+                        <ReasonText c={c} />
+                      </p>
+                    </div>
                   </div>
-                  {c.last_request_id && c.last_request_need && (
-                    <Link to={`/app/requests/${c.last_request_id}`} className="text-xs text-graphite underline-offset-4 hover:underline">
-                      {t("requests.connections.lastRequest", { need: c.last_request_need })}
-                    </Link>
-                  )}
-                </div>
-              </div>
-              <ResourceActions person={c} saved={c.saved} compact />
-            </li>
-          ))}
-        </ul>
+                  <ResourceActions person={c} saved={c.saved} compact className="shrink-0 pl-11 sm:pl-0" />
+                </li>
+              );
+            })}
+          </ul>
+        </Sheet>
       )}
     </div>
   );

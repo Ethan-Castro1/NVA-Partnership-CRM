@@ -1,16 +1,31 @@
 /**
- * The four things staff can do with a search result: View Profile, Contact,
- * Request Introduction and Save. Contact shows only for direct-contact people
- * whose email or phone the viewer received; otherwise Request Introduction
- * shows. Next to Contact, a quiet "Track as a request" link opens the request
- * form with this person filled in, so the work reaches their history once it
- * is completed. Save posts to /app/saved, which checks the viewer can see the person.
+ * What you can do with a person in a list or on a profile: one main action
+ * (Contact for direct-contact people whose email or phone the viewer has,
+ * otherwise Request introduction) plus a Save icon toggle. Names elsewhere link
+ * to the profile, so there is no "View profile" button unless `showProfile` is
+ * set (for places without a name link).
+ *
+ * Admins reach anyone directly and never see Request introduction; when an
+ * admin has no email or phone for someone, there is no main action.
+ *
+ * "Track as a request" (the request form with this person filled in) lives in
+ * a small ⋯ menu, shown on the profile (non-compact) or with `showMenu`.
+ * `variant="icons"` is the admin table cell: a contact icon and a ⋯ menu
+ * holding Call, Save and Track as a request.
+ * Save posts to /app/saved, which checks the viewer can see the person.
  *
  *   <ResourceActions person={hit} saved={savedIds.has(hit.id)} compact />
  */
-import { Link, useFetcher } from "react-router";
-import { Bookmark, BookmarkCheck, Handshake, Mail, Phone, UserRound } from "lucide-react";
+import { Link, useFetcher, useRouteLoaderData } from "react-router";
+import { Bookmark, BookmarkCheck, ClipboardList, Handshake, Mail, MoreHorizontal, Phone, UserRound } from "lucide-react";
 import { Button } from "~/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "~/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
 import { useT } from "~/i18n";
 import type { ContactMode } from "~/lib/constants";
 import { cn } from "~/lib/utils";
@@ -31,6 +46,12 @@ export type ResourceActionsProps = {
   compact?: boolean;
   /** Hide Request Introduction and Track as a request (on a request that is already about this person). */
   hideRequest?: boolean;
+  /** Add a "View profile" button, for places where the name is not a link. */
+  showProfile?: boolean;
+  /** Show the ⋯ menu (Track as a request, Call). Defaults to on for the full size, off for compact. */
+  showMenu?: boolean;
+  /** "icons": a contact icon plus a ⋯ menu (Call, Save, Track as a request), for dense tables. */
+  variant?: "default" | "icons";
   className?: string;
 };
 
@@ -46,51 +67,154 @@ export function trackRequestHref(personId: string): string {
   return `/app/requests/new?person=${encodeURIComponent(personId)}`;
 }
 
-export function ResourceActions({ person, saved, compact = false, hideRequest = false, className }: ResourceActionsProps) {
+/** Whether the signed-in viewer is an admin (from the root loader). */
+function useIsAdminViewer(): boolean {
+  const root = useRouteLoaderData("root") as { user?: { role?: string } | null } | undefined;
+  return root?.user?.role === "admin";
+}
+
+/** A 40px touch target on phones, the usual size from md up. */
+const touch = "max-md:h-10 max-md:min-w-10";
+
+export function ResourceActions({
+  person,
+  saved,
+  compact = false,
+  hideRequest = false,
+  showProfile = false,
+  showMenu,
+  variant = "default",
+  className,
+}: ResourceActionsProps) {
   const { t } = useT();
+  const isAdmin = useIsAdminViewer();
   const fetcher = useFetcher<{ ok: boolean; saved?: boolean }>();
-  const size = compact ? "xs" : "sm";
+  const size = compact ? "sm" : "default";
   const name = person.full_name;
 
-  const direct = person.contact_mode === "direct" && Boolean(person.email || person.phone);
+  const hasContact = Boolean(person.email || person.phone);
+  // Admins reach anyone they have details for; the introduction setting is for staff.
+  const direct = hasContact && (isAdmin || person.contact_mode === "direct");
+  const canIntro = !direct && !isAdmin && !hideRequest;
+  const canTrack = direct && !hideRequest;
+  const extraCall = direct && Boolean(person.email && person.phone);
+  const menu = showMenu ?? !compact;
+
   // Optimistic: show the state being sent, then what the server said.
   const pending = fetcher.formData?.get("intent");
   const isSaved =
     pending === "save" ? true : pending === "unsave" ? false : fetcher.data?.ok ? Boolean(fetcher.data.saved) : saved;
   const failed = fetcher.state === "idle" && fetcher.data && !fetcher.data.ok;
+  const toggleSave = () =>
+    fetcher.submit({ personId: person.id, intent: isSaved ? "unsave" : "save" }, { method: "post", action: "/app/saved" });
+
+  const saveLabel = t("resources.actions.saveLabel", { name });
+  const contactHref = person.email ? `mailto:${person.email}` : person.phone ? telHref(person.phone) : null;
+  const contactLabel = person.email ? t("resources.actions.email", { name }) : t("resources.actions.phone", { name });
+
+  const menuItems = (
+    <>
+      {extraCall && person.phone && (
+        <DropdownMenuItem asChild>
+          <a href={telHref(person.phone)}>
+            <Phone aria-hidden />
+            {t("resources.actions.callShort")}
+          </a>
+        </DropdownMenuItem>
+      )}
+      {variant === "icons" && (
+        <DropdownMenuItem onSelect={toggleSave}>
+          {isSaved ? <BookmarkCheck aria-hidden /> : <Bookmark aria-hidden />}
+          {isSaved ? t("resources.actions.unsave") : t("resources.actions.save")}
+        </DropdownMenuItem>
+      )}
+      {canTrack && (
+        <DropdownMenuItem asChild>
+          <Link to={trackRequestHref(person.id)} aria-label={t("resources.actions.trackLabel", { name })}>
+            <ClipboardList aria-hidden />
+            {t("resources.actions.track")}
+          </Link>
+        </DropdownMenuItem>
+      )}
+    </>
+  );
+  const hasMenuItems = extraCall || canTrack || variant === "icons";
+
+  const moreMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size={compact || variant === "icons" ? "icon-sm" : "icon"}
+          aria-label={t("resources.actions.more", { name })}
+          className={touch}
+        >
+          <MoreHorizontal aria-hidden />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-auto min-w-44">
+        {menuItems}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
+  const error = failed ? (
+    <span role="status" className="text-xs text-rust-ink">
+      {t("resources.actions.saveError")}
+    </span>
+  ) : null;
+
+  if (variant === "icons") {
+    return (
+      <div
+        role="group"
+        aria-label={t("resources.actions.label", { name })}
+        className={cn("relative z-10 flex items-center justify-end gap-0.5", className)}
+      >
+        {direct && contactHref && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button asChild variant="ghost" size="icon-sm" className={touch}>
+                <a href={contactHref} aria-label={contactLabel}>
+                  {person.email ? <Mail aria-hidden /> : <Phone aria-hidden />}
+                </a>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{person.email ?? person.phone}</TooltipContent>
+          </Tooltip>
+        )}
+        {moreMenu}
+        {error}
+      </div>
+    );
+  }
 
   return (
     <div
       role="group"
       aria-label={t("resources.actions.label", { name })}
-      className={cn("relative z-10 flex flex-wrap items-center gap-1.5", className)}
+      className={cn("relative z-10 flex flex-wrap items-center gap-1", className)}
     >
-      <Button asChild variant="outline" size={size}>
-        <Link to={`/app/people/${person.id}`} prefetch="intent">
-          <UserRound aria-hidden data-icon="inline-start" />
-          {t("resources.actions.view")}
-        </Link>
-      </Button>
+      {showProfile && (
+        <Button asChild variant="outline" size={size} className={touch}>
+          <Link to={`/app/people/${person.id}`} prefetch="intent">
+            <UserRound aria-hidden data-icon="inline-start" />
+            {t("resources.actions.view")}
+          </Link>
+        </Button>
+      )}
 
-      {direct && person.email && (
-        <Button asChild variant="outline" size={size}>
-          <a href={`mailto:${person.email}`} aria-label={t("resources.actions.email", { name })}>
-            <Mail aria-hidden data-icon="inline-start" />
+      {direct && contactHref && (
+        <Button asChild variant="outline" size={size} className={touch}>
+          <a href={contactHref} aria-label={contactLabel}>
+            {person.email ? <Mail aria-hidden data-icon="inline-start" /> : <Phone aria-hidden data-icon="inline-start" />}
             {t("resources.actions.contact")}
           </a>
         </Button>
       )}
-      {direct && person.phone && (!person.email || !compact) && (
-        <Button asChild variant="outline" size={size}>
-          <a href={telHref(person.phone)} aria-label={person.email ? t("resources.actions.call", { name }) : t("resources.actions.phone", { name })}>
-            <Phone aria-hidden data-icon="inline-start" />
-            {person.email ? t("resources.actions.callShort") : t("resources.actions.contact")}
-          </a>
-        </Button>
-      )}
 
-      {!direct && !hideRequest && (
-        <Button asChild variant="outline" size={size}>
+      {canIntro && (
+        <Button asChild variant="outline" size={size} className={touch}>
           <Link to={introRequestHref(person.id)}>
             <Handshake aria-hidden data-icon="inline-start" />
             {compact ? t("resources.actions.requestIntroShort") : t("resources.actions.requestIntro")}
@@ -98,35 +222,29 @@ export function ResourceActions({ person, saved, compact = false, hideRequest = 
         </Button>
       )}
 
-      <fetcher.Form method="post" action="/app/saved">
+      <fetcher.Form method="post" action="/app/saved" className="contents">
         <input type="hidden" name="personId" value={person.id} />
-        <Button
-          type="submit"
-          name="intent"
-          value={isSaved ? "unsave" : "save"}
-          variant={isSaved ? "secondary" : "ghost"}
-          size={size}
-          aria-pressed={isSaved}
-          aria-label={t("resources.actions.saveLabel", { name })}
-        >
-          {isSaved ? <BookmarkCheck aria-hidden data-icon="inline-start" /> : <Bookmark aria-hidden data-icon="inline-start" />}
-          {isSaved ? t("resources.actions.saved") : t("resources.actions.save")}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="submit"
+              name="intent"
+              value={isSaved ? "unsave" : "save"}
+              variant="ghost"
+              size={compact ? "icon-sm" : "icon"}
+              aria-pressed={isSaved}
+              aria-label={saveLabel}
+              className={cn(touch, isSaved && "text-gold-ink")}
+            >
+              {isSaved ? <BookmarkCheck aria-hidden className="fill-gold-soft" /> : <Bookmark aria-hidden />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{isSaved ? t("resources.actions.saved") : t("resources.actions.save")}</TooltipContent>
+        </Tooltip>
       </fetcher.Form>
-      {direct && !hideRequest && (
-        <Link
-          to={trackRequestHref(person.id)}
-          aria-label={t("resources.actions.trackLabel", { name })}
-          className="rounded-full px-1.5 text-xs text-smoke underline decoration-stone underline-offset-4 hover:text-ink hover:decoration-gold focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
-        >
-          {t("resources.actions.track")}
-        </Link>
-      )}
-      {failed && (
-        <span role="status" className="text-xs text-rust-ink">
-          {t("resources.actions.saveError")}
-        </span>
-      )}
+
+      {menu && hasMenuItems && moreMenu}
+      {error}
     </div>
   );
 }

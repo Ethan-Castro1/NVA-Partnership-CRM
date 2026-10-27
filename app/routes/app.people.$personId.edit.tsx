@@ -104,11 +104,7 @@ export default function EditPerson() {
   const { t } = useT();
   return (
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] max-w-4xl gap-6">
-      <PageHeader
-        eyebrow={t("people.edit.title")}
-        title={t("people.edit.heading", { name: person.full_name })}
-        description={t("people.edit.description")}
-      />
+      <PageHeader title={t("people.edit.heading", { name: person.full_name })} />
       <PersonForm
         defaults={person}
         errors={actionData?.errors}

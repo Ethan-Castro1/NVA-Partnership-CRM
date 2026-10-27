@@ -8,14 +8,14 @@
  */
 import { useEffect, useState } from "react";
 import { Form, Link, data, redirect, useActionData, useFetcher, useLoaderData, useNavigation } from "react-router";
-import { ArrowLeft, CalendarDays, Loader2, Network, Pencil, Plus, Trash2, UserRound } from "lucide-react";
+import { ArrowLeft, Loader2, MoreHorizontal, Network, Pencil, Plus, Trash2, UserRound } from "lucide-react";
 import { z } from "zod";
 import type { Route } from "./+types/app.caps.$capId";
 import { formatDay } from "~/components/admin/format";
-import { BlockChips, CapLabels, CapStatusBadge, TopicList } from "~/components/caps/cap-bits";
+import { BlockChips, CapLabels, CapStatusBadge, useTopicLabel } from "~/components/caps/cap-bits";
 import { CapForm } from "~/components/caps/cap-form";
 import { PartnerRow, SuggestionItem } from "~/components/caps/cap-partners";
-import { EmptyState, PageHeader, Panel, Sheet } from "~/components/nva";
+import { PageHeader, Panel, Sheet, TagList } from "~/components/nva";
 import type { SelectOption } from "~/components/people/named-select";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -30,6 +30,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "~/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "~/components/ui/dropdown-menu";
 import { makeT, useT, type MessageKey } from "~/i18n";
 import { requireUser } from "~/lib/auth.server";
 import {
@@ -144,12 +145,13 @@ export default function CapDetail() {
   const actionData = useActionData<typeof action>();
   const { t, locale } = useT();
   const connectionsQuery = (cap.needs?.trim() || cap.topics.join(", ")).slice(0, 200);
+  const topicLabel = useTopicLabel();
 
   if (editing) {
     return (
       <div className="mx-auto grid w-full max-w-3xl gap-6">
         <BackLink to={`/app/caps/${cap.id}`} label={cap.title} />
-        <PageHeader eyebrow={t("caps.eyebrow")} title={t("caps.detail.editTitle")} />
+        <PageHeader title={t("caps.detail.editTitle")} />
         <Sheet className="p-6 md:p-8">
           <CapForm
             key={cap.id}
@@ -169,38 +171,59 @@ export default function CapDetail() {
   }
 
   const countOf = (status: string) => partners.filter((p) => p.status === status).length;
+  // A CAP's own catalog key doubles as its topic tag: leave out the one that just repeats the title.
+  const topicLabels = cap.topics.map(topicLabel).filter((label) => label.trim().toLowerCase() !== cap.title.trim().toLowerCase());
 
   return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-8">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <BackLink to="/app/caps" label={t("caps.detail.backToList")} />
       <PageHeader
-        eyebrow={
-          <span className="flex flex-wrap items-center gap-2">
-            {t("caps.eyebrow")}
-            <CapStatusBadge status={cap.status} className="normal-case tracking-normal" />
-          </span>
-        }
         title={cap.title}
-        description={cap.driving_question ?? undefined}
+        description={
+          cap.status !== "active" || cap.driving_question ? (
+            <>
+              {cap.status !== "active" && <CapStatusBadge status={cap.status} className="mr-2 align-middle" />}
+              {cap.driving_question}
+            </>
+          ) : undefined
+        }
         actions={
           <>
-            {connectionsQuery && (
-              <Button asChild variant="outline">
-                <Link to={`/app/connections?q=${encodeURIComponent(connectionsQuery)}&cap=${encodeURIComponent(cap.id)}`}>
-                  <Network aria-hidden="true" />
-                  {t("caps.detail.findConnections")}
-                </Link>
-              </Button>
-            )}
-            {canEdit && (
-              <Button asChild variant="outline">
-                <Link to="?edit=1">
-                  <Pencil aria-hidden="true" />
-                  {t("caps.detail.edit")}
-                </Link>
-              </Button>
-            )}
             {canManage && <AddPartnerDialog options={partnerOptions} />}
+            {canEdit ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon" aria-label={t("caps.detail.more")} title={t("caps.detail.more")}>
+                    <MoreHorizontal aria-hidden="true" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuItem asChild>
+                    <Link to="?edit=1">
+                      <Pencil aria-hidden="true" />
+                      {t("caps.detail.edit")}
+                    </Link>
+                  </DropdownMenuItem>
+                  {connectionsQuery && (
+                    <DropdownMenuItem asChild>
+                      <Link to={`/app/connections?q=${encodeURIComponent(connectionsQuery)}&cap=${encodeURIComponent(cap.id)}`}>
+                        <Network aria-hidden="true" />
+                        {t("caps.detail.findConnections")}
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              connectionsQuery && (
+                <Button asChild variant="outline">
+                  <Link to={`/app/connections?q=${encodeURIComponent(connectionsQuery)}&cap=${encodeURIComponent(cap.id)}`}>
+                    <Network aria-hidden="true" />
+                    {t("caps.detail.findConnections")}
+                  </Link>
+                </Button>
+              )
+            )}
           </>
         }
       />
@@ -210,6 +233,7 @@ export default function CapDetail() {
           <Panel
             title={t("caps.partners.title")}
             action={
+              partners.length > 0 && (
               <span className="text-sm text-smoke">
                 {t("caps.partners.pipeline", {
                   suggested: countOf("suggested"),
@@ -217,10 +241,11 @@ export default function CapDetail() {
                   confirmed: countOf("confirmed"),
                 })}
               </span>
+              )
             }
           >
+            {partners.length ? (
             <Sheet className="py-1">
-              {partners.length ? (
                 <ul className="divide-y divide-stone">
                   {partners.map((partner) => (
                     <PartnerRow
@@ -232,13 +257,10 @@ export default function CapDetail() {
                     />
                   ))}
                 </ul>
-              ) : (
-                <p className="py-6 text-center text-sm text-smoke">{t(canManage ? "caps.partners.empty" : "caps.partners.emptyStaff")}</p>
-              )}
-              {!canManage && (
-                <p className="border-t border-stone px-1 pt-3 pb-2 text-xs text-smoke">{t("caps.partners.adminManaged")}</p>
-              )}
             </Sheet>
+            ) : (
+              <p className="text-sm text-smoke">{t(canManage ? "caps.partners.empty" : "caps.partners.emptyStaff")}</p>
+            )}
           </Panel>
 
           <Panel title={t("caps.detail.activity")}>
@@ -263,7 +285,7 @@ export default function CapDetail() {
                 ))}
               </ol>
             ) : (
-              <EmptyState title={t("caps.detail.activityEmpty")} />
+              <p className="text-sm text-smoke">{t("caps.detail.activityEmpty")}</p>
             )}
           </Panel>
         </div>
@@ -287,17 +309,20 @@ export default function CapDetail() {
                   {cap.teacher ?? cap.owner_name ?? t("caps.card.noOwner")}
                 </dd>
               </div>
-              <div className="grid gap-1">
-                <dt className="text-eyebrow text-smoke">{t("caps.detail.term")}</dt>
-                <dd className="flex items-center gap-1.5 text-graphite">
-                  <CalendarDays className="size-4 text-smoke" aria-hidden="true" />
-                  {cap.term ?? t("caps.detail.notSet")}
-                </dd>
-              </div>
-              <div className="grid gap-1.5">
-                <dt className="text-eyebrow text-smoke">{t("caps.detail.topics")}</dt>
-                <dd>{cap.topics.length ? <TopicList topics={cap.topics} /> : <span className="text-smoke">{t("caps.detail.notSet")}</span>}</dd>
-              </div>
+              {cap.term && (
+                <div className="grid gap-1">
+                  <dt className="text-eyebrow text-smoke">{t("caps.detail.term")}</dt>
+                  <dd className="text-graphite">{cap.term}</dd>
+                </div>
+              )}
+              {topicLabels.length > 0 && (
+                <div className="grid gap-1.5">
+                  <dt className="text-eyebrow text-smoke">{t("caps.detail.topics")}</dt>
+                  <dd>
+                    <TagList tags={topicLabels} />
+                  </dd>
+                </div>
+              )}
               <div className="grid gap-1">
                 <dt className="text-eyebrow text-smoke">{t("caps.detail.needs")}</dt>
                 <dd className="leading-relaxed whitespace-pre-line text-graphite">
@@ -329,7 +354,6 @@ export default function CapDetail() {
           </Panel>
 
           <Panel title={t("caps.suggest.title")}>
-            <p className="-mt-2 mb-2 text-sm text-smoke">{t("caps.suggest.description")}</p>
             {suggestions.length ? (
               <ul className="divide-y divide-stone">
                 {suggestions.map((suggestion) => (
@@ -342,7 +366,7 @@ export default function CapDetail() {
                 ))}
               </ul>
             ) : (
-              <EmptyState title={t("caps.suggest.empty")} />
+              <p className="text-sm text-smoke">{t("caps.suggest.empty")}</p>
             )}
           </Panel>
         </div>

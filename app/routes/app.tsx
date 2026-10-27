@@ -37,7 +37,12 @@ function AppShell() {
   const q = location.pathname === "/app/people" ? new URLSearchParams(location.search).get("q") ?? "" : "";
 
   return (
-    <SidebarProvider defaultOpen={sidebarOpen}>
+    // The sidebar panel itself is fixed to the viewport; painting its column too keeps the
+    // cream wash and edge running the full height of long pages.
+    <SidebarProvider
+      defaultOpen={sidebarOpen}
+      className="md:[&>[data-slot=sidebar]]:bg-sidebar md:[&>[data-slot=sidebar]]:shadow-[inset_-1px_0_0_var(--sidebar-border)]"
+    >
       <a
         href="#main"
         className="sr-only z-50 rounded-full bg-ink px-4 py-2 text-white focus:not-sr-only focus:fixed focus:top-3 focus:left-3"

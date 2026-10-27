@@ -1,7 +1,7 @@
 /** My account: any signed-in staff member's name, language and password. */
 import { useEffect, useRef, useState } from "react";
-import { data, Link, useFetcher, useLoaderData } from "react-router";
-import { KeyRound, Plug, Save } from "lucide-react";
+import { data, useFetcher, useLoaderData } from "react-router";
+import { KeyRound, Save } from "lucide-react";
 import { z } from "zod";
 import type { Route } from "./+types/app.account";
 import { Field, PageHeader, Panel, PersonAvatar, Sheet } from "~/components/nva";
@@ -82,8 +82,8 @@ export default function Account() {
   const { t } = useT();
 
   return (
-    <div className="space-y-6">
-      <PageHeader title={t("account.title")} description={t("account.description")} />
+    <div className="mx-auto grid w-full max-w-4xl min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
+      <PageHeader title={t("account.title")} />
       <Sheet className="flex items-center gap-3">
         <PersonAvatar name={user.name} className="size-11" />
         <div className="grid min-w-0">
@@ -97,14 +97,6 @@ export default function Account() {
         <ProfileForm name={user.name} locale={user.locale} />
         <PasswordForm minLength={minLength} />
       </div>
-      <Panel title={t("account.connect.title")} className="h-fit">
-        <Button asChild variant="outline" size="sm">
-          <Link to="/app/connect">
-            <Plug aria-hidden="true" />
-            {t("account.connect.setUp")}
-          </Link>
-        </Button>
-      </Panel>
     </div>
   );
 }
@@ -138,7 +130,7 @@ function ProfileForm({ name, locale }: { name: string; locale: "en" | "es" }) {
               aria-invalid={nameError ? true : undefined}
             />
           </Field>
-          <Field label={t("account.profile.language")} htmlFor="account-locale" hint={t("account.profile.languageHint")}>
+          <Field label={t("account.profile.language")} htmlFor="account-locale">
             <Select name="locale" value={chosen} onValueChange={(v) => setChosen(v === "es" ? "es" : "en")}>
               <SelectTrigger id="account-locale" className="h-9 w-full bg-canvas">
                 {/* Children so the server render shows the value before the menu mounts. */}

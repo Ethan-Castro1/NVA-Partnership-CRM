@@ -12,7 +12,7 @@ import { useT } from "~/i18n";
 import { KINDS_BY_TRACK, OPPORTUNITY_TRACKS, STAGES_BY_TRACK, type OpportunityTrack } from "~/lib/constants";
 import type { NamedOption, OpportunityFormErrors, PersonOption } from "~/lib/opportunities.server";
 import { cn } from "~/lib/utils";
-import { CrmSelect } from "./crm-bits";
+import { CrmSelect, MoreDetails } from "./crm-bits";
 
 export type OpportunityFormValues = {
   personId?: string | null;
@@ -137,39 +137,58 @@ export function OpportunityForm({
             options={STAGES_BY_TRACK[track].map((s) => ({ value: s, label: t(`common.stage.${s}`) }))}
           />
         </Field>
-        <Field label={t("crm.opps.form.targetDate")} htmlFor={`${uid}-target`} error={err("targetDate")} optional>
-          <Input id={`${uid}-target`} type="date" name="targetDate" defaultValue={values.targetDate ?? ""} className="h-10 bg-canvas" />
-        </Field>
-        <Field
-          label={t("crm.opps.form.amount")}
-          htmlFor={`${uid}-amount`}
-          hint={t("crm.opps.form.amountHint")}
-          error={err("amount")}
-          optional
-        >
-          <Input id={`${uid}-amount`} name="amount" maxLength={60} defaultValue={values.amount ?? ""} className="h-10 bg-canvas" />
-        </Field>
-        <Field label={t("crm.opps.form.cap")} htmlFor={`${uid}-cap`} optional>
-          <CrmSelect
-            id={`${uid}-cap`}
-            name="capId"
-            defaultValue={values.capId ?? "none"}
-            options={[{ value: "none", label: t("crm.opps.form.noCap") }, ...caps.map((c) => ({ value: c.id, label: c.name }))]}
+        {track === "funding" && (
+          <Field label={t("crm.opps.form.amount")} htmlFor={`${uid}-amount`} error={err("amount")} optional>
+          <Input
+            id={`${uid}-amount`}
+            name="amount"
+            maxLength={60}
+            defaultValue={values.amount ?? ""}
+            placeholder={t("crm.opps.form.amountHint")}
+            className="h-10 bg-canvas"
           />
         </Field>
-        <Field label={t("crm.opps.form.owner")} htmlFor={`${uid}-owner`}>
-          <CrmSelect
-            id={`${uid}-owner`}
-            name="ownerUserId"
-            defaultValue={values.ownerUserId ?? "none"}
-            options={[{ value: "none", label: t("crm.opps.form.noOwner") }, ...owners.map((o) => ({ value: o.id, label: o.name }))]}
-          />
-        </Field>
+        )}
       </div>
 
-      <Field label={t("crm.opps.form.notes")} htmlFor={`${uid}-notes`} hint={t("crm.opps.form.notesHint")} error={err("notes")} optional>
-        <Textarea id={`${uid}-notes`} name="notes" rows={4} maxLength={4000} defaultValue={values.notes ?? ""} className="bg-canvas" />
-      </Field>
+      <MoreDetails label={t("crm.moreDetails")} open={!!(errors.targetDate || errors.notes || (track !== "funding" && errors.amount))}>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field label={t("crm.opps.form.targetDate")} htmlFor={`${uid}-target`} error={err("targetDate")} optional>
+            <Input id={`${uid}-target`} type="date" name="targetDate" defaultValue={values.targetDate ?? ""} className="h-10 bg-canvas" />
+          </Field>
+          {track !== "funding" && (
+            <Field label={t("crm.opps.form.amount")} htmlFor={`${uid}-amount`} error={err("amount")} optional>
+            <Input
+              id={`${uid}-amount`}
+              name="amount"
+              maxLength={60}
+              defaultValue={values.amount ?? ""}
+              placeholder={t("crm.opps.form.amountHint")}
+              className="h-10 bg-canvas"
+            />
+          </Field>
+          )}
+          <Field label={t("crm.opps.form.cap")} htmlFor={`${uid}-cap`} optional>
+            <CrmSelect
+              id={`${uid}-cap`}
+              name="capId"
+              defaultValue={values.capId ?? "none"}
+              options={[{ value: "none", label: t("crm.opps.form.noCap") }, ...caps.map((c) => ({ value: c.id, label: c.name }))]}
+            />
+          </Field>
+          <Field label={t("crm.opps.form.owner")} htmlFor={`${uid}-owner`}>
+            <CrmSelect
+              id={`${uid}-owner`}
+              name="ownerUserId"
+              defaultValue={values.ownerUserId ?? "none"}
+              options={[{ value: "none", label: t("crm.opps.form.noOwner") }, ...owners.map((o) => ({ value: o.id, label: o.name }))]}
+            />
+          </Field>
+        </div>
+        <Field label={t("crm.opps.form.notes")} htmlFor={`${uid}-notes`} error={err("notes")} optional>
+          <Textarea id={`${uid}-notes`} name="notes" rows={3} maxLength={4000} defaultValue={values.notes ?? ""} className="bg-canvas" />
+        </Field>
+      </MoreDetails>
 
       <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" variant={submitVariant} size="lg" disabled={busy}>

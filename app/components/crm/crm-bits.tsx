@@ -2,8 +2,9 @@
  * Small shared pieces for the opportunity and follow-up screens: the stage
  * badge, a select that posts with its form, segmented tabs, and date labels.
  */
-import { Link } from "react-router";
+import { Link, useRouteLoaderData } from "react-router";
 import type { ReactNode } from "react";
+import { ChevronRight } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { useT, type Locale } from "~/i18n";
 import type { OpportunityStage } from "~/lib/constants";
@@ -95,6 +96,28 @@ export function CrmSelect({
         ))}
       </SelectContent>
     </Select>
+  );
+}
+
+/** The signed-in user's id (from the root loader), to hide "owner: you" labels. */
+export function useMyId(): string | undefined {
+  const root = useRouteLoaderData("root") as { user?: { id: string } | null } | undefined;
+  return root?.user?.id;
+}
+
+/**
+ * Optional form fields tucked behind a "More details" toggle. A native
+ * <details>, so the fields inside still post when it is closed.
+ */
+export function MoreDetails({ label, open, children, className }: { label: ReactNode; open?: boolean; children: ReactNode; className?: string }) {
+  return (
+    <details open={open} className={cn("group", className)}>
+      <summary className="inline-flex min-h-10 cursor-pointer list-none items-center gap-1.5 rounded-md text-sm font-medium text-graphite hover:text-ink focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none [&::-webkit-details-marker]:hidden">
+        <ChevronRight className="size-4 transition-transform group-open:rotate-90" aria-hidden="true" />
+        {label}
+      </summary>
+      <div className="mt-3 grid gap-5">{children}</div>
+    </details>
   );
 }
 

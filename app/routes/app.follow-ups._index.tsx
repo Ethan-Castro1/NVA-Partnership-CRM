@@ -62,11 +62,9 @@ export default function FollowUps() {
   const [adding, setAdding] = useState(false);
 
   return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-8">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <PageHeader
-        eyebrow={t("crm.eyebrow")}
         title={t("crm.fu.title")}
-        description={t("crm.fu.description")}
         actions={
           adding ? (
             <Button variant="outline" size="lg" onClick={() => setAdding(false)}>
@@ -83,13 +81,12 @@ export default function FollowUps() {
       />
 
       {adding && (
-        <Sheet className="p-6">
-          <h2 className="text-section mb-4">{t("crm.fu.form.title")}</h2>
+        <Sheet className="p-5 md:p-6">
           <QuickFollowUpForm today={today} people={people} owners={owners} defaultOwnerId={userId} />
         </Sheet>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <SegmentedLinks
           label={t("crm.fu.views")}
           tabs={VIEW_ORDER.map((v) => ({
@@ -108,7 +105,7 @@ export default function FollowUps() {
         />
       </div>
 
-      <Sheet className="px-5 py-2">
+      <Sheet className="px-4 py-1 md:px-5">
         <FollowUpList items={items} today={today} empty={t(`crm.fu.empty.${view}`)} />
       </Sheet>
     </div>

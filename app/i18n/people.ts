@@ -154,6 +154,8 @@ export default defineMessages(
     "profile.privateNotes": "Private notes",
     "profile.adminsOnly": "Admins only",
     "profile.introOnly": "Ask for an introduction to reach them.",
+    "profile.moreActions": "More actions for {name}",
+    "profile.noneYet": "None yet",
 
     "error.kind": "Choose what happened.",
     "error.date": "Enter a valid date.",
@@ -361,6 +363,8 @@ export default defineMessages(
     "profile.privateNotes": "Notas privadas",
     "profile.adminsOnly": "Solo administración",
     "profile.introOnly": "Pide una presentación para comunicarte.",
+    "profile.moreActions": "Más acciones para {name}",
+    "profile.noneYet": "Nada todavía",
 
     "error.kind": "Elige qué pasó.",
     "error.date": "Escribe una fecha válida.",

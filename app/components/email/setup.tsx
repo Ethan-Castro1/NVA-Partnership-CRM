@@ -4,7 +4,7 @@
  * each provider asks for.
  */
 import { useState } from "react";
-import { Check, CircleAlert, CircleDashed, Copy } from "lucide-react";
+import { Check, ChevronRight, CircleAlert, CircleDashed, Copy } from "lucide-react";
 import type { EmailProvider, EmailSetup, SettingState } from "~/lib/email/config.server";
 import { useT, type MessageKey } from "~/i18n";
 import { Button } from "~/components/ui/button";
@@ -85,7 +85,7 @@ export function EmailSetupChecklist({
         </div>
       </div>
 
-      <div className={cn("grid gap-4", !compact && "lg:grid-cols-2")}>
+      <div className="grid gap-4">
         {setup.providers.map((p) => (
           <div key={p.provider} className="rounded-card bg-canvas p-4 shadow-whisper">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -107,20 +107,26 @@ export function EmailSetupChecklist({
               ))}
             </ul>
             {!compact && (
-              <div className="mt-3 grid gap-2 text-xs text-smoke">
-                <p>{t(p.provider === "google" ? "settings.provider.googleSteps" : "settings.provider.microsoftSteps")}</p>
-                <div>
-                  <p className="font-medium text-graphite">{t("settings.checklist.scopes")}</p>
-                  <ul className="mt-1 flex flex-wrap gap-1.5">
-                    {scopes[p.provider].map((scope) => (
-                      <li key={scope} className="rounded-full bg-taupe px-2 py-0.5 font-mono text-[0.7rem] break-all">
-                        {scope}
-                      </li>
-                    ))}
-                  </ul>
+              <details className="group mt-2 text-xs text-smoke">
+                <summary className="inline-flex min-h-9 cursor-pointer list-none items-center gap-1 font-medium text-graphite hover:text-ink [&::-webkit-details-marker]:hidden">
+                  <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" aria-hidden="true" />
+                  {t("settings.checklist.howTo")}
+                </summary>
+                <div className="mt-1 grid gap-2">
+                  <p>{t(p.provider === "google" ? "settings.provider.googleSteps" : "settings.provider.microsoftSteps")}</p>
+                  <div>
+                    <p className="font-medium text-graphite">{t("settings.checklist.scopes")}</p>
+                    <ul className="mt-1 flex flex-wrap gap-1.5">
+                      {scopes[p.provider].map((scope) => (
+                        <li key={scope} className="rounded-full bg-taupe px-2 py-0.5 font-mono text-[0.7rem] break-all">
+                          {scope}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  {p.provider === "microsoft" && <p>{t("settings.checklist.tenant")}</p>}
                 </div>
-                {p.provider === "microsoft" && <p>{t("settings.checklist.tenant")}</p>}
-              </div>
+              </details>
             )}
           </div>
         ))}

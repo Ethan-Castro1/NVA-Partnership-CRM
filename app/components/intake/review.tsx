@@ -5,7 +5,7 @@
  */
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useFetcher, useSearchParams } from "react-router";
-import { Check, Eye, EyeOff, Link2, Pencil, UserPlus, UserRound, X } from "lucide-react";
+import { Check, Eye, EyeOff, Link2, Pencil, UserPlus, X } from "lucide-react";
 import { Field, PersonAvatar, Sheet, StatusBadge } from "~/components/nva";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -85,21 +85,15 @@ function MatchCard({ candidate, primary }: { candidate: DuplicateCandidate; prim
         <div className="flex min-w-0 items-center gap-3">
           <PersonAvatar name={candidate.full_name} />
           <div className="grid min-w-0">
-            <span className="truncate font-medium">{candidate.full_name}</span>
+            <Link to={`/app/people/${candidate.id}`} target="_blank" rel="noreferrer" className="truncate font-medium underline-offset-4 hover:underline">
+              {candidate.full_name}
+            </Link>
             <span className="truncate text-xs text-smoke">
               {[candidate.organization_name, candidate.email, candidate.phone].filter(Boolean).join(" · ")}
             </span>
           </div>
         </div>
-        <span className="flex items-center gap-2">
-          <StatusBadge status={candidate.status} />
-          <Button variant="ghost" size="sm" asChild>
-            <Link to={`/app/people/${candidate.id}`} target="_blank" rel="noreferrer" aria-label={t("admin.detail.viewProfileOf", { name: candidate.full_name })}>
-              <UserRound aria-hidden="true" />
-              {t("admin.detail.viewProfile")}
-            </Link>
-          </Button>
-        </span>
+        <StatusBadge status={candidate.status} />
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <ReasonChips reasons={candidate.reasons} />
@@ -125,16 +119,12 @@ export function ApproveForm({ primary }: { primary: boolean }) {
   return (
     <fetcher.Form method="post" className="grid gap-3">
       <input type="hidden" name="intent" value="approve" />
-      <div className="grid gap-1">
-        <CheckRow name="show" label={t("admin.detail.showInDirectory")} defaultChecked={false} />
-        <p className="pl-8 text-xs text-smoke">{t("admin.detail.showInDirectoryHint")}</p>
-      </div>
+      <CheckRow name="show" label={t("admin.detail.showInDirectory")} defaultChecked={false} />
       <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" variant={primary ? "brand" : "outline"} disabled={busy}>
           {primary ? <Check aria-hidden="true" /> : <UserPlus aria-hidden="true" />}
           {pendingIntent === "approve" ? t("common.state.saving") : primary ? t("admin.detail.approve") : t("admin.detail.approveNew")}
         </Button>
-        <span className="text-xs text-smoke">{t("admin.detail.approveHint")}</span>
       </div>
     </fetcher.Form>
   );
@@ -181,7 +171,7 @@ function RejectForm({ onCancel }: { onCancel: () => void }) {
       <fetcher.Form method="post" className="grid gap-3">
         <input type="hidden" name="intent" value="reject" />
         <h3 className="font-medium">{t("admin.detail.rejectTitle")}</h3>
-        <Field label={t("admin.detail.rejectNote")} htmlFor="reject-note" optional hint={t("admin.detail.rejectNoteHint")}>
+        <Field label={t("admin.detail.rejectNote")} htmlFor="reject-note" optional>
           <Textarea id="reject-note" name="note" rows={2} maxLength={2000} className={FILLED_AREA} />
         </Field>
         <div className="flex flex-wrap gap-2">
@@ -213,10 +203,7 @@ function EditForm({
     <Sheet>
       <fetcher.Form method="post" className="grid gap-4" noValidate>
         <input type="hidden" name="intent" value="edit" />
-        <div>
-          <h3 className="font-medium">{t("admin.detail.editTitle")}</h3>
-          <p className="text-sm text-smoke">{t("admin.detail.editHint")}</p>
-        </div>
+        <h3 className="font-medium">{t("admin.detail.editTitle")}</h3>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={t("common.field.name")} htmlFor="edit-name" error={err("full_name")} className="sm:col-span-2">
             <Input id="edit-name" name="full_name" required maxLength={120} defaultValue={p.full_name} className={FILLED} aria-invalid={!!errors.full_name || undefined} />

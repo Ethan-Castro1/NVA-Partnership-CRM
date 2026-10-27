@@ -2,7 +2,7 @@ import { defineMessages } from "./define";
 
 export default defineMessages(
   {
-    title: "Ask the village",
+    title: "Ask the Village",
     eyebrow: "Assistant",
     description:
       "Ask in plain words. I look through our people, their skills and who knows whom, and point you to the right partner.",
@@ -86,7 +86,7 @@ export default defineMessages(
     deleteChat: "Delete this chat",
     chatDeleted: "Chat deleted",
     newChat: "New chat",
-    openPanel: "Ask the village",
+    openPanel: "Ask the Village",
     closePanel: "Close the assistant",
     openFullPage: "Open as a full page",
     panelHint: "Links open on the page; this panel stays open.",

@@ -6,8 +6,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Link, useFetcher } from "react-router";
 import { Check, CircleDashed, Loader2, Mail, NotebookPen, Plus, Route as RouteIcon, Trash2 } from "lucide-react";
-import { ContributionChips, PersonAvatar, StatusBadge, TagList } from "~/components/nva";
-import { MatchReasons } from "~/components/resources/match-reasons";
+import { PersonAvatar } from "~/components/nva";
 import { ResourceActions } from "~/components/resources/resource-actions";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -312,55 +311,40 @@ export function SuggestionItem({
   const matched = suggestion.matched.map(topicLabel);
 
   return (
-    <li className="grid gap-2.5 py-4">
-      <div className="flex items-start gap-3">
-        <PersonAvatar name={person.full_name} />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <Link
-              to={`/app/people/${person.id}`}
-              className="font-medium underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
-            >
-              {person.full_name}
-            </Link>
-            <StatusBadge status={person.status} />
-          </div>
-          {subtitle && <p className="text-xs text-smoke">{subtitle}</p>}
-        </div>
-      </div>
-      <ContributionChips types={person.contribution_types} />
-      <MatchReasons reasons={person.reasons} max={2} />
-      {matched.length > 0 && !person.reasons.length && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs text-smoke">{t("caps.suggest.matched")}:</span>
-          <TagList tags={matched} highlight={matched} />
-        </div>
-      )}
-      <p className={cn("flex items-start gap-1.5 text-xs", reachable ? "text-graphite" : "text-smoke")}>
-        {reachable ? (
-          <RouteIcon className="mt-px size-3.5 shrink-0 text-gold-ink" aria-hidden="true" />
-        ) : (
-          <CircleDashed className="mt-px size-3.5 shrink-0" aria-hidden="true" />
-        )}
-        {pathSummary(suggestion, t)}
-      </p>
-      {!canAdd ? (
-        <ResourceActions person={person} saved={saved} compact />
-      ) : (
-      <fetcher.Form method="post">
-        <input type="hidden" name="intent" value="add-partner" />
-        <input type="hidden" name="personId" value={person.id} />
-        <Button
-          type="submit"
-          variant="outline"
-          size="sm"
-          disabled={adding}
-          aria-label={t("caps.suggest.addFor", { name: person.full_name })}
+    <li className="flex items-center gap-3 py-3">
+      <div className="grid min-w-0 flex-1 gap-0.5">
+        <Link
+          to={`/app/people/${person.id}`}
+          className="truncate font-medium underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
         >
-          {adding ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Plus aria-hidden="true" />}
-          {adding ? t("caps.suggest.adding") : t("caps.suggest.add")}
-        </Button>
-      </fetcher.Form>
+          {person.full_name}
+        </Link>
+        <p className={cn("flex min-w-0 items-center gap-1.5 text-xs", reachable ? "text-graphite" : "text-smoke")} title={matched.join(", ") || undefined}>
+          {reachable ? (
+            <RouteIcon className="size-3.5 shrink-0 text-gold-ink" aria-hidden="true" />
+          ) : (
+            <CircleDashed className="size-3.5 shrink-0" aria-hidden="true" />
+          )}
+          <span className="truncate">{[subtitle, pathSummary(suggestion, t)].filter(Boolean).join(" · ")}</span>
+        </p>
+      </div>
+      {!canAdd ? (
+        <ResourceActions person={person} saved={saved} compact className="shrink-0" />
+      ) : (
+        <fetcher.Form method="post" className="shrink-0">
+          <input type="hidden" name="intent" value="add-partner" />
+          <input type="hidden" name="personId" value={person.id} />
+          <Button
+            type="submit"
+            variant="outline"
+            size="sm"
+            disabled={adding}
+            aria-label={t("caps.suggest.addFor", { name: person.full_name })}
+          >
+            {adding ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Plus aria-hidden="true" />}
+            {adding ? t("caps.suggest.adding") : t("caps.suggest.add")}
+          </Button>
+        </fetcher.Form>
       )}
     </li>
   );

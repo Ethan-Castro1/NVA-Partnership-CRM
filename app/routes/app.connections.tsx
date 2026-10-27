@@ -12,7 +12,7 @@ import type { Route } from "./+types/app.connections";
 import { ConnectorCard } from "~/components/connections/connector-card";
 import { VillageMap } from "~/components/connections/village-map";
 import { WebLeadCard, WebSearchForm, type WebActionResult } from "~/components/connections/web-leads";
-import { EmptyState, Field, PageHeader, Panel } from "~/components/nva";
+import { Field, PageHeader, Panel } from "~/components/nva";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
@@ -158,7 +158,7 @@ export default function Connections() {
   const capParam = cap ? `&cap=${encodeURIComponent(cap.id)}` : "";
 
   return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-8">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       {cap && (
         <Link
           to={`/app/caps/${cap.id}`}
@@ -168,7 +168,7 @@ export default function Connections() {
           {t("connections.backToCap", { title: cap.title })}
         </Link>
       )}
-      <PageHeader eyebrow={t("connections.eyebrow")} title={t("connections.title")} description={t("connections.description")} />
+      <PageHeader title={t("connections.title")} description={t("connections.description")} />
 
       <Panel>
         <Form method="get" role="search" className="grid gap-4 md:grid-cols-[minmax(0,1fr)_15rem_auto] md:items-end">
@@ -208,6 +208,7 @@ export default function Connections() {
             {searchingNow ? t("connections.search.searching") : t("connections.search.submit")}
           </Button>
         </Form>
+        {!searching && (
         <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
           <span className="text-smoke">{t("connections.search.tryLabel")}</span>
           {EXAMPLES.map((example) => (
@@ -220,6 +221,7 @@ export default function Connections() {
             </Link>
           ))}
         </div>
+        )}
       </Panel>
 
       {searching && (
@@ -232,7 +234,6 @@ export default function Connections() {
               {results.length === 1
                 ? t("connections.results.countOne", { q })
                 : t("connections.results.count", { count: results.length, q })}
-              {results.length > 0 && <> {t("connections.results.intro")}</>}
             </p>
           </div>
           {results.length ? (
@@ -248,7 +249,10 @@ export default function Connections() {
               ))}
             </div>
           ) : (
-            <EmptyState title={t("connections.results.none")} body={t(showWeb ? "connections.results.noneBody" : isAdmin ? "connections.results.noneBodyNoWeb" : "connections.results.noneBodyStaff")} />
+            <p className="text-sm text-smoke">
+              {t("connections.results.none")}{" "}
+              {t(showWeb ? "connections.results.noneBody" : isAdmin ? "connections.results.noneBodyNoWeb" : "connections.results.noneBodyStaff")}
+            </p>
           )}
         </section>
       )}
@@ -261,7 +265,6 @@ export default function Connections() {
           </span>
         }
       >
-        <p className="-mt-2 mb-4 text-sm text-smoke">{t("connections.map.description")}</p>
         <div className="rounded-card bg-canvas p-3 md:p-4">
           <VillageMap map={map} highlight={highlight} results={results} />
         </div>

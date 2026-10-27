@@ -50,7 +50,7 @@ export default function NewRequest({ loaderData, actionData }: Route.ComponentPr
         <ArrowLeft className="size-4" aria-hidden="true" />
         {t("requests.new.back")}
       </Link>
-      <PageHeader title={t("requests.new.title")} description={t("requests.new.description")} />
+      <PageHeader title={t("requests.new.title")} />
       <Sheet className="p-6 md:p-8">
         <RequestForm
           caps={loaderData.caps}

@@ -3,8 +3,8 @@
  * timeline, plus the admin-only delete dialog. Admin removals post through
  * fetchers; the route action checks requireAdmin either way.
  */
-import { Form, Link, useFetcher, useNavigation } from "react-router";
-import { Handshake, Mail, MailCheck, NotebookPen, Sparkles, Trash2, Users, X } from "lucide-react";
+import { Form, Link, useFetcher, useNavigation, useRouteLoaderData } from "react-router";
+import { Trash2, X } from "lucide-react";
 import { PersonAvatar } from "~/components/nva";
 import { Button } from "~/components/ui/button";
 import {
@@ -131,12 +131,13 @@ function entrySource(e: EngagementView, staffAuthored: ReadonlySet<string>): Ent
   return staffAuthored.has(e.id) ? "staff" : "manual";
 }
 
-const SOURCE_STYLE: Record<EntrySource, { dot: string; badge: string; icon: typeof Mail; label: MessageKey }> = {
-  manual: { dot: "bg-graphite", badge: "bg-stone text-graphite", icon: NotebookPen, label: "people.profile.entryManual" },
-  email: { dot: "bg-blue", badge: "bg-blue-soft text-blue-ink", icon: MailCheck, label: "people.profile.entryEmail" },
-  staff: { dot: "bg-sage", badge: "bg-sage-soft text-sage-ink", icon: Users, label: "people.profile.entryStaff" },
-  request: { dot: "bg-sage", badge: "bg-sage-soft text-sage-ink", icon: Handshake, label: "people.profile.entryRequest" },
-  system: { dot: "bg-stone", badge: "bg-canvas text-smoke", icon: Sparkles, label: "people.profile.entrySystem" },
+/** Timeline dot colour, and a quiet label only where the source matters (email, staff). */
+const SOURCE_STYLE: Record<EntrySource, { dot: string; label: MessageKey | null }> = {
+  manual: { dot: "bg-graphite", label: null },
+  email: { dot: "bg-blue", label: "people.profile.entryEmail" },
+  staff: { dot: "bg-sage", label: "people.profile.entryStaff" },
+  request: { dot: "bg-sage", label: "people.profile.entryRequest" },
+  system: { dot: "bg-stone", label: null },
 };
 
 /**
@@ -159,6 +160,8 @@ export function HistoryTimeline({
   emptyLabel?: string;
 }) {
   const { t, locale } = useT();
+  const root = useRouteLoaderData("root") as { user?: { name?: string } | null } | undefined;
+  const me = root?.user?.name;
   if (!engagements.length) return <p className="text-sm text-smoke">{emptyLabel ?? t("people.profile.historyEmpty")}</p>;
   const staffIds = new Set(staffAuthored);
   return (
@@ -166,25 +169,17 @@ export function HistoryTimeline({
       {engagements.map((e) => {
         const source = entrySource(e, staffIds);
         const style = SOURCE_STYLE[source];
-        const Icon = style.icon;
         return (
           <li key={e.id} className="relative">
             <span className={cn("absolute top-1.5 -left-[25px] size-2.5 rounded-full ring-4 ring-taupe", style.dot)} aria-hidden="true" />
             <div className="flex items-start justify-between gap-2">
               <div className="grid min-w-0 gap-1">
-                <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <span className="text-sm font-medium text-ink">{t(`common.engagement.${e.kind}`)}</span>
-                  <span className={cn("inline-flex h-5 items-center gap-1 rounded-full px-2 text-[0.7rem] font-medium", style.badge)}>
-                    <Icon className="size-3" aria-hidden="true" />
-                    {t(style.label)}
-                  </span>
-                  {isAdmin && e.visibility === "staff" && (
-                    <span className="text-[0.7rem] text-smoke">{t("people.profile.entryShared")}</span>
-                  )}
-                </p>
+                <p className="text-sm font-medium text-ink">{t(`common.engagement.${e.kind}`)}</p>
                 <p className="text-xs text-smoke">
                   <time dateTime={isoDate(e.happened_on)}>{formatDate(e.happened_on, locale)}</time>
-                  {e.user_name && <> · {t("people.profile.activityBy", { name: e.user_name })}</>}
+                  {e.user_name && e.user_name !== me && <> · {t("people.profile.activityBy", { name: e.user_name })}</>}
+                  {style.label && <> · {t(style.label)}</>}
+                  {isAdmin && e.visibility === "staff" && <> · {t("people.profile.entryShared")}</>}
                 </p>
                 {e.cap_id && e.cap_title && (
                   <p className="text-xs text-graphite">

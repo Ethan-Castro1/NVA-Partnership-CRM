@@ -151,7 +151,7 @@ export async function getAdminDashboard(viewer: Viewer): Promise<AdminDashboard>
       listFollowUps(viewer, { views: ["overdue", "today"], today, limit: 8 }),
       listFollowUps(viewer, { views: "upcoming", today, limit: 5 }),
       listFollowUps(viewer, { views: "awaiting", today, limit: 5 }),
-      listRecentActivity(viewer, 8),
+      listRecentActivity(viewer, 5),
       openOpportunitiesByStage(viewer),
       getRequestAttention(viewer, { limit: 5 }),
       listNewSignups(viewer, 5),

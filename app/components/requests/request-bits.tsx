@@ -90,22 +90,30 @@ export function RequestRows({
       {requests.map((r) => {
         const when = requestWhen(r, locale);
         const names = r.people.map((p) => p.full_name).join(", ");
+        const meta = [
+          showRequester ? t("requests.detail.from", { name: r.requester_name }) : null,
+          r.shared_with_me && !showRequester ? t("requests.share.sharedBy", { name: r.requester_name }) : null,
+          when || null,
+          names ? t("requests.item.with", { names }) : null,
+        ].filter(Boolean);
         return (
           <li key={r.id} className="py-3 first:pt-0 last:pb-0">
             <Link
               to={`/app/requests/${r.id}`}
-              className="group grid gap-1 rounded-md focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+              className="group grid grid-cols-[minmax(0,1fr)] gap-0.5 rounded-md focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
             >
-              <span className="flex flex-wrap items-center gap-2">
-                <span className="font-medium group-hover:underline">{r.need}</span>
-                <RequestStatusBadge status={r.status} />
-                {r.kind === "introduction" && <IntroTag />}
-                {r.shared_with_me && <SharedTag name={r.requester_name} />}
+              <span className="flex items-start justify-between gap-3">
+                <span className="min-w-0 font-medium group-hover:underline">{r.need}</span>
+                <RequestStatusBadge status={r.status} className="mt-0.5 shrink-0" />
               </span>
-              <span className="flex flex-wrap gap-x-3 text-xs text-smoke">
-                {showRequester && <span>{t("requests.detail.from", { name: r.requester_name })}</span>}
-                {when && <span>{when}</span>}
-                {names && <span>{t("requests.item.with", { names })}</span>}
+              <span className="truncate text-xs text-smoke">
+                {r.kind === "introduction" && (
+                  <span className="mr-2 inline-flex items-center gap-1 font-medium text-graphite">
+                    <Handshake className="size-3" aria-hidden="true" />
+                    {t("requests.item.intro")}
+                  </span>
+                )}
+                {meta.join(" · ")}
               </span>
             </Link>
           </li>

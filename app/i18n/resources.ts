@@ -17,6 +17,8 @@ export default defineMessages(
     "actions.save": "Save",
     "actions.saved": "Saved",
     "actions.saveLabel": "Save {name}",
+    "actions.unsave": "Remove from saved",
+    "actions.more": "More actions for {name}",
     "actions.saveError": "Couldn't save. Try again.",
 
     "why.label": "Why:",
@@ -53,6 +55,8 @@ export default defineMessages(
     "actions.save": "Guardar",
     "actions.saved": "Guardado",
     "actions.saveLabel": "Guardar a {name}",
+    "actions.unsave": "Quitar de guardados",
+    "actions.more": "Más acciones para {name}",
     "actions.saveError": "No se pudo guardar. Inténtalo de nuevo.",
 
     "why.label": "Por qué:",

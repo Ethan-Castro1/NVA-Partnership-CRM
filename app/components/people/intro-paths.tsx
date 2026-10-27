@@ -5,7 +5,7 @@
  */
 import { Link } from "react-router";
 import { ArrowRight } from "lucide-react";
-import { EmptyState, PersonAvatar, Sheet } from "~/components/nva";
+import { PersonAvatar, Sheet } from "~/components/nva";
 import { useT } from "~/i18n";
 import { INNER_CIRCLE } from "~/lib/constants";
 import type { IntroPath, MiniPerson } from "~/lib/people.server";
@@ -45,9 +45,7 @@ export function IntroPaths({ paths, person }: { paths: IntroPath[]; person: Mini
           {t("people.profile.reachInner", { name: person.full_name })}
         </p>
       )}
-      {paths.length === 0 && !isInner && (
-        <EmptyState title={t("people.profile.reachEmpty")} body={t("people.profile.reachEmptyBody")} />
-      )}
+      {paths.length === 0 && !isInner && <p className="text-sm text-smoke">{t("people.profile.reachEmpty")}</p>}
       {paths.length > 0 && (
         <ol className="grid gap-3">
           {paths.map((path, index) => (

@@ -5,7 +5,7 @@
  */
 import { useEffect, useId, useState } from "react";
 import { useFetcher } from "react-router";
-import { KeyRound, Power, RefreshCw } from "lucide-react";
+import { KeyRound, MoreHorizontal, Power, RefreshCw } from "lucide-react";
 import { generatePassword } from "~/components/admin/format";
 import { Field } from "~/components/nva";
 import { Button } from "~/components/ui/button";
@@ -17,8 +17,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "~/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "~/components/ui/dropdown-menu";
 import { Input } from "~/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { useT, type MessageKey } from "~/i18n";
@@ -111,25 +111,27 @@ export function StaffActions({
   const roleFetcher = useFetcher<StaffActionResult>();
   const activeFetcher = useFetcher<StaffActionResult>();
   const selectId = useId();
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetDone, setResetDone] = useState(false);
 
   // Show the role the admin just picked while the request runs.
   const pendingRole = roleFetcher.formData?.get("role") as Role | undefined;
   const role = pendingRole ?? user.role;
   const result = roleFetcher.state === "idle" ? roleFetcher.data : undefined;
   const activeResult = activeFetcher.state === "idle" ? activeFetcher.data : undefined;
+  const toggleActive = () =>
+    activeFetcher.submit({ intent: "active", userId: user.id, active: user.active ? "false" : "true" }, { method: "post" });
 
   return (
-    <div className="grid gap-1.5">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="grid justify-items-end gap-1">
+      <div className="flex items-center gap-1">
         <label htmlFor={selectId} className="sr-only">
           {t("admin.users.roleFor", { name: user.name })}
         </label>
         <Select
           value={role}
           disabled={isSelf || roleFetcher.state !== "idle"}
-          onValueChange={(value) =>
-            roleFetcher.submit({ intent: "role", userId: user.id, role: value }, { method: "post" })
-          }
+          onValueChange={(value) => roleFetcher.submit({ intent: "role", userId: user.id, role: value }, { method: "post" })}
         >
           <SelectTrigger id={selectId} size="sm" className="min-w-28 bg-canvas">
             <SelectValue>{t(`common.role.${role}`)}</SelectValue>
@@ -142,99 +144,104 @@ export function StaffActions({
             ))}
           </SelectContent>
         </Select>
-
-        {!isSelf && (
-          <activeFetcher.Form method="post">
-            <input type="hidden" name="intent" value="active" />
-            <input type="hidden" name="userId" value={user.id} />
-            <input type="hidden" name="active" value={user.active ? "false" : "true"} />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
             <Button
-              type="submit"
-              size="sm"
-              variant={user.active ? "ghost" : "outline"}
+              type="button"
+              variant="ghost"
+              size="icon"
               disabled={activeFetcher.state !== "idle"}
-              aria-label={`${user.active ? t("admin.users.deactivate") : t("admin.users.reactivate")}: ${user.name}`}
+              aria-label={t("admin.users.moreFor", { name: user.name })}
+              title={t("admin.users.moreFor", { name: user.name })}
             >
-              <Power aria-hidden="true" />
-              {activeFetcher.state !== "idle"
-                ? t("common.state.saving")
-                : user.active
-                  ? t("admin.users.deactivate")
-                  : t("admin.users.reactivate")}
+              <MoreHorizontal aria-hidden="true" />
             </Button>
-          </activeFetcher.Form>
-        )}
-
-        <ResetPasswordDialog user={user} minLength={minLength} />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuItem
+              onSelect={() => {
+                setResetDone(false);
+                setResetOpen(true);
+              }}
+            >
+              <KeyRound aria-hidden="true" />
+              {t("admin.users.resetPassword")}
+            </DropdownMenuItem>
+            {!isSelf && (
+              <DropdownMenuItem variant={user.active ? "destructive" : "default"} onSelect={toggleActive}>
+                <Power aria-hidden="true" />
+                {user.active ? t("admin.users.deactivate") : t("admin.users.reactivate")}
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
+      <ResetPasswordDialog user={user} minLength={minLength} open={resetOpen} onOpenChange={setResetOpen} onDone={() => setResetDone(true)} />
+      {resetDone && (
+        <p role="status" className="text-xs text-sage-ink">
+          {t("admin.users.done.reset")}
+        </p>
+      )}
       <ResultMessage result={result} />
       <ResultMessage result={activeResult} />
     </div>
   );
 }
 
-function ResetPasswordDialog({ user, minLength }: { user: { id: string; name: string }; minLength: number }) {
+function ResetPasswordDialog({
+  user,
+  minLength,
+  open,
+  onOpenChange,
+  onDone,
+}: {
+  user: { id: string; name: string };
+  minLength: number;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onDone: () => void;
+}) {
   const { t } = useT();
   const fetcher = useFetcher<StaffActionResult>();
-  const [open, setOpen] = useState(false);
   const [password, setPassword] = useState("");
-  const [done, setDone] = useState(false);
   const inputId = useId();
   const result = fetcher.state === "idle" ? fetcher.data : undefined;
 
-  // Close the dialog after a successful reset and say so next to the button.
+  // Close the dialog after a successful reset and say so under the row's actions.
   useEffect(() => {
     if (result?.ok) {
-      setOpen(false);
+      onOpenChange(false);
       setPassword("");
-      setDone(true);
+      onDone();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result]);
 
   const error = result && !result.ok ? t(result.error, { min: minLength }) : undefined;
 
   return (
-    <>
-      <Dialog
-        open={open}
-        onOpenChange={(next) => {
-          setOpen(next);
-          if (next) setDone(false);
-        }}
-      >
-        <DialogTrigger asChild>
-          <Button type="button" size="sm" variant="ghost" aria-label={`${t("admin.users.resetPassword")}: ${user.name}`}>
-            <KeyRound aria-hidden="true" />
-            {t("admin.users.resetPassword")}
-          </Button>
-        </DialogTrigger>
-        <DialogContent showCloseButton={false} className="rounded-card">
-          <fetcher.Form method="post" className="grid gap-5">
-            <DialogHeader>
-              <DialogTitle>{t("admin.users.resetTitle", { name: user.name })}</DialogTitle>
-              <DialogDescription>{t("admin.users.resetHint")}</DialogDescription>
-            </DialogHeader>
-            <input type="hidden" name="intent" value="reset" />
-            <input type="hidden" name="userId" value={user.id} />
-            <TempPasswordField id={inputId} minLength={minLength} value={password} onChange={setPassword} error={error} />
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button type="button" variant="ghost">
-                  {t("common.action.cancel")}
-                </Button>
-              </DialogClose>
-              <Button type="submit" disabled={fetcher.state !== "idle"}>
-                {fetcher.state !== "idle" ? t("common.state.saving") : t("admin.users.resetSubmit")}
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent showCloseButton={false} className="rounded-card">
+        <fetcher.Form method="post" className="grid gap-5">
+          <DialogHeader>
+            <DialogTitle>{t("admin.users.resetTitle", { name: user.name })}</DialogTitle>
+            <DialogDescription>{t("admin.users.resetHint")}</DialogDescription>
+          </DialogHeader>
+          <input type="hidden" name="intent" value="reset" />
+          <input type="hidden" name="userId" value={user.id} />
+          <TempPasswordField id={inputId} minLength={minLength} value={password} onChange={setPassword} error={error} />
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="ghost">
+                {t("common.action.cancel")}
               </Button>
-            </DialogFooter>
-          </fetcher.Form>
-        </DialogContent>
-      </Dialog>
-      {done && (
-        <p role="status" className="basis-full text-xs text-sage-ink">
-          {t("admin.users.done.reset")}
-        </p>
-      )}
-    </>
+            </DialogClose>
+            <Button type="submit" disabled={fetcher.state !== "idle"}>
+              {fetcher.state !== "idle" ? t("common.state.saving") : t("admin.users.resetSubmit")}
+            </Button>
+          </DialogFooter>
+        </fetcher.Form>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -16,9 +16,9 @@
  * never the only guard. Deleting a person happens from the edit page but posts here.
  */
 import { TopicList } from "~/components/caps/cap-bits";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, data, redirect, useFetcher, useLoaderData, useLocation, useSearchParams } from "react-router";
-import { ArrowLeft, Globe, Lock, Mail, MapPin, NotebookPen, Pencil, Phone, Plus } from "lucide-react";
+import { ArrowLeft, Globe, Lock, Mail, MapPin, MoreHorizontal, NotebookPen, Pencil, Phone, Plus } from "lucide-react";
 import type { Route } from "./+types/app.people.$personId";
 import { OpportunitiesPanel, FollowUpsPanel } from "~/components/crm";
 import { IntroPaths } from "~/components/people/intro-paths";
@@ -30,6 +30,7 @@ import { ContributionChip, PageHeader, Panel, PersonAvatar, Sheet, TagList } fro
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "~/components/ui/collapsible";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "~/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { makeT, useT, type MessageKey } from "~/i18n";
 import { requireAdmin, requireUser } from "~/lib/auth.server";
@@ -38,6 +39,7 @@ import {
   ADMIN_LOGGABLE_KINDS,
   CONTACT_MODES,
   CONTRIBUTION_TYPES,
+  INNER_CIRCLE,
   PERSON_STATUSES,
   STAFF_LOGGABLE_KINDS,
   type ContactMode,
@@ -416,20 +418,25 @@ function AccessControls({ visible, mode }: { visible: boolean; mode: ContactMode
 const LOG_HASHES = new Set(["#log-activity", "#record"]);
 
 /**
- * "Record an interaction" / "Log work with students": a button until it is
- * needed, so the history reads first. Opens on its own when the URL points at
- * it (#log-activity, or ?logCap from a CAP) and when the header button jumps to it.
+ * The "Record an interaction" / "Log work with students" form. Hidden until a
+ * button elsewhere links to #log-activity (the header button for admins, the
+ * History action for staff); also opens on its own for ?logCap from a CAP.
  */
-function LogBox({ title, hint, startOpen, children }: { title: string; hint: string; startOpen: boolean; children: ReactNode }) {
+function LogBox({ title, startOpen, children }: { title: string; startOpen: boolean; children: ReactNode }) {
   const { t } = useT();
   const { hash } = useLocation();
   const [open, setOpen] = useState(startOpen || LOG_HASHES.has(hash));
+  const box = useRef<HTMLDivElement>(null);
+  const openAndShow = () => {
+    setOpen(true);
+    window.requestAnimationFrame(() => box.current?.scrollIntoView({ block: "start", behavior: "smooth" }));
+  };
   useEffect(() => {
-    if (LOG_HASHES.has(hash)) setOpen(true);
+    if (LOG_HASHES.has(hash)) openAndShow();
   }, [hash]);
   useEffect(() => {
     const onHash = () => {
-      if (LOG_HASHES.has(window.location.hash)) setOpen(true);
+      if (LOG_HASHES.has(window.location.hash)) openAndShow();
     };
     onHash();
     window.addEventListener("hashchange", onHash);
@@ -438,28 +445,15 @@ function LogBox({ title, hint, startOpen, children }: { title: string; hint: str
 
   const close = () => {
     setOpen(false);
-    // Drop the anchor so the header button can open the box again.
+    // Drop the anchor so the button can open the box again.
     if (LOG_HASHES.has(window.location.hash)) window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
   };
 
-  if (!open) {
-    return (
-      <div id="log-activity" className="flex scroll-mt-24 flex-wrap items-center gap-x-3 gap-y-1">
-        <Button variant="outline" size="sm" aria-expanded={false} onClick={() => setOpen(true)}>
-          <Plus aria-hidden="true" />
-          {title}
-        </Button>
-        <p className="text-xs text-smoke">{hint}</p>
-      </div>
-    );
-  }
+  if (!open) return <div id="log-activity" ref={box} className="absolute scroll-mt-24" />;
   return (
-    <div id="log-activity" className="grid scroll-mt-24 gap-3 rounded-xl bg-canvas p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="grid gap-0.5">
-          <h3 className="text-sm font-medium text-ink">{title}</h3>
-          <p className="text-xs text-smoke">{hint}</p>
-        </div>
+    <div id="log-activity" ref={box} className="grid scroll-mt-24 gap-3 rounded-xl bg-canvas p-4">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-medium text-ink">{title}</h3>
         <Button variant="ghost" size="xs" aria-expanded onClick={close}>
           {t("common.action.close")}
         </Button>
@@ -508,6 +502,37 @@ function ContactLines({ name, email, phone }: { name: string; email: string | nu
         </li>
       )}
     </ul>
+  );
+}
+
+const addLinkClass =
+  "inline-flex min-h-8 shrink-0 items-center gap-1 rounded-full text-xs font-medium text-graphite underline decoration-stone underline-offset-4 hover:text-ink hover:decoration-gold focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none max-md:min-h-10";
+
+/** An empty side section as one muted line: "CAPs  None yet  + Add to a CAP". The add form opens underneath. */
+function EmptyLine({ title, action, addLabel, children }: { title: string; action?: ReactNode; addLabel?: string; children?: ReactNode }) {
+  const { t } = useT();
+  const line = (trigger?: ReactNode) => (
+    <div className="flex min-h-10 flex-wrap items-center justify-between gap-x-3 gap-y-1 py-1.5">
+      <p className="text-sm text-smoke">
+        <span className="font-medium text-graphite">{title}</span>
+        <span className="sr-only">:</span> <span className="ml-1.5">{t("people.profile.noneYet")}</span>
+      </p>
+      {trigger ?? action}
+    </div>
+  );
+  if (!children || !addLabel) return <li>{line()}</li>;
+  return (
+    <li>
+      <Collapsible className="grid">
+        {line(
+          <CollapsibleTrigger className={addLinkClass}>
+            <Plus className="size-3.5" aria-hidden="true" />
+            {addLabel}
+          </CollapsibleTrigger>,
+        )}
+        <CollapsibleContent className="pb-3">{children}</CollapsibleContent>
+      </Collapsible>
+    </li>
   );
 }
 
@@ -606,12 +631,17 @@ function AdminProfile({ data: d }: { data: AdminData }) {
   const defaultCap = useDefaultCap(d.capOptions);
   const subtitle = subtitleOf(t, person);
   const sourceLine = person.source ? t("people.profile.sourceLine", { source: t(`common.source.${person.source}`) }) : null;
+  const reachEmpty = d.paths.length === 0 && !person.affiliations.some((a) => INNER_CIRCLE.includes(a));
+  const empties = {
+    requests: d.requests.length === 0,
+    caps: d.caps.length === 0,
+    connections: d.relationships.length === 0,
+  };
 
   return (
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <BackLink />
       <PageHeader
-        eyebrow={t("people.profile.eyebrow")}
         title={<ProfileTitle name={person.full_name} />}
         description={
           <span className="grid gap-2.5">
@@ -629,54 +659,52 @@ function AdminProfile({ data: d }: { data: AdminData }) {
                   {t("people.profile.visibleOff")}
                 </span>
               )}
-              {sourceLine &&
-                (d.intakeId ? (
-                  <Link
-                    to={`/app/admin/intake/${d.intakeId}`}
-                    className="text-xs text-smoke underline decoration-stone underline-offset-4 hover:text-ink hover:decoration-gold"
-                  >
-                    {sourceLine}
-                  </Link>
-                ) : (
-                  <span className="text-xs text-smoke">{sourceLine}</span>
-                ))}
             </span>
           </span>
         }
         actions={
           <>
-            <Button asChild variant="outline">
-              <Link to={`/app/people/${person.id}/email`}>
-                <Mail aria-hidden="true" />
-                {t("people.profile.actionEmail")}
-              </Link>
-            </Button>
-            {person.phone && (
-              <Button asChild variant="outline">
-                <a href={telHref(person.phone)}>
-                  <Phone aria-hidden="true" />
-                  {t("people.profile.actionCall")}
-                </a>
-              </Button>
-            )}
-            <Button asChild variant="outline">
-              <Link to={`/app/people/${person.id}/edit`}>
-                <Pencil aria-hidden="true" />
-                {t("common.action.edit")}
-              </Link>
-            </Button>
-            <Button asChild variant="brand">
+            <Button asChild variant="brand" className="max-md:h-10">
               <a href="#log-activity">
                 <NotebookPen aria-hidden="true" />
                 {t("people.profile.record")}
               </a>
             </Button>
+            <Button asChild variant="outline" className="max-md:h-10">
+              <Link to={`/app/people/${person.id}/email`}>
+                <Mail aria-hidden="true" />
+                {t("people.profile.actionEmail")}
+              </Link>
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="max-md:size-10" aria-label={t("people.profile.moreActions", { name: person.full_name })}>
+                  <MoreHorizontal aria-hidden="true" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-auto min-w-40">
+                {person.phone && (
+                  <DropdownMenuItem asChild>
+                    <a href={telHref(person.phone)}>
+                      <Phone aria-hidden="true" />
+                      {t("people.profile.actionCall")}
+                    </a>
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem asChild>
+                  <Link to={`/app/people/${person.id}/edit`}>
+                    <Pencil aria-hidden="true" />
+                    {t("common.action.edit")}
+                  </Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </>
         }
       />
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
-        <div className="grid min-w-0 gap-6">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
           <Panel title={t("people.profile.details")} bodyClassName="grid gap-5">
             <HelpDetails person={person} />
             {person.shared_summary && (
@@ -718,7 +746,7 @@ function AdminProfile({ data: d }: { data: AdminData }) {
           />
 
           <Panel title={t("people.profile.historyTitle")} bodyClassName="grid gap-6">
-            <LogBox title={t("people.profile.record")} hint={t("people.profile.recordHint")} startOpen={Boolean(defaultCap)}>
+            <LogBox title={t("people.profile.record")} startOpen={Boolean(defaultCap)}>
               <LogActivityForm
                 caps={d.capOptions}
                 today={d.today}
@@ -733,7 +761,7 @@ function AdminProfile({ data: d }: { data: AdminData }) {
           </Panel>
         </div>
 
-        <div className="grid min-w-0 gap-6">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
           <Sheet className="grid h-fit gap-4">
             <h2 className="text-section">{t("people.profile.contact")}</h2>
             {person.email || person.phone ? (
@@ -812,33 +840,82 @@ function AdminProfile({ data: d }: { data: AdminData }) {
                 </dd>
               </div>
             </dl>
-            <p className="-mt-1 text-xs text-smoke">{t("people.profile.addedOn", { date: formatDate(person.created_at, locale) })}</p>
+            <p className="-mt-1 text-xs text-smoke">
+              {t("people.profile.addedOn", { date: formatDate(person.created_at, locale) })}
+              {sourceLine && (
+                <>
+                  {" · "}
+                  {d.intakeId ? (
+                    <Link
+                      to={`/app/admin/intake/${d.intakeId}`}
+                      className="underline decoration-stone underline-offset-4 hover:text-ink hover:decoration-gold"
+                    >
+                      {sourceLine}
+                    </Link>
+                  ) : (
+                    sourceLine
+                  )}
+                </>
+              )}
+            </p>
             <div className="grid gap-3 border-t border-stone pt-4">
               <h3 className="text-eyebrow text-smoke">{t("people.profile.accessTitle")}</h3>
               <AccessControls visible={person.directory_visible} mode={person.contact_mode} />
             </div>
           </Sheet>
 
-          <RequestsPanel personId={person.id} requests={d.requests} showRequester />
+          {!empties.requests && <RequestsPanel personId={person.id} requests={d.requests} showRequester />}
 
-          <Panel title={t("people.profile.capsTitle")}>
-            <CapsList caps={d.caps} />
-            <AddToggle label={t("people.profile.addToCap")}>
-              <CapForm caps={d.capOptions} />
-            </AddToggle>
-          </Panel>
+          {!empties.caps && (
+            <Panel title={t("people.profile.capsTitle")}>
+              <CapsList caps={d.caps} />
+              <AddToggle label={t("people.profile.addToCap")}>
+                <CapForm caps={d.capOptions} />
+              </AddToggle>
+            </Panel>
+          )}
 
-          <Panel title={t("people.profile.connectionsTitle")}>
-            <ConnectionsList relationships={d.relationships} isAdmin />
-            <AddToggle label={t("people.profile.addConnection")}>
-              <ConnectionForm people={d.peopleOptions} personName={person.full_name} />
-            </AddToggle>
-          </Panel>
+          {!empties.connections && (
+            <Panel title={t("people.profile.connectionsTitle")}>
+              <ConnectionsList relationships={d.relationships} isAdmin />
+              <AddToggle label={t("people.profile.addConnection")}>
+                <ConnectionForm people={d.peopleOptions} personName={person.full_name} />
+              </AddToggle>
+            </Panel>
+          )}
 
-          <Panel title={t("people.profile.reachTitle")}>
-            <p className="-mt-2 mb-4 text-sm text-smoke">{t("people.profile.reachDescription")}</p>
-            <IntroPaths paths={d.paths} person={person} />
-          </Panel>
+          {!reachEmpty && (
+            <Panel title={t("people.profile.reachTitle")}>
+              <IntroPaths paths={d.paths} person={person} />
+            </Panel>
+          )}
+
+          {(empties.requests || empties.caps || empties.connections || reachEmpty) && (
+            <ul className="grid divide-y divide-stone/70 rounded-card bg-taupe px-5 py-1.5">
+              {empties.requests && (
+                <EmptyLine
+                  title={t("requests.panel.title")}
+                  action={
+                    <Link to={`/app/requests/new?person=${encodeURIComponent(person.id)}`} className={addLinkClass}>
+                      <Plus className="size-3.5" aria-hidden="true" />
+                      {t("requests.panel.new")}
+                    </Link>
+                  }
+                />
+              )}
+              {empties.caps && (
+                <EmptyLine title={t("people.profile.capsTitle")} addLabel={t("people.profile.addToCap")}>
+                  <CapForm caps={d.capOptions} />
+                </EmptyLine>
+              )}
+              {empties.connections && (
+                <EmptyLine title={t("people.profile.connectionsTitle")} addLabel={t("people.profile.addConnection")}>
+                  <ConnectionForm people={d.peopleOptions} personName={person.full_name} />
+                </EmptyLine>
+              )}
+              {reachEmpty && <EmptyLine title={t("people.profile.reachTitle")} />}
+            </ul>
+          )}
         </div>
       </div>
     </div>
@@ -855,7 +932,6 @@ function StaffProfile({ data: d }: { data: StaffData }) {
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <BackLink />
       <PageHeader
-        eyebrow={t("people.profile.eyebrow")}
         title={<ProfileTitle name={person.full_name} />}
         description={
           <span className="grid gap-1.5">
@@ -868,21 +944,29 @@ function StaffProfile({ data: d }: { data: StaffData }) {
             )}
           </span>
         }
-        actions={
-          // "View profile" is the first action; this is the profile, so it is hidden here.
-          <ResourceActions person={person} saved={d.saved} className="[&>a:first-child]:hidden" />
-        }
+        actions={<ResourceActions person={person} saved={d.saved} />}
       />
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
-        <div className="grid min-w-0 gap-6">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
           <Panel title={t("people.profile.details")} bodyClassName="grid gap-5">
             {person.summary && <Prose>{person.summary}</Prose>}
             <HelpDetails person={person} />
           </Panel>
 
-          <Panel title={t("people.profile.historyTitle")} bodyClassName="grid gap-6">
-            <LogBox title={t("people.profile.logWork")} hint={t("people.profile.logWorkHint")} startOpen={Boolean(defaultCap)}>
+          <Panel
+            title={t("people.profile.historyTitle")}
+            bodyClassName="grid gap-6"
+            action={
+              <Button asChild variant="outline" size="sm" className="max-md:h-10">
+                <a href="#log-activity">
+                  <Plus aria-hidden="true" />
+                  {t("people.profile.logWork")}
+                </a>
+              </Button>
+            }
+          >
+            <LogBox title={t("people.profile.logWork")} startOpen={Boolean(defaultCap)}>
               <LogActivityForm caps={d.capOptions} today={d.today} defaultCap={defaultCap} kinds={d.logKinds} />
             </LogBox>
             <HistoryTimeline
@@ -894,10 +978,10 @@ function StaffProfile({ data: d }: { data: StaffData }) {
             />
           </Panel>
 
-          <RequestsPanel personId={person.id} requests={d.requests} />
+          {d.requests.length > 0 && <RequestsPanel personId={person.id} requests={d.requests} />}
         </div>
 
-        <div className="grid min-w-0 gap-6">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
           <Sheet className="grid h-fit gap-4">
             <h2 className="text-section">{t("people.profile.contact")}</h2>
             {person.email || person.phone ? (
@@ -921,9 +1005,28 @@ function StaffProfile({ data: d }: { data: StaffData }) {
             </dl>
           </Sheet>
 
-          <Panel title={t("people.profile.capsTitle")}>
-            <CapsList caps={d.caps} />
-          </Panel>
+          {d.caps.length > 0 ? (
+            <Panel title={t("people.profile.capsTitle")}>
+              <CapsList caps={d.caps} />
+            </Panel>
+          ) : null}
+
+          {(d.requests.length === 0 || d.caps.length === 0) && (
+            <ul className="grid divide-y divide-stone/70 rounded-card bg-taupe px-5 py-1.5">
+              {d.requests.length === 0 && (
+                <EmptyLine
+                  title={t("requests.panel.title")}
+                  action={
+                    <Link to={`/app/requests/new?person=${encodeURIComponent(person.id)}`} className={addLinkClass}>
+                      <Plus className="size-3.5" aria-hidden="true" />
+                      {t("requests.panel.new")}
+                    </Link>
+                  }
+                />
+              )}
+              {d.caps.length === 0 && <EmptyLine title={t("people.profile.capsTitle")} />}
+            </ul>
+          )}
         </div>
       </div>
     </div>

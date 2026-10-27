@@ -5,9 +5,9 @@
  */
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, data, redirect, useActionData, useFetcher, useLoaderData } from "react-router";
-import { ArrowLeft, Check, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, Pencil, Plus, Trash2, X } from "lucide-react";
 import type { Route } from "./+types/app.opportunities.$opportunityId";
-import { StageBadge, crmDate, stageDot } from "~/components/crm/crm-bits";
+import { crmDate, stageDot } from "~/components/crm/crm-bits";
 import { FollowUpList } from "~/components/crm/follow-up-list";
 import { OpportunityForm } from "~/components/crm/opportunity-form";
 import { QuickFollowUpForm } from "~/components/crm/quick-follow-up-form";
@@ -92,6 +92,7 @@ export default function OpportunityDetail() {
   const actionData = useActionData<typeof action>();
   const { t, locale } = useT();
   const [editing, setEditing] = useState(false);
+  const [addingFollowUp, setAddingFollowUp] = useState(false);
 
   useEffect(() => {
     if (actionData?.ok && actionData.intent === "update") setEditing(false);
@@ -101,33 +102,57 @@ export default function OpportunityDetail() {
   const doneFollowUps = followUps.filter((f) => f.status === "completed");
 
   return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-8">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <Link to="/app/opportunities" className="inline-flex w-fit items-center gap-1.5 text-sm text-graphite hover:text-ink">
         <ArrowLeft className="size-4" aria-hidden="true" />
         {t("crm.opps.back")}
       </Link>
 
       <PageHeader
-        eyebrow={`${t(`common.track.${o.track}`)} · ${t(`common.opportunityKind.${o.kind}`)}`}
         title={o.title}
         description={
-          o.person_id ? (
-            <Link to={`/app/people/${o.person_id}`} className="font-medium text-graphite underline-offset-4 hover:text-ink hover:underline">
-              {o.person_name}
-              {o.organization_name && <span className="font-normal text-smoke">, {o.organization_name}</span>}
-            </Link>
-          ) : (
-            t("crm.opps.row.noPerson")
-          )
+          <>
+            {o.person_id ? (
+              <Link to={`/app/people/${o.person_id}`} className="font-medium text-graphite underline-offset-4 hover:text-ink hover:underline">
+                {o.person_name}
+                {o.organization_name && <span className="font-normal text-smoke">, {o.organization_name}</span>}
+              </Link>
+            ) : (
+              t("crm.opps.row.noPerson")
+            )}
+            {" · "}
+            {t(`common.opportunityKind.${o.kind}`)}
+          </>
         }
-        actions={<StageBadge stage={o.stage} className="h-7 px-3 text-sm" />}
       />
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <div className="grid gap-6">
           <StagePanel id={o.id} track={o.track} stage={o.stage} key={o.stage} />
 
-          <Panel title={t("crm.opps.detail.followUps")}>
+          <Panel
+            title={t("crm.opps.detail.followUps")}
+            action={
+              o.person_id && (
+                <Button variant="outline" size="sm" onClick={() => setAddingFollowUp((v) => !v)} aria-expanded={addingFollowUp}>
+                  {addingFollowUp ? <X aria-hidden="true" /> : <Plus aria-hidden="true" />}
+                  {addingFollowUp ? t("crm.fu.action.close") : t("crm.fu.panel.add")}
+                </Button>
+              )
+            }
+          >
+            {o.person_id && addingFollowUp && (
+              <div className="mb-4 rounded-card bg-canvas p-4 shadow-whisper">
+                <QuickFollowUpForm
+                  today={today}
+                  personId={o.person_id}
+                  opportunityId={o.id}
+                  owners={owners}
+                  defaultOwnerId={o.owner_user_id ?? undefined}
+                  onDone={() => setAddingFollowUp(false)}
+                />
+              </div>
+            )}
             <FollowUpList
               items={[...openFollowUps, ...doneFollowUps]}
               today={today}
@@ -135,11 +160,6 @@ export default function OpportunityDetail() {
               showOpportunity={false}
               empty={t("crm.opps.detail.followUpsEmpty")}
             />
-            {o.person_id && (
-              <div className="mt-4 rounded-card bg-canvas p-4 shadow-whisper">
-                <QuickFollowUpForm today={today} personId={o.person_id} opportunityId={o.id} owners={owners} defaultOwnerId={o.owner_user_id ?? undefined} submitVariant="brand" />
-              </div>
-            )}
           </Panel>
 
           <Panel title={t("crm.opps.detail.history")}>
@@ -213,9 +233,7 @@ export default function OpportunityDetail() {
                 </Detail>
                 <Detail label={t("crm.opps.detail.owner")}>{o.owner_name}</Detail>
                 <Detail label={t("crm.opps.detail.notes")}>{o.notes && <span className="whitespace-pre-line">{o.notes}</span>}</Detail>
-                <p className="text-xs text-smoke">
-                  {o.open ? t("crm.opps.detail.open") : t("crm.opps.detail.closedOn", { date: crmDate(o.closed_at, locale, today) })}
-                </p>
+                {!o.open && <p className="text-xs text-smoke">{t("crm.opps.detail.closedOn", { date: crmDate(o.closed_at, locale, today) })}</p>}
               </dl>
             )}
           </Panel>
@@ -227,13 +245,14 @@ export default function OpportunityDetail() {
   );
 }
 
+/** A label and value; left out entirely when there is no value. */
 function Detail({ label, children }: { label: string; children: ReactNode }) {
-  const { t } = useT();
   const empty = children === null || children === undefined || children === "" || children === false;
+  if (empty) return null;
   return (
     <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-3">
       <dt className="text-smoke">{label}</dt>
-      <dd className={cn(empty ? "text-ash" : "text-ink")}>{empty ? t("crm.opps.detail.none") : children}</dd>
+      <dd className="text-ink">{children}</dd>
     </div>
   );
 }
@@ -270,13 +289,12 @@ function StagePanel({ id, track, stage }: { id: string; track: "engagement" | "f
             );
           })}
         </div>
-        <div className="grid max-w-md gap-1">
-          <Label htmlFor={`stage-note-${id}`} className="text-xs text-smoke">
+        <div className="max-w-md">
+          <Label htmlFor={`stage-note-${id}`} className="sr-only">
             {t("crm.opps.detail.stageNote")}
           </Label>
-          <Input id={`stage-note-${id}`} name="note" maxLength={500} placeholder={t("crm.opps.detail.stageNotePlaceholder")} className="h-9 bg-canvas" />
+          <Input id={`stage-note-${id}`} name="note" maxLength={500} placeholder={t("crm.opps.detail.stageNotePlaceholder")} className="h-10 bg-canvas" />
         </div>
-        <p className="text-xs text-smoke">{t("crm.opps.detail.stageHint")}</p>
       </fetcher.Form>
     </Panel>
   );

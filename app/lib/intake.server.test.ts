@@ -12,6 +12,8 @@ import {
 } from "./intake.server";
 import { createPerson, getPerson, getRelationships } from "./people.server";
 
+const ADMIN = { id: "test-admin", role: "admin" } as const;
+
 const base = (overrides: Partial<IntakePayload> = {}): IntakePayload => ({
   full_name: "Ana Rivera",
   email: "ana@example.test",
@@ -36,7 +38,7 @@ describe("processIntake", () => {
     const payload = base({ organization: "Rivera Tailoring", cap_topics: ["the bay"] });
     const { personId, submissionId } = await processIntake(payload, "es");
 
-    const person = await getPerson(personId);
+    const person = await getPerson(personId, ADMIN);
     expect(person).toMatchObject({
       full_name: "Ana Rivera",
       email: "ana@example.test",
@@ -87,7 +89,7 @@ describe("processIntake", () => {
     );
 
     expect(personId).toBe(existingId);
-    const person = await getPerson(existingId);
+    const person = await getPerson(existingId, ADMIN);
     expect(person?.full_name).toBe("Marcus Bell");
     expect(person?.title).toBe("Head chef");
     expect(person?.phone).toBe("410-555-0100");
@@ -116,20 +118,20 @@ describe("processIntake", () => {
       "en",
     );
 
-    const rels = await getRelationships(personId);
+    const rels = await getRelationships(personId, ADMIN);
     expect(rels).toHaveLength(2);
     expect(rels.every((r) => r.kind === "knows" && r.direction === "out" && r.source === "intake")).toBe(true);
 
     const lucia = rels.find((r) => r.other.full_name === "Lucía Gómez");
     expect(lucia?.note).toBe("my cousin");
-    const lead = await getPerson(lucia!.other.id);
+    const lead = await getPerson(lucia!.other.id, ADMIN);
     expect(lead).toMatchObject({ status: "lead", source: "referral", phone: "410-555-0199", contribution_types: [] });
     expect(lead?.notes).toContain("runs a bakery");
     expect(lead?.notes).toContain("Sam Ortiz");
 
     // The second referral matched the existing person by email instead of creating a lead.
     expect(rels.find((r) => r.other.id === known)?.note).toBe("coworker");
-    expect((await getPerson(known))?.status).toBe("active");
+    expect((await getPerson(known, ADMIN))?.status).toBe("active");
   });
 
   it("matches referred_by by name (case-insensitive) and records who referred whom", async () => {
@@ -140,7 +142,7 @@ describe("processIntake", () => {
       "en",
     );
 
-    const rels = await getRelationships(rosa);
+    const rels = await getRelationships(rosa, ADMIN);
     expect(rels).toHaveLength(1);
     expect(rels[0]).toMatchObject({ kind: "referred", direction: "out", source: "intake" });
     expect(rels[0].other.id).toBe(personId);
@@ -151,10 +153,10 @@ describe("processIntake", () => {
       base({ full_name: "Tom Lee", email: "tom@example.test", referred_by: { name: "Nobody Yet", email: "nobody@example.test" } }),
       "en",
     );
-    const rels = await getRelationships(personId);
+    const rels = await getRelationships(personId, ADMIN);
     expect(rels).toHaveLength(1);
     expect(rels[0]).toMatchObject({ kind: "referred", direction: "in" });
-    const referrer = await getPerson(rels[0].other.id);
+    const referrer = await getPerson(rels[0].other.id, ADMIN);
     expect(referrer).toMatchObject({ full_name: "Nobody Yet", email: "nobody@example.test", status: "lead", source: "referral" });
     expect(referrer?.notes).toContain("Tom Lee");
   });

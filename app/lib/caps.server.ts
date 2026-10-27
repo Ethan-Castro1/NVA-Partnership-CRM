@@ -4,6 +4,7 @@ import { CAP_BLOCKS, CAP_LABELS, type CapBlock, type CapLabel } from "./cap-cata
 import { CAP_PARTNER_STATUSES, CAP_STATUSES, normalizeTags, type CapPartnerStatus, type CapStatus, type EngagementKind } from "./constants";
 import { newId, query, queryOne } from "./db.server";
 import { findConnectorsForNeed, type IntroPath, type MiniPerson, type SearchHit } from "./people.server";
+import { isAdmin, visibleToSql, type Viewer } from "./permissions.server";
 
 export type CapSummary = {
   id: string;
@@ -133,18 +134,20 @@ export async function deleteCap(id: string): Promise<void> {
   await query("DELETE FROM caps WHERE id = $1", [id]);
 }
 
-export async function getCapPartners(capId: string): Promise<CapPartnerView[]> {
+/** A CAP's partners. Staff see only partners in the staff directory, with email only for direct contacts. */
+export async function getCapPartners(capId: string, viewer: Viewer): Promise<CapPartnerView[]> {
   const rows = await query<{
     id: string; full_name: string; title: string | null; organization_name: string | null; affiliations: MiniPerson["affiliations"];
     person_status: MiniPerson["status"]; email: string | null; skills: string[];
     role: string | null; status: CapPartnerStatus; note: string | null; created_at: string;
   }>(
-    `SELECT p.id, p.full_name, p.title, o.name AS organization_name, p.affiliations, p.status AS person_status, p.email, p.skills,
+    `SELECT p.id, p.full_name, p.title, o.name AS organization_name, p.affiliations, p.status AS person_status,
+            ${isAdmin(viewer) ? "p.email" : "CASE WHEN p.contact_mode = 'direct' THEN p.email END AS email"}, p.skills,
             cp.role, cp.status, cp.note, cp.created_at
        FROM cap_partners cp
        JOIN people p ON p.id = cp.person_id
        LEFT JOIN organizations o ON o.id = p.organization_id
-      WHERE cp.cap_id = $1
+      WHERE cp.cap_id = $1 AND ${visibleToSql(viewer, "p")}
       ORDER BY CASE cp.status WHEN 'confirmed' THEN 0 WHEN 'contacted' THEN 1 WHEN 'suggested' THEN 2 ELSE 3 END, p.full_name`,
     [capId],
   );
@@ -160,12 +163,15 @@ export async function getCapPartners(capId: string): Promise<CapPartnerView[]> {
   }));
 }
 
-/** People who are not yet partners on this CAP, for the "Add partner" picker. */
-export async function getCapPartnerOptions(capId: string): Promise<{ id: string; full_name: string; organization_name: string | null }[]> {
+/** People who are not yet partners on this CAP, for the "Add partner" picker (staff: only the staff directory). */
+export async function getCapPartnerOptions(
+  capId: string,
+  viewer: Viewer,
+): Promise<{ id: string; full_name: string; organization_name: string | null }[]> {
   return query(
     `SELECT p.id, p.full_name, o.name AS organization_name
        FROM people p LEFT JOIN organizations o ON o.id = p.organization_id
-      WHERE p.id NOT IN (SELECT person_id FROM cap_partners WHERE cap_id = $1)
+      WHERE p.id NOT IN (SELECT person_id FROM cap_partners WHERE cap_id = $1) AND ${visibleToSql(viewer, "p")}
       ORDER BY p.full_name LIMIT 2000`,
     [capId],
   );
@@ -181,12 +187,18 @@ export type CapActivity = {
   user_name: string | null;
 };
 
-/** The latest calls, visits and notes logged against this CAP. */
-export async function getCapActivity(capId: string): Promise<CapActivity[]> {
+/**
+ * The latest history logged against this CAP. Staff see only entries shared
+ * with staff, about people in the staff directory, without admins' names.
+ */
+export async function getCapActivity(capId: string, viewer: Viewer): Promise<CapActivity[]> {
+  const admin = isAdmin(viewer);
   return query<CapActivity>(
-    `SELECT e.id, e.kind, e.happened_on::text AS happened_on, e.notes, p.id AS person_id, p.full_name AS person_name, u.name AS user_name
+    `SELECT e.id, e.kind, e.happened_on::text AS happened_on, e.notes, p.id AS person_id, p.full_name AS person_name,
+            ${admin ? "u.name" : "CASE WHEN u.role = 'admin' THEN NULL ELSE u.name END"} AS user_name
        FROM engagements e JOIN people p ON p.id = e.person_id LEFT JOIN users u ON u.id = e.user_id
-      WHERE e.cap_id = $1 ORDER BY e.happened_on DESC, e.created_at DESC LIMIT 20`,
+      WHERE e.cap_id = $1 ${admin ? "" : `AND e.visibility = 'staff' AND ${visibleToSql(viewer, "p")}`}
+      ORDER BY e.happened_on DESC, e.created_at DESC LIMIT 20`,
     [capId],
   );
 }
@@ -249,6 +261,7 @@ export type CapSuggestion = { person: SearchHit; direct: boolean; paths: IntroPa
  */
 export async function getCapSuggestions(
   cap: Pick<CapSummary, "id" | "needs" | "topics">,
+  viewer: Viewer,
   limit = 8,
 ): Promise<CapSuggestion[]> {
   const q = capSearchText(cap);
@@ -257,10 +270,10 @@ export async function getCapSuggestions(
     (await query<{ person_id: string }>("SELECT person_id FROM cap_partners WHERE cap_id = $1", [cap.id])).map((r) => r.person_id),
   );
   const want = limit + taken.size;
-  const byTopic = cap.topics.length ? await findConnectorsForNeed({ q, capTopics: cap.topics, limit: want }) : [];
+  const byTopic = cap.topics.length ? await findConnectorsForNeed({ q, capTopics: cap.topics, limit: want }, viewer) : [];
   const byWords = byTopic.length - byTopic.filter((r) => taken.has(r.person.id)).length >= limit
     ? []
-    : await findConnectorsForNeed({ q, limit: want });
+    : await findConnectorsForNeed({ q, limit: want }, viewer);
 
   const topics = new Set(normalizeTags(cap.topics));
   const out: CapSuggestion[] = [];

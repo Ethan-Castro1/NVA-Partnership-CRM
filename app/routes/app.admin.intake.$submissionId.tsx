@@ -45,7 +45,9 @@ export async function action({ request, params }: Route.ActionArgs) {
   const user = await requireAdmin(request);
   const parsed = ActionSchema.safeParse(Object.fromEntries(await request.formData()));
   if (!parsed.success) return data({ ok: false as const, error: "admin.error.invalid" as const }, { status: 400 });
-  const found = await setIntakeStatus(params.submissionId, parsed.data.intent, user.id, {
+  // The form still says "reviewed" (marking a sign-up reviewed); it is stored as 'approved'.
+  const status = parsed.data.intent === "reviewed" ? "approved" : parsed.data.intent;
+  const found = await setIntakeStatus(params.submissionId, status, user.id, {
     activatePerson: parsed.data.activate === "on",
   });
   if (!found) return data({ ok: false as const, error: "admin.error.signupNotFound" as const }, { status: 404 });
@@ -131,7 +133,7 @@ export default function IntakeDetailPage() {
                   {pending?.get("intent") === "new" ? t("common.state.saving") : t("admin.detail.moveToNew")}
                 </Button>
               </fetcher.Form>
-              {s.status === "reviewed" && (
+              {s.status === "approved" && (
                 <fetcher.Form method="post">
                   <input type="hidden" name="intent" value="archived" />
                   <Button type="submit" variant="ghost" disabled={busy}>

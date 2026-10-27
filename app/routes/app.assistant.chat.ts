@@ -100,7 +100,7 @@ export async function action({ request }: Route.ActionArgs) {
         writer.write({ type: "text-delta", id: "answer", delta: result.answer });
         writer.write({ type: "text-end", id: "answer" });
       }
-      const people = await peopleForCards(result.personIds);
+      const people = await peopleForCards(result.personIds, user);
       if (people.length) writer.write({ type: "data-people", data: { people } });
     },
     onEnd: async ({ messages: all }) => {

@@ -18,12 +18,13 @@ import { makeT, useT, type MessageKey } from "~/i18n";
 import { getLocale } from "~/i18n/locale.server";
 import { isWebSearchConfigured } from "~/lib/ai/exa.server";
 import { dismissWebLead, findWebLeads, listWebLeads, saveWebLeadAsContact } from "~/lib/ai/web-leads.server";
-import { requireUser } from "~/lib/auth.server";
+import { requireAdmin, requireUser } from "~/lib/auth.server";
 import { getCap } from "~/lib/caps.server";
 import { query } from "~/lib/db.server";
 import { getVillageMap, highlightFor, sortConnectorResults } from "~/lib/connections.server";
 import { CONTRIBUTION_COLOR, CONTRIBUTION_TYPES, INNER_CIRCLE } from "~/lib/constants";
 import { findConnectorsForNeed, searchPeople, searchTerms } from "~/lib/people.server";
+import { isAdmin, visibleToSql } from "~/lib/permissions.server";
 import { cn } from "~/lib/utils";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
@@ -42,16 +43,24 @@ export async function loader({ request }: Route.LoaderArgs) {
   // A query of only stopwords ("someone") would match everyone, so treat it as empty.
   const searching = searchTerms(q).length > 0;
 
+  const admin = isAdmin(user);
+  // Staff see only the staff directory (results, map, inner circle); web leads are admin-only.
   const [results, map, inner, leads, capRow] = await Promise.all([
-    searching ? findConnectorsForNeed({ q, contributionTypes: type ? [type] : undefined, limit: 25 }) : Promise.resolve([]),
-    getVillageMap(),
-    searchPeople({ affiliations: [...INNER_CIRCLE], limit: 100 }),
-    listWebLeads(),
+    searching ? findConnectorsForNeed({ q, contributionTypes: type ? [type] : undefined, limit: 25 }, user) : Promise.resolve([]),
+    getVillageMap(user),
+    searchPeople({ affiliations: [...INNER_CIRCLE], limit: 100 }, user),
+    admin ? listWebLeads() : Promise.resolve([]),
     capId ? getCap(capId) : Promise.resolve(null),
   ]);
   // People already on the CAP get a note instead of an Add button.
   const partnerIds = capRow
-    ? (await query<{ person_id: string }>("SELECT person_id FROM cap_partners WHERE cap_id = $1", [capRow.id])).map((r) => r.person_id)
+    ? (
+        await query<{ person_id: string }>(
+          `SELECT cp.person_id FROM cap_partners cp JOIN people p ON p.id = cp.person_id
+            WHERE cp.cap_id = $1 AND ${visibleToSql(user, "p")}`,
+          [capRow.id],
+        )
+      ).map((r) => r.person_id)
     : [];
   const sorted = sortConnectorResults(results);
   return {
@@ -65,8 +74,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       .map((p) => ({ id: p.id, full_name: p.full_name }))
       .sort((a, b) => a.full_name.localeCompare(b.full_name)),
     leads,
-    aiConfigured: isWebSearchConfigured(),
-    isAdmin: user.role === "admin",
+    aiConfigured: admin && isWebSearchConfigured(),
+    isAdmin: admin,
     cap: capRow ? { id: capRow.id, title: capRow.title, partnerIds } : null,
   };
 }
@@ -82,7 +91,8 @@ const webSchema = z.object({
 const leadSchema = z.object({ leadId: z.string().min(1).max(100) });
 
 export async function action({ request }: Route.ActionArgs) {
-  const user = await requireUser(request);
+  // Web search for new leads, and saving or dismissing them, is admin-only.
+  const user = await requireAdmin(request);
   const form = await request.formData();
   const intent = form.get("intent");
   const locale = await getLocale(request, user.locale);
@@ -95,7 +105,7 @@ export async function action({ request }: Route.ActionArgs) {
         { status: 400 },
       );
     }
-    const result = await findWebLeads({ need: parsed.data.need, via: parsed.data.via, locale, userId: user.id });
+    const result = await findWebLeads({ need: parsed.data.need, via: parsed.data.via, locale, userId: user.id, role: user.role });
     if (!result.ok) {
       const status = result.error === "connections.web.error.rateLimited" ? 429 : result.error === "connections.web.error.viaInvalid" ? 400 : 503;
       return data<WebActionResult>(

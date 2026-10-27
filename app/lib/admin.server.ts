@@ -21,6 +21,7 @@ import {
 import { query, queryOne, transaction } from "./db.server";
 import type { IntakePayload, IntakeReferral } from "./intake-types";
 import { getCounts, updatePerson } from "./people.server";
+import type { Viewer } from "./permissions.server";
 
 /** Timestamps leave the server as ISO strings (pg and PGlite both hand back Dates). */
 function iso(value: unknown): string {
@@ -98,9 +99,9 @@ function toSignupRow(row: SignupRow): SignupRow {
   };
 }
 
-export async function getAdminOverview() {
+export async function getAdminOverview(admin: Viewer) {
   const [counts, caps, signups, leads, capsWithoutPartner, recent] = await Promise.all([
-    getCounts(),
+    getCounts(admin),
     queryOne<{ n: number }>("SELECT count(*)::int AS n FROM caps WHERE status = 'active'"),
     query<SignupRow>(
       `SELECT ${SIGNUP_COLUMNS} FROM intake_submissions s LEFT JOIN people p ON p.id = s.person_id
@@ -147,7 +148,7 @@ export async function listIntake(status: IntakeStatus): Promise<{ rows: SignupRo
     ),
     query<{ status: IntakeStatus; n: number }>("SELECT status, count(*)::int AS n FROM intake_submissions GROUP BY status"),
   ]);
-  const byStatus = { new: 0, reviewed: 0, archived: 0 } as Record<IntakeStatus, number>;
+  const byStatus: Record<IntakeStatus, number> = { new: 0, approved: 0, rejected: 0, archived: 0 };
   for (const c of counts) byStatus[c.status] = c.n;
   return { rows: rows.map(toSignupRow), counts: byStatus };
 }
@@ -320,7 +321,7 @@ export async function getIntakeSubmission(id: string): Promise<IntakeDetail | nu
 }
 
 /**
- * Moves a sign-up between New, Reviewed and Archived. Reviewing or archiving
+ * Moves a sign-up between New, Approved, Rejected and Archived. Deciding
  * records who did it and when; moving back to New clears that.
  */
 export async function setIntakeStatus(
@@ -332,12 +333,14 @@ export async function setIntakeStatus(
   return transaction(async (tx) => {
     const rows = await tx.query<{ person_id: string | null }>(
       status === "new"
-        ? "UPDATE intake_submissions SET status = $2, reviewed_by = NULL, reviewed_at = NULL WHERE id = $1 RETURNING person_id"
-        : "UPDATE intake_submissions SET status = $2, reviewed_by = $3, reviewed_at = now() WHERE id = $1 RETURNING person_id",
+        ? `UPDATE intake_submissions SET status = $2, reviewed_by = NULL, reviewed_at = NULL, decided_by = NULL, decided_at = NULL
+            WHERE id = $1 RETURNING person_id`
+        : `UPDATE intake_submissions SET status = $2, reviewed_by = $3, reviewed_at = now(), decided_by = $3, decided_at = now()
+            WHERE id = $1 RETURNING person_id`,
       status === "new" ? [id, status] : [id, status, reviewerId],
     );
     if (!rows[0]) return false;
-    if (status === "reviewed" && options.activatePerson && rows[0].person_id) {
+    if (status === "approved" && options.activatePerson && rows[0].person_id) {
       await updatePerson(rows[0].person_id, { status: "active" }, tx);
     }
     return true;

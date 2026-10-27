@@ -28,8 +28,8 @@ export const meta: Route.MetaFunction = ({ matches }) => {
 };
 
 export async function loader({ request }: Route.LoaderArgs) {
-  await requireAdmin(request);
-  return getAdminOverview();
+  const admin = await requireAdmin(request);
+  return getAdminOverview(admin);
 }
 
 export default function AdminOverview() {

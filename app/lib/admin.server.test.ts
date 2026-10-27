@@ -51,20 +51,20 @@ describe("CSV export escaping", () => {
 
 describe("account guard rails", () => {
   const admin = { id: "a1", role: "admin" as const, active: true };
-  const teacher = { id: "t1", role: "teacher" as const, active: true };
+  const teacher = { id: "t1", role: "staff" as const, active: true };
 
   it("stops admins from demoting or deactivating themselves", () => {
-    expect(accountChangeProblem("a1", admin, { kind: "role", role: "teacher" }, 3)).toBe("admin.error.self");
+    expect(accountChangeProblem("a1", admin, { kind: "role", role: "staff" }, 3)).toBe("admin.error.self");
     expect(accountChangeProblem("a1", admin, { kind: "active", active: false }, 3)).toBe("admin.error.self");
     expect(accountChangeProblem("a1", admin, { kind: "role", role: "admin" }, 1)).toBeNull();
   });
 
   it("keeps at least one active admin", () => {
-    expect(accountChangeProblem("x", admin, { kind: "role", role: "teacher" }, 1)).toBe("admin.error.lastAdmin");
+    expect(accountChangeProblem("x", admin, { kind: "role", role: "staff" }, 1)).toBe("admin.error.lastAdmin");
     expect(accountChangeProblem("x", admin, { kind: "active", active: false }, 1)).toBe("admin.error.lastAdmin");
-    expect(accountChangeProblem("x", admin, { kind: "role", role: "teacher" }, 2)).toBeNull();
+    expect(accountChangeProblem("x", admin, { kind: "role", role: "staff" }, 2)).toBeNull();
     // An already-deactivated admin isn't one of the active ones, so demoting them is fine.
-    expect(accountChangeProblem("x", { ...admin, active: false }, { kind: "role", role: "teacher" }, 1)).toBeNull();
+    expect(accountChangeProblem("x", { ...admin, active: false }, { kind: "role", role: "staff" }, 1)).toBeNull();
   });
 
   it("lets admins change teachers freely", () => {
@@ -75,10 +75,10 @@ describe("account guard rails", () => {
   it("is enforced against the database", async () => {
     const first = await createUser({ email: "first@test.local", name: "First", password: "x".repeat(12), role: "admin" });
     const second = await createUser({ email: "second@test.local", name: "Second", password: "x".repeat(12), role: "admin" });
-    const teacher = await createUser({ email: "t@test.local", name: "Teach", password: "x".repeat(12), role: "teacher" });
+    const teacher = await createUser({ email: "t@test.local", name: "Teach", password: "x".repeat(12), role: "staff" });
 
-    expect(await changeStaffAccount(first, first, { kind: "role", role: "teacher" })).toEqual({ ok: false, error: "admin.error.self" });
-    expect(await changeStaffAccount(first, second, { kind: "role", role: "teacher" })).toEqual({ ok: true });
+    expect(await changeStaffAccount(first, first, { kind: "role", role: "staff" })).toEqual({ ok: false, error: "admin.error.self" });
+    expect(await changeStaffAccount(first, second, { kind: "role", role: "staff" })).toEqual({ ok: true });
     // `first` is now the only active admin. Promote the teacher so there are two again.
     expect(await changeStaffAccount(first, teacher, { kind: "role", role: "admin" })).toEqual({ ok: true });
     expect(await changeStaffAccount(teacher, first, { kind: "active", active: false })).toEqual({ ok: true });
@@ -86,7 +86,7 @@ describe("account guard rails", () => {
 
     // Make `teacher` (now an admin) the last active admin and try to remove them via someone else.
     await query("UPDATE users SET active = false WHERE id = $1", [first]);
-    expect(await changeStaffAccount(second, teacher, { kind: "role", role: "teacher" })).toEqual({
+    expect(await changeStaffAccount(second, teacher, { kind: "role", role: "staff" })).toEqual({
       ok: false,
       error: "admin.error.lastAdmin",
     });
@@ -154,12 +154,12 @@ describe("sign-up review", () => {
     expect(detail?.referredBy?.id).toBe(referrer);
     expect(detail?.referrals.map((r) => r.match?.id ?? null)).toEqual([lead, null]);
 
-    expect(await setIntakeStatus(id, "reviewed", reviewer, { activatePerson: true })).toBe(true);
+    expect(await setIntakeStatus(id, "approved", reviewer, { activatePerson: true })).toBe(true);
     const row = await queryOne<{ status: string; reviewed_by: string; reviewed_at: Date | null }>(
       "SELECT status, reviewed_by, reviewed_at FROM intake_submissions WHERE id = $1",
       [id],
     );
-    expect(row?.status).toBe("reviewed");
+    expect(row?.status).toBe("approved");
     expect(row?.reviewed_by).toBe(reviewer);
     expect(row?.reviewed_at).toBeTruthy();
     expect((await queryOne<{ status: string }>("SELECT status FROM people WHERE id = $1", [person]))?.status).toBe("active");
@@ -192,7 +192,7 @@ describe("next sign-up to review", () => {
 
 describe("needs attention", () => {
   it("lists leads with their last contact and CAPs without a confirmed partner", async () => {
-    const owner = await createUser({ email: "owner@test.local", name: "Owner", password: "x".repeat(12), role: "teacher" });
+    const owner = await createUser({ email: "owner@test.local", name: "Owner", password: "x".repeat(12), role: "staff" });
     const quiet = await createPerson({ full_name: "Quiet Lead", status: "lead" }, null);
     const called = await createPerson({ full_name: "Called Lead", status: "lead" }, null);
     await logEngagement({ personId: called, kind: "call", happenedOn: "2026-09-01" }, owner);
@@ -205,7 +205,7 @@ describe("needs attention", () => {
     await addCapPartner({ capId: suggestedOnly, personId: partner }, owner);
     await addCapPartner({ capId: staffed, personId: partner, status: "confirmed" }, owner);
 
-    const { leads, capsWithoutPartner } = await getAdminOverview();
+    const { leads, capsWithoutPartner } = await getAdminOverview({ id: "test-admin", role: "admin" });
     const byId = new Map(leads.map((l) => [l.id, l]));
     expect(byId.get(quiet)?.last_contact).toBeNull();
     expect(byId.get(called)?.last_contact).toBe("2026-09-01");

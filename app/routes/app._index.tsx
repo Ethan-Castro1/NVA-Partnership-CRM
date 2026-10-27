@@ -15,6 +15,7 @@ import { requireUser } from "~/lib/auth.server";
 import { listCaps } from "~/lib/caps.server";
 import { query } from "~/lib/db.server";
 import { getCounts } from "~/lib/people.server";
+import { isAdmin, visibleToSql } from "~/lib/permissions.server";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const locale = (matches[0]?.data as { locale?: "en" | "es" } | undefined)?.locale ?? "en";
@@ -28,24 +29,29 @@ export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
   const locale = await getLocale(request, user.locale);
 
+  // Staff see only the staff directory, email only for direct contacts, and only shared history.
+  const admin = isAdmin(user);
   const [counts, caps, people, recentActivity] = await Promise.all([
-    getCounts(),
+    getCounts(user),
     listCaps({ ownerId: user.id, excludeComplete: true }),
     // The table filters, sorts and pages in the browser; 1000 rows is plenty for one school.
     query<Omit<DashboardPerson, "updated_at"> & { updated_at: unknown }>(
-      `SELECT p.id, p.full_name, p.title, o.name AS organization_name, p.email, p.contribution_types, p.skills,
-              p.affiliations, p.status, p.preferred_language, p.updated_at
+      `SELECT p.id, p.full_name, p.title, o.name AS organization_name,
+              ${admin ? "p.email" : "CASE WHEN p.contact_mode = 'direct' THEN p.email END AS email"},
+              p.contribution_types, p.skills, p.affiliations, p.status, p.preferred_language, p.updated_at
          FROM people p LEFT JOIN organizations o ON o.id = p.organization_id
+        WHERE ${visibleToSql(user, "p")}
         ORDER BY p.updated_at DESC, p.full_name
         LIMIT 1000`,
     ),
     query<RecentEngagement>(
       `SELECT e.id, e.kind, e.happened_on::text AS happened_on, p.id AS person_id, p.full_name AS person_name,
-              u.name AS user_name, e.cap_id, c.title AS cap_title
+              ${admin ? "u.name" : "CASE WHEN u.role = 'admin' THEN NULL ELSE u.name END"} AS user_name, e.cap_id, c.title AS cap_title
          FROM engagements e
          JOIN people p ON p.id = e.person_id
          LEFT JOIN users u ON u.id = e.user_id
          LEFT JOIN caps c ON c.id = e.cap_id
+        ${admin ? "" : `WHERE e.visibility = 'staff' AND ${visibleToSql(user, "p")}`}
         ORDER BY e.happened_on DESC, e.created_at DESC
         LIMIT 6`,
     ),
@@ -63,7 +69,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   return {
     firstName: user.name.trim().split(/\s+/)[0] || user.name,
-    isAdmin: user.role === "admin",
+    isAdmin: admin,
     // Formatted here so the server and browser show the same date.
     today: longToday(locale),
     counts,

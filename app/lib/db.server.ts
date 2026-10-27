@@ -84,6 +84,9 @@ async function init(): Promise<Driver> {
     ? await createPgDriver(url)
     : await createPgliteDriver(process.env.PGLITE_DIR ?? path.resolve(".data/pglite"));
   await driver.exec(SCHEMA_SQL);
+  // One-time data moves that go with the schema (guarded per database in app_meta).
+  const { runDataMigrations } = await import("./migrations.server");
+  await runDataMigrations(driver);
   const { bootstrapAdminFromEnv } = await import("./bootstrap.server");
   await bootstrapAdminFromEnv(driver);
   return driver;
@@ -130,7 +133,7 @@ export function whenReady(): Promise<void> {
   return globalForDb.__nvaReady;
 }
 
-/** For scripts: run the schema and return when the database is ready. */
+/** For scripts: run the schema and data migrations, and return when the database is ready. */
 export async function ensureDatabase(): Promise<void> {
   await getDriver();
 }

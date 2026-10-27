@@ -4,13 +4,14 @@ import { query } from "~/lib/db.server";
 import { addRelationship, createPerson, logEngagement } from "~/lib/people.server";
 import { executeTool, TOOLS } from "./tools.server";
 
-const ctx = { userId: "u-teacher" };
+// An admin sees everyone; what staff get is tested in permissions.server.test.ts.
+const ctx = { user: { id: "u-teacher", email: "t@nva.test", name: "Tess Teacher", role: "admin" as const, locale: "en" as const } };
 let board: string, mid: string, sewer: string, welder: string, capId: string;
 
 beforeAll(async () => {
   await query(
-    "INSERT INTO users (id, email, name, password_hash, role) VALUES ($1, $2, $3, 'x', 'teacher') ON CONFLICT DO NOTHING",
-    [ctx.userId, "t@nva.test", "Tess Teacher"],
+    "INSERT INTO users (id, email, name, password_hash, role) VALUES ($1, $2, $3, 'x', 'admin') ON CONFLICT DO NOTHING",
+    [ctx.user.id, "t@nva.test", "Tess Teacher"],
   );
   board = await createPerson({ full_name: "Bea Board", affiliations: ["board"], status: "active" }, null);
   mid = await createPerson({ full_name: "Mo Middle", skills: ["cooking"] }, null);
@@ -32,9 +33,9 @@ beforeAll(async () => {
   );
   await addRelationship({ personId: board, relatedPersonId: mid, kind: "knows" }, null);
   await addRelationship({ personId: mid, relatedPersonId: sewer, kind: "colleague" }, null);
-  capId = await createCap({ title: "Clean the creek", topics: ["the bay"] }, ctx.userId);
-  await addCapPartner({ capId, personId: sewer }, ctx.userId);
-  await logEngagement({ personId: sewer, kind: "call", notes: "Left a message" }, ctx.userId);
+  capId = await createCap({ title: "Clean the creek", topics: ["the bay"] }, ctx.user.id);
+  await addCapPartner({ capId, personId: sewer }, ctx.user.id);
+  await logEngagement({ personId: sewer, kind: "call", notes: "Left a message" }, ctx.user.id);
 });
 
 describe("tool definitions", () => {
@@ -128,7 +129,7 @@ describe("connection tools", () => {
   it("list_caps can show only my CAPs", async () => {
     const mine = JSON.parse((await executeTool("list_caps", { mine: true }, ctx)).content);
     expect(mine.caps.map((c: { id: string }) => c.id)).toEqual([capId]);
-    const someoneElse = JSON.parse((await executeTool("list_caps", { mine: true }, { userId: "other" })).content);
+    const someoneElse = JSON.parse((await executeTool("list_caps", { mine: true }, { user: { ...ctx.user, id: "other" } })).content);
     expect(someoneElse.caps).toEqual([]);
   });
 

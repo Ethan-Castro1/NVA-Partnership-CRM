@@ -17,15 +17,15 @@ export const meta: Route.MetaFunction = ({ matches }) => {
 };
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  await requireAdmin(request);
-  const person = await getPerson(params.personId);
+  const admin = await requireAdmin(request);
+  const person = await getPerson(params.personId, admin);
   if (!person) throw data(null, { status: 404 });
   return { person };
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
-  await requireAdmin(request);
-  const person = await getPerson(params.personId);
+  const admin = await requireAdmin(request);
+  const person = await getPerson(params.personId, admin);
   if (!person) throw data(null, { status: 404 });
 
   const parsed = parsePersonForm(await request.formData());

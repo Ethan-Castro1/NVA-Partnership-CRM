@@ -6,8 +6,9 @@
  * paint with no layout jank, and it is deterministic: the same people and
  * links always land in the same places, so the map doesn't jump between visits.
  */
-import { CONTRIBUTION_COLOR, CONTRIBUTION_TYPES, INNER_CIRCLE, type ContributionType, type RelationshipKind } from "./constants";
+import { CONTRIBUTION_COLOR, CONTRIBUTION_TYPES, INNER_CIRCLE, type ContributionType, type RelationshipKind, type Role } from "./constants";
 import { getNetwork, type IntroPath, type MiniPerson, type SearchHit } from "./people.server";
+import type { Viewer } from "./permissions.server";
 
 // ---------- need search ----------
 
@@ -234,16 +235,19 @@ export type VillageMap = { width: number; height: number; nodes: MapNode[]; link
 
 const isInner = (p: Pick<MiniPerson, "affiliations">) => p.affiliations.some((a) => INNER_CIRCLE.includes(a));
 
-// The layout only changes when people or links change, so keep the last one.
-let cached: { key: string; map: VillageMap } | undefined;
+// The layout only changes when people or links change, so keep the last one
+// per role (staff see only the staff directory, so their map is different).
+const cached = new Map<Role, { key: string; map: VillageMap }>();
 
-export async function getVillageMap(): Promise<VillageMap> {
-  const network = await getNetwork();
+/** The village map as this viewer may see it (staff: only people in the staff directory). */
+export async function getVillageMap(viewer: Viewer): Promise<VillageMap> {
+  const network = await getNetwork(viewer);
   const key = JSON.stringify([
     network.nodes.map((n) => [n.id, n.full_name, n.status, n.affiliations, n.contribution_types, n.title, n.organization_name]),
     network.links.map((l) => [l.source, l.target, l.kind]),
   ]);
-  if (cached?.key === key) return cached.map;
+  const hit = cached.get(viewer.role);
+  if (hit?.key === key) return hit.map;
 
   const layout = layoutNetwork(
     network.nodes.map((n) => ({ id: n.id, inner: isInner(n) })),
@@ -271,6 +275,6 @@ export async function getVillageMap(): Promise<VillageMap> {
     }),
     links: layout.links.map((l) => ({ source: l.source, target: l.target, kind: kinds.get(edgeKey(l.source, l.target)) ?? "knows" })),
   };
-  cached = { key, map };
+  cached.set(viewer.role, { key, map });
   return map;
 }

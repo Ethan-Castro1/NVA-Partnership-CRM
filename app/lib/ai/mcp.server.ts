@@ -28,7 +28,8 @@ export function createMcpServer(user: SessionUser, origin: string): Server {
     { name: "nva-village-partners", title: "NVA Village Partners", version: "1.0.0" },
     { capabilities: { tools: {} }, instructions: MCP_INSTRUCTIONS },
   );
-  const tools = toolsFor({ web: isWebSearchConfigured(), strict: false });
+  // Same role scoping as the in-app assistant: staff get no web search.
+  const tools = toolsFor({ web: isWebSearchConfigured(), strict: false, user });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: tools.map((tool) => ({
@@ -40,7 +41,7 @@ export function createMcpServer(user: SessionUser, origin: string): Server {
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const outcome = await executeTool(request.params.name, request.params.arguments ?? {}, { userId: user.id });
+    const outcome = await executeTool(request.params.name, request.params.arguments ?? {}, { user });
     return { content: [{ type: "text" as const, text: absolutizeLinks(outcome.content, origin) }], isError: outcome.isError };
   });
 

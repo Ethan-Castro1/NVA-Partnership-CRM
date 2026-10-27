@@ -1,10 +1,13 @@
-import { Form, Link, data, redirect, useActionData, useNavigation, useSearchParams } from "react-router";
+import { Form, Link, data, redirect, useActionData, useLoaderData, useNavigation, useSearchParams } from "react-router";
+import { ShieldCheck, UserRound } from "lucide-react";
 import type { Route } from "./+types/login";
 import { Field, FullLogo, LanguageToggle } from "~/components/nva";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { makeT, useT } from "~/i18n";
-import { getUser, login, safeNext } from "~/lib/auth.server";
+import { demoLogin, getUser, isDemoLoginEnabled, login, safeNext } from "~/lib/auth.server";
+import type { Role } from "~/lib/constants";
+import { canAccessPath } from "~/lib/permissions.server";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const locale = (matches[0]?.data as { locale?: "en" | "es" } | undefined)?.locale ?? "en";
@@ -12,23 +15,69 @@ export const meta: Route.MetaFunction = ({ matches }) => {
   return [{ title: `${t("auth.title")} | ${t("common.schoolName")}` }];
 };
 
+/** Where to go after signing in: `next` when it's a safe same-site path this role may open, else /app. */
+function landingFor(role: Role, next: string | null | undefined): string {
+  const target = safeNext(next);
+  return canAccessPath(role, target) ? target : "/app";
+}
+
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await getUser(request);
-  if (user) throw redirect(safeNext(new URL(request.url).searchParams.get("next")));
-  return null;
+  if (user) throw redirect(landingFor(user.role, new URL(request.url).searchParams.get("next")));
+  return { demo: isDemoLoginEnabled() };
 }
 
 export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
+  const next = String(form.get("next") ?? "");
+
+  if (form.get("intent") === "demo") {
+    const role = form.get("role");
+    if (role !== "admin" && role !== "staff") return data({ error: "auth.demoUnavailable" as const, email: "" }, { status: 400 });
+    const result = await demoLogin(request, role);
+    if (!result.ok) return data({ error: result.error, email: "" }, { status: isDemoLoginEnabled() ? 503 : 404 });
+    return redirect(landingFor(result.user.role, next), { headers: { "Set-Cookie": result.setCookie } });
+  }
+
   const email = String(form.get("email") ?? "");
   const password = String(form.get("password") ?? "");
   const result = await login(request, email, password);
   if (!result.ok) return data({ error: result.error, email }, { status: result.error === "auth.tooManyAttempts" ? 429 : 400 });
-  return redirect(safeNext(String(form.get("next") ?? "")), { headers: { "Set-Cookie": result.setCookie } });
+  return redirect(landingFor(result.user.role, next), { headers: { "Set-Cookie": result.setCookie } });
+}
+
+/** Demo mode only: one click to sign in as the fictional admin or staff member. */
+function DemoButtons({ next, busy }: { next: string; busy: boolean }) {
+  const { t } = useT();
+  return (
+    <section aria-labelledby="demo-title" className="mt-8 grid gap-3 rounded-2xl bg-taupe p-4">
+      <div className="grid gap-1 text-center">
+        <h2 id="demo-title" className="text-sm font-semibold">
+          {t("auth.demoTitle")}
+        </h2>
+        <p className="text-xs text-smoke">{t("auth.demoHelp")}</p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {(["admin", "staff"] as const).map((role) => (
+          <Form key={role} method="post">
+            <input type="hidden" name="intent" value="demo" />
+            <input type="hidden" name="role" value={role} />
+            <input type="hidden" name="next" value={next} />
+            <Button type="submit" variant="outline" className="w-full bg-canvas" disabled={busy}>
+              {role === "admin" ? <ShieldCheck aria-hidden="true" /> : <UserRound aria-hidden="true" />}
+              {role === "admin" ? t("auth.demoAdmin") : t("auth.demoStaff")}
+            </Button>
+          </Form>
+        ))}
+      </div>
+      <p className="text-center text-xs text-smoke">{t("auth.demoOr")}</p>
+    </section>
+  );
 }
 
 export default function Login() {
   const { t } = useT();
+  const { demo } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const [params] = useSearchParams();
@@ -44,7 +93,9 @@ export default function Login() {
         <h1 className="text-center font-display text-3xl font-bold tracking-tight">{t("auth.title")}</h1>
         <p className="mt-2 text-center text-sm text-smoke">{t("auth.subtitle")}</p>
 
-        <Form method="post" className="mt-8 grid gap-4">
+        {demo && <DemoButtons next={params.get("next") ?? ""} busy={busy} />}
+
+        <Form method="post" className={demo ? "mt-4 grid gap-4" : "mt-8 grid gap-4"}>
           <input type="hidden" name="next" value={params.get("next") ?? ""} />
           <Field label={t("auth.email")} htmlFor="email">
             <Input

@@ -45,7 +45,7 @@ import {
   updateCap,
   updateCapPartner,
 } from "~/lib/caps.server";
-import { getPerson } from "~/lib/people.server";
+import { canViewPerson } from "~/lib/permissions.server";
 
 export const meta: Route.MetaFunction = ({ matches, data: loaderData }) => {
   const locale = (matches[0]?.data as { locale?: "en" | "es" } | undefined)?.locale ?? "en";
@@ -62,13 +62,14 @@ async function loadCap(request: Request, capId: string) {
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const { cap, canEdit } = await loadCap(request, params.capId);
+  const { user, cap, canEdit } = await loadCap(request, params.capId);
   const editing = canEdit && new URL(request.url).searchParams.get("edit") === "1";
+  // Everything about people is scoped to the viewer: staff see only the staff directory.
   const [partners, suggestions, activity, others] = await Promise.all([
-    getCapPartners(cap.id),
-    editing ? Promise.resolve([]) : getCapSuggestions(cap),
-    editing ? Promise.resolve([]) : getCapActivity(cap.id),
-    editing ? Promise.resolve([]) : getCapPartnerOptions(cap.id),
+    getCapPartners(cap.id, user),
+    editing ? Promise.resolve([]) : getCapSuggestions(cap, user),
+    editing ? Promise.resolve([]) : getCapActivity(cap.id, user),
+    editing ? Promise.resolve([]) : getCapPartnerOptions(cap.id, user),
   ]);
   const partnerOptions: SelectOption[] = others.map((p) => ({
     value: p.id,
@@ -100,7 +101,8 @@ export async function action({ request, params }: Route.ActionArgs) {
     case "add-partner": {
       const personId = personIdSchema.safeParse(form.get("personId"));
       if (!personId.success) throw new Response("Bad request", { status: 400 });
-      if (!(await getPerson(personId.data))) {
+      // Staff can only add people they can see (hidden looks the same as missing).
+      if (!(await canViewPerson(user, personId.data))) {
         return data({ ok: false as const, error: "caps.error.personNotFound" as MessageKey }, { status: 404 });
       }
       await addCapPartner({ capId: cap.id, personId: personId.data }, user.id);
@@ -109,12 +111,14 @@ export async function action({ request, params }: Route.ActionArgs) {
     case "update-partner": {
       const input = parsePartnerUpdate(form);
       if (!input) throw new Response("Bad request", { status: 400 });
+      if (!(await canViewPerson(user, input.personId))) throw new Response("Not found", { status: 404 });
       await updateCapPartner(cap.id, input.personId, input);
       return data({ ok: true as const });
     }
     case "remove-partner": {
       const personId = personIdSchema.safeParse(form.get("personId"));
       if (!personId.success) throw new Response("Bad request", { status: 400 });
+      if (!(await canViewPerson(user, personId.data))) throw new Response("Not found", { status: 404 });
       await removeCapPartner(cap.id, personId.data);
       return data({ ok: true as const });
     }

@@ -109,13 +109,50 @@ export async function login(request: Request, email: string, password: string): 
   }
   attempts.delete(emailKey);
 
+  const user: SessionUser = { id: row.id, email: row.email, name: row.name, role: row.role, locale: row.locale };
+  return { ok: true, user, setCookie: await startSession(user.id) };
+}
+
+/** Starts a session for a user and returns the Set-Cookie header value. */
+async function startSession(userId: string): Promise<string> {
   const token = randomBytes(32).toString("base64url");
   const expires = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
-  await query("INSERT INTO sessions (id, user_id, expires_at) VALUES ($1, $2, $3)", [hashToken(token), row.id, expires]);
-  await query("UPDATE users SET last_login_at = now() WHERE id = $1", [row.id]);
+  await query("INSERT INTO sessions (id, user_id, expires_at) VALUES ($1, $2, $3)", [hashToken(token), userId, expires]);
+  await query("UPDATE users SET last_login_at = now() WHERE id = $1", [userId]);
   await query("DELETE FROM sessions WHERE expires_at < now()");
+  return sessionCookie.serialize(token);
+}
+
+// ---------- demo sign-in ----------
+
+/**
+ * Demo mode (DEMO_LOGIN=true, or a SEED_DEMO deployment): /login shows
+ * "Continue as Administrator / Continue as Staff", which start a real session
+ * for the fictional demo account of that role. Never set it on a real deployment.
+ */
+export function isDemoLoginEnabled(): boolean {
+  return process.env.DEMO_LOGIN === "true" || process.env.SEED_DEMO === "true";
+}
+export const DEMO_LOGIN = isDemoLoginEnabled();
+
+/** The seeded demo account for each role (see demo-seed.server.ts). */
+export const DEMO_ACCOUNTS: Record<Role, string> = { admin: "admin@nva.test", staff: "teacher@nva.test" };
+
+export type DemoLoginResult =
+  | { ok: true; user: SessionUser; setCookie: string }
+  | { ok: false; error: "auth.demoUnavailable" };
+
+/** Signs in as the demo account for `role`. Refuses unless demo mode is on and that account exists. */
+export async function demoLogin(_request: Request, role: Role): Promise<DemoLoginResult> {
+  if (!isDemoLoginEnabled() || !(role in DEMO_ACCOUNTS)) return { ok: false, error: "auth.demoUnavailable" };
+  await whenReady();
+  const row = await queryOne<SessionUser & { active: boolean }>(
+    "SELECT id, email, name, role, locale, active FROM users WHERE email = $1",
+    [DEMO_ACCOUNTS[role]],
+  );
+  if (!row || !row.active || row.role !== role) return { ok: false, error: "auth.demoUnavailable" };
   const user: SessionUser = { id: row.id, email: row.email, name: row.name, role: row.role, locale: row.locale };
-  return { ok: true, user, setCookie: await sessionCookie.serialize(token) };
+  return { ok: true, user, setCookie: await startSession(user.id) };
 }
 
 export async function logout(request: Request): Promise<string> {
@@ -142,19 +179,8 @@ async function readToken(request: Request): Promise<string | null> {
 
 // ---------- reading the signed-in user ----------
 
-/**
- * OPEN_ACCESS=true skips sign-in: every visitor acts as the first active admin.
- * For local demos only (`npm run dev` sets it); never set it on a real deployment.
- */
-export const OPEN_ACCESS = process.env.OPEN_ACCESS === "true";
-
 export async function getUser(request: Request): Promise<SessionUser | null> {
   await whenReady();
-  if (OPEN_ACCESS) {
-    return queryOne<SessionUser>(
-      "SELECT id, email, name, role, locale FROM users WHERE active AND role = 'admin' ORDER BY created_at LIMIT 1",
-    );
-  }
   const token = await readToken(request);
   if (!token) return null;
   return queryOne<SessionUser>(
@@ -176,10 +202,13 @@ export async function requireUser(request: Request): Promise<SessionUser> {
   return user;
 }
 
-/** For admin pages and admin-only actions: 403 for teachers. */
+/**
+ * For admin pages and admin-only actions. Staff get a 403, which the error
+ * page shows as "Only admins can do that" with a link back to /app.
+ */
 export async function requireAdmin(request: Request): Promise<SessionUser> {
   const user = await requireUser(request);
-  if (user.role !== "admin") throw new Response("Admins only", { status: 403 });
+  if (user.role !== "admin") throw new Response("Admins only", { status: 403, statusText: "Forbidden" });
   return user;
 }
 

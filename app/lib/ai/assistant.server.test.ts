@@ -3,7 +3,8 @@ import { addRelationship, createPerson } from "~/lib/people.server";
 import type { SessionUser } from "~/lib/types";
 import { fallbackAnswer, interpretQuestion, peopleForCards, referencedPersonIds, runAssistant } from "./assistant.server";
 
-const user: SessionUser = { id: "u1", email: "t@nva.test", name: "Tess Teacher", role: "teacher", locale: "en" };
+// An admin sees everyone; staff scoping is tested in permissions.server.test.ts.
+const user: SessionUser = { id: "u1", email: "t@nva.test", name: "Tess Teacher", role: "admin", locale: "en" };
 let rosa: string, lucia: string, mei: string, tom: string;
 
 beforeAll(async () => {
@@ -50,26 +51,26 @@ describe("the no-API-key fallback", () => {
   });
 
   it("answers in Spanish and finds people from Spanish words", async () => {
-    const { answer, personIds } = await fallbackAnswer("¿Quién podría ofrecer una pasantía de soldadura?", "es");
+    const { answer, personIds } = await fallbackAnswer("¿Quién podría ofrecer una pasantía de soldadura?", "es", user);
     expect(personIds).toEqual([tom]);
     expect(answer).toContain("Esto es lo que encontré");
     expect(answer).toContain("Todavía no hay un camino conocido");
   });
 
   it("drops a too-strict type filter before giving up", async () => {
-    const { personIds } = await fallbackAnswer("Partners for a CAP about the Chesapeake Bay", "en");
+    const { personIds } = await fallbackAnswer("Partners for a CAP about the Chesapeake Bay", "en", user);
     expect(personIds).toEqual([tom]);
   });
 
   it("says clearly when nobody matches and suggests next steps", async () => {
-    const { answer, personIds } = await fallbackAnswer("glassblowing", "en");
+    const { answer, personIds } = await fallbackAnswer("glassblowing", "en", user);
     expect(personIds).toEqual([]);
     expect(answer).toContain(`I couldn't find anyone matching "glassblowing"`);
     expect(answer).toContain("[Connections](/app/connections)");
   });
 
   it("asks for a keyword when the question has none", async () => {
-    const { answer } = await fallbackAnswer("Who can help?", "en");
+    const { answer } = await fallbackAnswer("Who can help?", "en", user);
     expect(answer).toContain("Tell me a skill");
   });
 
@@ -97,7 +98,7 @@ describe("helpers", () => {
   });
 
   it("builds cards in the order asked and skips unknown ids", async () => {
-    const cards = await peopleForCards([tom, "missing", mei]);
+    const cards = await peopleForCards([tom, "missing", mei], user);
     expect(cards.map((c) => c.full_name)).toEqual(["Tom Brennan", "Mei Lin"]);
   });
 });

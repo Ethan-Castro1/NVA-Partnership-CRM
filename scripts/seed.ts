@@ -26,7 +26,10 @@ async function main() {
     console.log("The database already has people. Run `npm run seed -- --reset` to start over.");
     return;
   }
-  console.log(`Sign in at /login as admin@nva.test or teacher@nva.test (or maestra@nva.test, in Spanish) with password: ${DEMO_PASSWORD}`);
+  console.log(
+    `Sign in at /login as admin@nva.test or jordan.admin@nva.test (admins), teacher@nva.test or maestra@nva.test (staff, Spanish) with password: ${DEMO_PASSWORD}`,
+  );
+  console.log("Or start with DEMO_LOGIN=true (npm run dev does) and use the Continue as Administrator / Staff buttons.");
 }
 
 main().then(

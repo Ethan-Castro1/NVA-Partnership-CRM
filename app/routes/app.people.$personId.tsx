@@ -1,7 +1,9 @@
 /**
  * One person's profile: who they are, how NVA can reach them, their
- * connections, CAPs and activity. Teachers and admins can add to the record;
- * only admins can edit, change status or remove things (checked in the action
+ * connections, CAPs and activity. Staff see only people in the staff
+ * directory (anyone else is a 404), without private CRM fields, and may log
+ * only the work itself (lessons, volunteering, internships, guest talks).
+ * Only admins can edit, change status or remove things (checked in the action
  * too). Deleting a person happens from the edit page but posts here.
  */
 import { TopicList } from "~/components/caps/cap-bits";
@@ -25,8 +27,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~
 import { makeT, useT, type MessageKey } from "~/i18n";
 import { requireAdmin, requireUser } from "~/lib/auth.server";
 import { addCapPartner, getCap, getCapsForPerson, listCaps } from "~/lib/caps.server";
-import { CONTRIBUTION_TYPES, PERSON_STATUSES, type PersonStatus } from "~/lib/constants";
+import {
+  ADMIN_LOGGABLE_KINDS,
+  CONTRIBUTION_TYPES,
+  PERSON_STATUSES,
+  STAFF_LOGGABLE_KINDS,
+  type PersonStatus,
+} from "~/lib/constants";
 import { query, queryOne } from "~/lib/db.server";
+import { canViewPerson, isAdmin as isAdminViewer, visibleToSql } from "~/lib/permissions.server";
 import {
   parseCapPartnerForm,
   parseConnectionForm,
@@ -55,20 +64,21 @@ export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const user = await requireUser(request);
-  const person = await getPerson(params.personId);
+  // Hidden from this viewer looks the same as missing.
+  const person = await getPerson(params.personId, user);
   if (!person) throw data(null, { status: 404 });
-  const isAdmin = user.role === "admin";
+  const isAdmin = isAdminViewer(user);
 
   const [paths, relationships, caps, engagements, allCaps, others, intake] = await Promise.all([
-    findIntroPaths(person.id),
-    getRelationships(person.id),
+    findIntroPaths(person.id, user),
+    getRelationships(person.id, user),
     getCapsForPerson(person.id),
-    getEngagements(person.id),
+    getEngagements(person.id, user),
     listCaps(),
     query<{ id: string; full_name: string; organization_name: string | null }>(
       `SELECT p.id, p.full_name, o.name AS organization_name
          FROM people p LEFT JOIN organizations o ON o.id = p.organization_id
-        WHERE p.id <> $1 ORDER BY p.full_name LIMIT 2000`,
+        WHERE p.id <> $1 AND ${visibleToSql(user, "p")} ORDER BY p.full_name LIMIT 2000`,
       [person.id],
     ),
     isAdmin
@@ -92,6 +102,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     })),
     intakeId: intake?.id ?? null,
     isAdmin,
+    logKinds: isAdmin ? ADMIN_LOGGABLE_KINDS : STAFF_LOGGABLE_KINDS,
     today: schoolToday(),
   };
 }
@@ -103,8 +114,8 @@ const done = (intent: string) => data<ProfileActionData>({ ok: true, intent });
 export async function action({ request, params }: Route.ActionArgs) {
   const user = await requireUser(request);
   const personId = params.personId;
-  const exists = await queryOne<{ id: string }>("SELECT id FROM people WHERE id = $1", [personId]);
-  if (!exists) throw data(null, { status: 404 });
+  // Staff can only add to records they can see; a hidden person is a 404 like a missing one.
+  if (!(await canViewPerson(user, personId))) throw data(null, { status: 404 });
 
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "");
@@ -113,6 +124,9 @@ export async function action({ request, params }: Route.ActionArgs) {
     case "logEngagement": {
       const parsed = parseEngagementForm(form);
       if (!parsed.ok) return fail(intent, parsed.errors);
+      // Staff log the work itself only; calls, meetings, notes and emails are admin history.
+      const allowed: readonly string[] = isAdminViewer(user) ? ADMIN_LOGGABLE_KINDS : STAFF_LOGGABLE_KINDS;
+      if (!allowed.includes(parsed.value.kind)) return fail(intent, { kind: "people.error.kind" }, 403);
       const { capId, ...rest } = parsed.value;
       if (capId && !(await getCap(capId))) return fail(intent, { _form: "people.error.notFound" });
       await logEngagement({ personId, capId, ...rest }, user.id);
@@ -124,8 +138,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       if (!parsed.ok) return fail(intent, parsed.errors);
       const { relatedPersonId, kind, note } = parsed.value;
       if (relatedPersonId === personId) return fail(intent, { related_person_id: "people.error.person" });
-      const other = await queryOne<{ id: string }>("SELECT id FROM people WHERE id = $1", [relatedPersonId]);
-      if (!other) return fail(intent, { _form: "people.error.notFound" });
+      if (!(await canViewPerson(user, relatedPersonId))) return fail(intent, { _form: "people.error.notFound" });
       await addRelationship({ personId, relatedPersonId, kind, note, source: "admin" }, user.id);
       return done(intent);
     }
@@ -249,7 +262,7 @@ function AddToggle({ label, children }: { label: string; children: ReactNode }) 
 }
 
 export default function PersonProfile() {
-  const { person, paths, relationships, caps, engagements, capOptions, peopleOptions, intakeId, isAdmin, today } =
+  const { person, paths, relationships, caps, engagements, capOptions, peopleOptions, intakeId, isAdmin, logKinds, today } =
     useLoaderData<typeof loader>();
   const { t } = useT();
   const [searchParams] = useSearchParams();
@@ -260,7 +273,7 @@ export default function PersonProfile() {
     person.title && person.organization_name
       ? t("people.profile.atOrg", { title: person.title, org: person.organization_name })
       : (person.title ?? person.organization_name);
-  const sourceLine = t("people.profile.sourceLine", { source: t(`common.source.${person.source}`) });
+  const sourceLine = person.source ? t("people.profile.sourceLine", { source: t(`common.source.${person.source}`) }) : null;
   const hasDetails =
     person.skills.length > 0 ||
     person.cap_topics.length > 0 ||
@@ -297,16 +310,17 @@ export default function PersonProfile() {
                   {t(`common.affiliation.${a}`)}
                 </span>
               ))}
-              {isAdmin && intakeId ? (
-                <Link
-                  to={`/app/admin/intake/${intakeId}`}
-                  className="text-xs text-smoke underline decoration-stone underline-offset-4 hover:text-ink hover:decoration-gold"
-                >
-                  {sourceLine}
-                </Link>
-              ) : (
-                <span className="text-xs text-smoke">{sourceLine}</span>
-              )}
+              {sourceLine &&
+                (isAdmin && intakeId ? (
+                  <Link
+                    to={`/app/admin/intake/${intakeId}`}
+                    className="text-xs text-smoke underline decoration-stone underline-offset-4 hover:text-ink hover:decoration-gold"
+                  >
+                    {sourceLine}
+                  </Link>
+                ) : (
+                  <span className="text-xs text-smoke">{sourceLine}</span>
+                ))}
             </span>
           </span>
         }
@@ -399,7 +413,7 @@ export default function PersonProfile() {
 
           <Panel title={t("people.profile.activityTitle")} bodyClassName="grid gap-6">
             <div id="log-activity" className="scroll-mt-24 rounded-xl bg-canvas p-4">
-              <LogActivityForm caps={capOptions} today={today} defaultCap={defaultCap} />
+              <LogActivityForm caps={capOptions} today={today} defaultCap={defaultCap} kinds={logKinds} />
             </div>
             <ActivityTimeline engagements={engagements} isAdmin={isAdmin} />
           </Panel>

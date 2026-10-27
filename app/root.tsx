@@ -63,14 +63,21 @@ export default function App() {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  const root = useRouteLoaderData("root") as { locale?: Locale } | undefined;
+  const root = useRouteLoaderData("root") as { locale?: Locale; user?: { id: string } | null } | undefined;
   const locale = root?.locale ?? "en";
   let title = translate(locale, "common.state.error");
+  let body: string | undefined;
   let stack: string | undefined;
+  // Signed-in people go back to their dashboard; everyone else to the public home.
+  let back = root?.user ? { to: "/app", label: translate(locale, "common.state.backToApp") } : { to: "/", label: translate(locale, "common.nav.home") };
 
   if (isRouteErrorResponse(error)) {
     if (error.status === 404) title = translate(locale, "common.state.notFound");
-    else if (error.status === 403) title = translate(locale, "common.state.forbidden");
+    else if (error.status === 403) {
+      title = translate(locale, "common.state.forbidden");
+      body = translate(locale, "common.state.forbiddenBody");
+      back = { to: "/app", label: translate(locale, "common.state.backToApp") };
+    }
   } else if (import.meta.env.DEV && error instanceof Error) {
     stack = `${error.message}\n\n${error.stack ?? ""}`;
   }
@@ -79,8 +86,9 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col items-start justify-center gap-5 px-6 py-16">
       <VillageMark className="size-12" />
       <h1 className="text-heading">{title}</h1>
-      <Link to="/" className="text-sm font-medium underline underline-offset-4">
-        {translate(locale, "common.nav.home")}
+      {body && <p className="text-smoke">{body}</p>}
+      <Link to={back.to} className="text-sm font-medium underline underline-offset-4">
+        {back.label}
       </Link>
       {stack && <pre className="w-full overflow-x-auto rounded-xl bg-taupe p-4 text-xs">{stack}</pre>}
     </main>

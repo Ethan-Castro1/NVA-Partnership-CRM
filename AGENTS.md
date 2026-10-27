@@ -125,8 +125,8 @@ assistant, find second-degree connections, and manage CAPs.
 ```bash
 npm install
 npm run seed        # fictional demo data + logins (admin@nva.test / teacher@nva.test, password village-demo-2026)
-npm run dev         # http://localhost:5173 (no sign-in: you are the demo admin)
-npm run dev:login   # same, but with real sign-in
+npm run dev         # http://localhost:5173 (DEMO_LOGIN=true: /login shows Continue as Administrator / Staff)
+npm run dev:login   # same, but email and password sign-in only
 npm test            # vitest, in-memory database
 npm run typecheck
 ```

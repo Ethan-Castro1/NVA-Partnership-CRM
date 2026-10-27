@@ -9,7 +9,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { makeT, type Locale } from "~/i18n";
-import { INNER_CIRCLE } from "../constants";
+import { INNER_CIRCLE, type Role } from "../constants";
 import { newId, query, queryOne, transaction } from "../db.server";
 import { createPerson, getPerson } from "../people.server";
 import { APICallError, generateText, jsonSchema, tool } from "ai";
@@ -192,9 +192,9 @@ export type WebSearchResult = { ok: true; count: number } | { ok: false; error: 
 
 type Via = { id: string; text: string; organization: string | null };
 
-async function viaDescription(viaId: string | null | undefined): Promise<Via | null | "invalid"> {
+async function viaDescription(viaId: string | null | undefined, viewer: { id: string; role: Role }): Promise<Via | null | "invalid"> {
   if (!viaId) return null;
-  const person = await getPerson(viaId);
+  const person = await getPerson(viaId, viewer);
   if (!person || !person.affiliations.some((a) => INNER_CIRCLE.includes(a))) return "invalid";
   const details = [person.title, person.organization_name].filter(Boolean).join(", ");
   const tags = [...person.skills, ...person.cap_topics].slice(0, 8).join(", ");
@@ -370,9 +370,11 @@ export async function findWebLeads(input: {
   via?: string | null;
   locale: Locale;
   userId: string;
+  /** Web search for new leads is admin-only; routes check too. */
+  role: Role;
 }): Promise<WebSearchResult> {
-  if (!isWebSearchConfigured()) return { ok: false, error: "connections.web.error.notConfigured" };
-  const via = await viaDescription(input.via);
+  if (!isWebSearchConfigured() || input.role !== "admin") return { ok: false, error: "connections.web.error.notConfigured" };
+  const via = await viaDescription(input.via, { id: input.userId, role: input.role });
   if (via === "invalid") return { ok: false, error: "connections.web.error.viaInvalid" };
   if (!takeSearchSlot(input.userId)) return { ok: false, error: "connections.web.error.rateLimited" };
 

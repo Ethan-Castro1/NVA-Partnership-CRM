@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
   password_hash TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('admin', 'teacher')),
+  role TEXT NOT NULL CHECK (role IN ('admin', 'staff')),
   locale TEXT NOT NULL DEFAULT 'en' CHECK (locale IN ('en', 'es')),
   active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -203,4 +203,216 @@ ALTER TABLE caps ADD COLUMN IF NOT EXISTS teacher TEXT;
 ALTER TABLE caps ADD COLUMN IF NOT EXISTS blocks TEXT[] NOT NULL DEFAULT '{}';
 ALTER TABLE caps ADD COLUMN IF NOT EXISTS labels TEXT[] NOT NULL DEFAULT '{}';
 ALTER TABLE caps ADD COLUMN IF NOT EXISTS impact TEXT;
+
+-- ---------- Village Partners CRM (requirements phases 1 to 5) ----------
+-- New tables first, then the ALTERs that reference them. One-time data moves
+-- (backfills) live in migrations.server.ts, each guarded by a key in app_meta.
+
+-- Roles: 'teacher' became 'staff'. Databases from before still carry the old
+-- check (admin, teacher); swap it once, rename the rows, and leave it alone after.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conname = 'users_role_check' AND conrelid = 'users'::regclass
+       AND pg_get_constraintdef(oid) LIKE '%teacher%'
+  ) THEN
+    ALTER TABLE users DROP CONSTRAINT users_role_check;
+  END IF;
+  UPDATE users SET role = 'staff' WHERE role = 'teacher';
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_role_check' AND conrelid = 'users'::regclass) THEN
+    ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'staff'));
+  END IF;
+END $$;
+
+-- Opportunities: one per thing someone might do (a workshop, an internship, a
+-- grant), so one person can have many. Stages depend on the track
+-- (ENGAGEMENT_STAGES or FUNDING_STAGES); tracks, kinds and stages are checked in app code.
+CREATE TABLE IF NOT EXISTS opportunities (
+  id TEXT PRIMARY KEY,
+  person_id TEXT REFERENCES people(id) ON DELETE CASCADE,
+  organization_id TEXT REFERENCES organizations(id) ON DELETE SET NULL,
+  track TEXT NOT NULL DEFAULT 'engagement',
+  kind TEXT NOT NULL DEFAULT 'other',
+  title TEXT NOT NULL,
+  stage TEXT NOT NULL,
+  amount TEXT,
+  target_date DATE,
+  cap_id TEXT REFERENCES caps(id) ON DELETE SET NULL,
+  owner_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  notes TEXT,
+  created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  closed_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS opportunities_stage_idx ON opportunities (stage);
+CREATE INDEX IF NOT EXISTS opportunities_person_idx ON opportunities (person_id);
+
+-- Follow-up tasks for the admin (reminders inside the app only, never emails).
+CREATE TABLE IF NOT EXISTS follow_ups (
+  id TEXT PRIMARY KEY,
+  person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+  opportunity_id TEXT REFERENCES opportunities(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  due_on DATE NOT NULL,
+  owner_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'open',
+  awaiting_response BOOLEAN NOT NULL DEFAULT FALSE,
+  completed_at TIMESTAMPTZ,
+  completed_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS follow_ups_status_due_idx ON follow_ups (status, due_on);
+CREATE INDEX IF NOT EXISTS follow_ups_person_idx ON follow_ups (person_id);
+
+-- Staff requests ("I need a guest speaker on healthcare"), separate from the
+-- admin's opportunity pipeline. Staff see only their own.
+CREATE TABLE IF NOT EXISTS staff_requests (
+  id TEXT PRIMARY KEY,
+  requester_id TEXT NOT NULL REFERENCES users(id),
+  kind TEXT NOT NULL DEFAULT 'resource',
+  need TEXT NOT NULL,
+  description TEXT,
+  cap_id TEXT REFERENCES caps(id) ON DELETE SET NULL,
+  activity TEXT,
+  preferred_date DATE,
+  timeframe TEXT,
+  participant_count INT,
+  status TEXT NOT NULL DEFAULT 'open',
+  response TEXT,
+  completed_note TEXT,
+  assigned_to TEXT REFERENCES users(id) ON DELETE SET NULL,
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS staff_requests_requester_idx ON staff_requests (requester_id, status);
+CREATE INDEX IF NOT EXISTS staff_requests_status_idx ON staff_requests (status, created_at);
+
+-- People on a request: the contact a teacher asked about ('interest') or the one the admin arranged ('assigned').
+CREATE TABLE IF NOT EXISTS staff_request_people (
+  request_id TEXT NOT NULL REFERENCES staff_requests(id) ON DELETE CASCADE,
+  person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'interest',
+  added_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (request_id, person_id)
+);
+CREATE INDEX IF NOT EXISTS staff_request_people_person_idx ON staff_request_people (person_id);
+
+-- Contacts a staff member saved for later ("Save resource").
+CREATE TABLE IF NOT EXISTS saved_resources (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+  note TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, person_id)
+);
+CREATE INDEX IF NOT EXISTS saved_resources_person_idx ON saved_resources (person_id);
+
+-- A connected NVA mailbox (Google Workspace or Microsoft 365, OAuth). Only an
+-- encrypted refresh token is kept, never a password. Sync keeps subject and
+-- snippet only, for threads with known contacts.
+CREATE TABLE IF NOT EXISTS email_accounts (
+  id TEXT PRIMARY KEY,
+  provider TEXT NOT NULL,
+  email_address TEXT NOT NULL,
+  connected_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  scopes TEXT[] NOT NULL DEFAULT '{}',
+  refresh_token_enc TEXT NOT NULL,
+  key_version INT NOT NULL DEFAULT 1,
+  sync_cursor TEXT,
+  last_synced_at TIMESTAMPTZ,
+  status TEXT NOT NULL DEFAULT 'active',
+  last_error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS email_messages (
+  id TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL REFERENCES email_accounts(id) ON DELETE CASCADE,
+  provider_message_id TEXT NOT NULL,
+  thread_id TEXT,
+  direction TEXT NOT NULL,
+  from_address TEXT,
+  to_addresses TEXT[] NOT NULL DEFAULT '{}',
+  cc_addresses TEXT[] NOT NULL DEFAULT '{}',
+  subject TEXT,
+  snippet TEXT,
+  sent_at TIMESTAMPTZ,
+  sent_via_app BOOLEAN NOT NULL DEFAULT FALSE,
+  sent_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (account_id, provider_message_id)
+);
+CREATE INDEX IF NOT EXISTS email_messages_sent_idx ON email_messages (sent_at DESC);
+
+CREATE TABLE IF NOT EXISTS email_message_people (
+  message_id TEXT NOT NULL REFERENCES email_messages(id) ON DELETE CASCADE,
+  person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+  PRIMARY KEY (message_id, person_id)
+);
+CREATE INDEX IF NOT EXISTS email_message_people_person_idx ON email_message_people (person_id);
+
+-- Drafts written in the app (by hand or with AI). Never sent without an admin's explicit approval.
+CREATE TABLE IF NOT EXISTS email_drafts (
+  id TEXT PRIMARY KEY,
+  person_id TEXT REFERENCES people(id) ON DELETE CASCADE,
+  author_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  purpose TEXT,
+  subject TEXT,
+  body TEXT,
+  ai_generated BOOLEAN NOT NULL DEFAULT FALSE,
+  facts_used JSONB NOT NULL DEFAULT '[]',
+  flags JSONB NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL DEFAULT 'draft',
+  email_message_id TEXT REFERENCES email_messages(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS email_drafts_person_idx ON email_drafts (person_id, updated_at DESC);
+
+-- people: who staff can see and contact, CRM categories, the relationship's owner and origin.
+-- directory_visible: shown in the staff directory (admins decide). contact_mode: 'direct'
+-- (staff see email and phone) or 'introduction' (staff ask the admin). notes, funding_focus,
+-- origin and owner_user_id are admin-only; shared_summary is written by an admin for staff.
+ALTER TABLE people ADD COLUMN IF NOT EXISTS directory_visible BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE people ADD COLUMN IF NOT EXISTS contact_mode TEXT NOT NULL DEFAULT 'introduction';
+ALTER TABLE people ADD COLUMN IF NOT EXISTS categories TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE people ADD COLUMN IF NOT EXISTS owner_user_id TEXT REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE people ADD COLUMN IF NOT EXISTS origin TEXT;
+ALTER TABLE people ADD COLUMN IF NOT EXISTS shared_summary TEXT;
+ALTER TABLE people ADD COLUMN IF NOT EXISTS location TEXT;
+ALTER TABLE people ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS people_visible_idx ON people (directory_visible, status);
+CREATE INDEX IF NOT EXISTS people_owner_idx ON people (owner_user_id);
+
+-- engagements is now the whole contact history. Kinds (HISTORY_KINDS) are checked in app code.
+-- origin: manual | system | email | staff_request. visibility: admin | staff.
+ALTER TABLE engagements DROP CONSTRAINT IF EXISTS engagements_kind_check;
+ALTER TABLE engagements ADD COLUMN IF NOT EXISTS origin TEXT NOT NULL DEFAULT 'manual';
+ALTER TABLE engagements ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'admin';
+ALTER TABLE engagements ADD COLUMN IF NOT EXISTS opportunity_id TEXT REFERENCES opportunities(id) ON DELETE SET NULL;
+ALTER TABLE engagements ADD COLUMN IF NOT EXISTS follow_up_id TEXT REFERENCES follow_ups(id) ON DELETE SET NULL;
+ALTER TABLE engagements ADD COLUMN IF NOT EXISTS staff_request_id TEXT REFERENCES staff_requests(id) ON DELETE SET NULL;
+ALTER TABLE engagements ADD COLUMN IF NOT EXISTS email_message_id TEXT REFERENCES email_messages(id) ON DELETE SET NULL;
+ALTER TABLE engagements ADD COLUMN IF NOT EXISTS meta JSONB NOT NULL DEFAULT '{}';
+CREATE UNIQUE INDEX IF NOT EXISTS engagements_request_person_idx ON engagements (staff_request_id, person_id)
+  WHERE staff_request_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS engagements_visibility_idx ON engagements (visibility, happened_on DESC);
+
+-- Sign-up review: new | approved | rejected | archived (checked in app code;
+-- 'reviewed' rows become 'approved' in migrations.server.ts). person_id is set
+-- once approved (legacy rows already have it); matched_person_id is an existing
+-- record the reviewer linked it to.
+ALTER TABLE intake_submissions DROP CONSTRAINT IF EXISTS intake_submissions_status_check;
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS matched_person_id TEXT REFERENCES people(id) ON DELETE SET NULL;
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS decision_note TEXT;
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS edited_payload JSONB;
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS decided_by TEXT REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS decided_at TIMESTAMPTZ;
 `;

@@ -2,11 +2,20 @@
  * People, organizations, relationships and engagements: the core of the CRM.
  * Pages, the AI assistant's tools and the connection finder all go through
  * these functions so search results mean the same thing everywhere.
+ *
+ * Every read takes the viewer. Admins see everyone and every field. Staff see
+ * only people in the staff directory (permissions.server.ts), never private
+ * fields (notes, funding focus, origin, owner, source), and a person's email
+ * and phone only when that person's contact mode is 'direct'.
  */
 import {
   INNER_CIRCLE,
+  WORK_KINDS,
+  categoriesFor,
   normalizeTags,
   type Affiliation,
+  type ContactCategory,
+  type ContactMode,
   type ContributionType,
   type EngagementKind,
   type OrganizationKind,
@@ -15,12 +24,18 @@ import {
   type PreferredLanguage,
   type RelationshipKind,
 } from "./constants";
-import { newId, query, queryOne, type Queryable } from "./db.server";
+import { newId, query, type Queryable } from "./db.server";
+import { defaultVisibility, listHistory, recordHistory, type HistoryView } from "./history.server";
+import { isAdmin, staffVisibleSql, visibleToSql, type Viewer } from "./permissions.server";
+
+export type { Viewer } from "./permissions.server";
 
 export type PersonSummary = {
   id: string;
   full_name: string;
+  /** Null for staff unless the person is set to direct contact. */
   email: string | null;
+  /** Null for staff unless the person is set to direct contact. */
   phone: string | null;
   title: string | null;
   organization_id: string | null;
@@ -32,29 +47,62 @@ export type PersonSummary = {
   status: PersonStatus;
   preferred_language: PreferredLanguage;
   availability: string | null;
-  source: PersonSource;
+  location: string | null;
+  categories: ContactCategory[];
+  directory_visible: boolean;
+  contact_mode: ContactMode;
+  /** Admin only: null for staff. */
+  source: PersonSource | null;
   updated_at: string;
 };
 
-export type PersonDetail = PersonSummary & {
+/** One person as a viewer may see them. Admin-only fields are null for staff. */
+export type PersonView = PersonSummary & {
   bio: string | null;
-  notes: string | null;
-  /** Funders only: what they fund, typical amounts, deadlines. */
-  funding_focus: string | null;
+  /** Written by an admin for staff to read. */
+  shared_summary: string | null;
   created_at: string;
+  approved_at: string | null;
   organization_kind: OrganizationKind | null;
   organization_website: string | null;
+  /** Admin only: private notes. */
+  notes: string | null;
+  /** Admin only. Funders: what they fund, typical amounts, deadlines. */
+  funding_focus: string | null;
+  /** Admin only: how the relationship began. */
+  origin: string | null;
+  /** Admin only: who owns the relationship. */
+  owner_user_id: string | null;
+  owner_name: string | null;
 };
+/** @deprecated Same as PersonView. */
+export type PersonDetail = PersonView;
 
 export type MiniPerson = Pick<
   PersonSummary,
   "id" | "full_name" | "title" | "organization_name" | "affiliations" | "status"
 >;
 
-const SUMMARY_COLUMNS = `
-  p.id, p.full_name, p.email, p.phone, p.title, p.organization_id, o.name AS organization_name,
+/** Columns for PersonSummary, redacted for staff in SQL so private values never leave the database. */
+function summaryColumns(viewer: Viewer): string {
+  const admin = isAdmin(viewer);
+  const contact = (column: "email" | "phone") =>
+    admin ? `p.${column}` : `CASE WHEN p.contact_mode = 'direct' THEN p.${column} END AS ${column}`;
+  return `
+  p.id, p.full_name, ${contact("email")}, ${contact("phone")}, p.title, p.organization_id, o.name AS organization_name,
   p.skills, p.cap_topics, p.contribution_types, p.affiliations, p.status, p.preferred_language,
-  p.availability, p.source, p.updated_at`;
+  p.availability, p.location, p.categories, p.directory_visible, p.contact_mode,
+  ${admin ? "p.source" : "NULL::text AS source"}, p.updated_at`;
+}
+
+/** The extra PersonView columns (needs `LEFT JOIN users ow ON ow.id = p.owner_user_id`). */
+function detailColumns(viewer: Viewer): string {
+  const admin = isAdmin(viewer);
+  const priv = (expr: string, name: string) => (admin ? `${expr} AS ${name}` : `NULL::text AS ${name}`);
+  return `p.bio, p.shared_summary, p.created_at, p.approved_at, o.kind AS organization_kind, o.website AS organization_website,
+  ${priv("p.notes", "notes")}, ${priv("p.funding_focus", "funding_focus")}, ${priv("p.origin", "origin")},
+  ${priv("p.owner_user_id", "owner_user_id")}, ${priv("ow.name", "owner_name")}`;
+}
 
 // ---------- search ----------
 
@@ -66,10 +114,16 @@ export type PeopleFilter = {
   statuses?: string[];
   skills?: string[];
   capTopics?: string[];
+  /** CRM categories (any of). */
+  categories?: string[];
   /** Only people who prefer this language (or both). */
   language?: "en" | "es";
   organizationId?: string;
   includeInactive?: boolean;
+  /** Admin filters (ignored for staff, who only ever see the staff directory). */
+  directoryVisible?: boolean;
+  contactMode?: ContactMode;
+  ownerUserId?: string;
   limit?: number;
   offset?: number;
 };
@@ -99,26 +153,35 @@ export function searchTerms(q: string | undefined): string[] {
 
 /**
  * Ranked search. Each term scores: skill 4, CAP topic 3, name 3, title or
- * organization 2, bio/notes/availability 1. With a q, only people matching at
- * least one term come back; without one, everyone matching the filters does,
- * most recently updated first.
+ * organization 2, about/summary/location/availability 1 (admins: private notes
+ * and funding focus count too; staff rankings never use private fields). With a
+ * q, only people matching at least one term come back; without one, everyone
+ * matching the filters does, most recently updated first.
  */
-export async function searchPeople(filter: PeopleFilter = {}): Promise<{ people: SearchHit[]; total: number }> {
+export async function searchPeople(
+  filter: PeopleFilter,
+  viewer: Viewer,
+): Promise<{ people: SearchHit[]; total: number }> {
+  const admin = isAdmin(viewer);
   const params: unknown[] = [];
   const p = (value: unknown) => {
     params.push(value);
     return `$${params.length}`;
   };
-  const where: string[] = [];
+  const where: string[] = admin ? [] : [staffVisibleSql("p")];
   const terms = searchTerms(filter.q);
 
+  // Text that counts 1 point. Staff never match on private fields.
+  const looseText = admin
+    ? "coalesce(p.bio, '') || ' ' || coalesce(p.shared_summary, '') || ' ' || coalesce(p.location, '') || ' ' || coalesce(p.availability, '') || ' ' || coalesce(p.notes, '') || ' ' || coalesce(p.funding_focus, '') || ' ' || coalesce(p.origin, '')"
+    : "coalesce(p.bio, '') || ' ' || coalesce(p.shared_summary, '') || ' ' || coalesce(p.location, '') || ' ' || coalesce(p.availability, '')";
   const scoreParts = terms.map((term) => {
     const like = p(`%${term}%`);
     return `(CASE WHEN EXISTS (SELECT 1 FROM unnest(p.skills) s WHERE s ILIKE ${like}) THEN 4 ELSE 0 END
       + CASE WHEN EXISTS (SELECT 1 FROM unnest(p.cap_topics) s WHERE s ILIKE ${like}) THEN 3 ELSE 0 END
       + CASE WHEN p.full_name ILIKE ${like} THEN 3 ELSE 0 END
       + CASE WHEN coalesce(p.title, '') ILIKE ${like} OR coalesce(o.name, '') ILIKE ${like} THEN 2 ELSE 0 END
-      + CASE WHEN coalesce(p.bio, '') || ' ' || coalesce(p.notes, '') || ' ' || coalesce(p.availability, '') || ' ' || coalesce(p.funding_focus, '') ILIKE ${like} THEN 1 ELSE 0 END)`;
+      + CASE WHEN ${looseText} ILIKE ${like} THEN 1 ELSE 0 END)`;
   });
   const score = scoreParts.length ? scoreParts.join(" + ") : "0";
 
@@ -126,18 +189,23 @@ export async function searchPeople(filter: PeopleFilter = {}): Promise<{ people:
   if (filter.affiliations?.length) where.push(`p.affiliations && ${p(filter.affiliations)}::text[]`);
   if (filter.skills?.length) where.push(`p.skills && ${p(normalizeTags(filter.skills))}::text[]`);
   if (filter.capTopics?.length) where.push(`p.cap_topics && ${p(normalizeTags(filter.capTopics))}::text[]`);
+  if (filter.categories?.length) where.push(`p.categories && ${p(filter.categories)}::text[]`);
   if (filter.statuses?.length) where.push(`p.status = ANY(${p(filter.statuses)}::text[])`);
   else if (!filter.includeInactive) where.push(`p.status <> 'inactive'`);
   if (filter.language) where.push(`p.preferred_language IN (${p(filter.language)}, 'both')`);
   if (filter.organizationId) where.push(`p.organization_id = ${p(filter.organizationId)}`);
+  if (admin && filter.directoryVisible !== undefined) where.push(`p.directory_visible = ${p(filter.directoryVisible)}`);
+  if (admin && filter.contactMode) where.push(`p.contact_mode = ${p(filter.contactMode)}`);
+  if (admin && filter.ownerUserId) where.push(`p.owner_user_id = ${p(filter.ownerUserId)}`);
 
   const limit = Math.min(Math.max(filter.limit ?? 50, 1), 200);
   const offset = Math.max(filter.offset ?? 0, 0);
+  const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const sql = `
     SELECT * FROM (
-      SELECT ${SUMMARY_COLUMNS}, (${score})::int AS score, count(*) OVER () AS total
+      SELECT ${summaryColumns(viewer)}, (${score})::int AS score, count(*) OVER () AS total
         FROM people p LEFT JOIN organizations o ON o.id = p.organization_id
-       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+       ${whereSql}
     ) ranked
     ${terms.length ? "WHERE score > 0" : ""}
     ORDER BY ${terms.length ? "score DESC," : ""} updated_at DESC, full_name ASC
@@ -150,7 +218,7 @@ export async function searchPeople(filter: PeopleFilter = {}): Promise<{ people:
     const countRows = await query<{ n: number }>(
       `SELECT count(*)::int AS n FROM (
          SELECT (${score}) AS score FROM people p LEFT JOIN organizations o ON o.id = p.organization_id
-         ${where.length ? `WHERE ${where.join(" AND ")}` : ""}) s WHERE score > 0`,
+         ${whereSql}) s WHERE score > 0`,
       params,
     );
     total = countRows[0]?.n ?? rows.length;
@@ -170,25 +238,32 @@ export async function searchPeople(filter: PeopleFilter = {}): Promise<{ people:
 
 // ---------- one person ----------
 
-export async function getPerson(id: string): Promise<PersonDetail | null> {
-  return queryOne<PersonDetail>(
-    `SELECT ${SUMMARY_COLUMNS}, p.bio, p.notes, p.funding_focus, p.created_at,
-            o.kind AS organization_kind, o.website AS organization_website
-       FROM people p LEFT JOIN organizations o ON o.id = p.organization_id
-      WHERE p.id = $1`,
+/** One person, or null when they don't exist or this viewer may not see them. */
+export async function getPerson(id: string, viewer: Viewer, db: Queryable = { query }): Promise<PersonView | null> {
+  if (!id || id.length > 100) return null;
+  const rows = await db.query<PersonView>(
+    `SELECT ${summaryColumns(viewer)}, ${detailColumns(viewer)}
+       FROM people p
+       LEFT JOIN organizations o ON o.id = p.organization_id
+       LEFT JOIN users ow ON ow.id = p.owner_user_id
+      WHERE p.id = $1 AND ${visibleToSql(viewer, "p")}`,
     [id],
   );
+  return rows[0] ?? null;
 }
 
-export async function getPeopleByIds(ids: string[]): Promise<PersonSummary[]> {
-  if (!ids.length) return [];
+/** The people with these ids that this viewer may see (in no particular order). */
+export async function getPeopleByIds(ids: string[], viewer: Viewer): Promise<PersonSummary[]> {
+  const wanted = [...new Set(ids.filter((id) => typeof id === "string" && id && id.length <= 100))];
+  if (!wanted.length) return [];
   return query<PersonSummary>(
-    `SELECT ${SUMMARY_COLUMNS} FROM people p LEFT JOIN organizations o ON o.id = p.organization_id
-      WHERE p.id = ANY($1::text[])`,
-    [ids],
+    `SELECT ${summaryColumns(viewer)} FROM people p LEFT JOIN organizations o ON o.id = p.organization_id
+      WHERE p.id = ANY($1::text[]) AND ${visibleToSql(viewer, "p")}`,
+    [wanted],
   );
 }
 
+/** Admin and internal use: the record with this email, hidden or not. */
 export async function findPersonByEmail(email: string, db: Queryable = { query }): Promise<{ id: string } | null> {
   const rows = await db.query<{ id: string }>("SELECT id FROM people WHERE lower(email) = lower($1) LIMIT 1", [
     email.trim(),
@@ -214,6 +289,16 @@ export type PersonInput = {
   source?: PersonSource;
   notes?: string | null;
   funding_focus?: string | null;
+  /** CRM categories. On create, defaults to the ones implied by ways to help and organization kind. */
+  categories?: ContactCategory[];
+  /** Shown in the staff directory. Defaults to false: new people start hidden until an admin approves them. */
+  directory_visible?: boolean;
+  /** Defaults to 'introduction'. */
+  contact_mode?: ContactMode;
+  owner_user_id?: string | null;
+  origin?: string | null;
+  shared_summary?: string | null;
+  location?: string | null;
 };
 
 const blank = (v: string | null | undefined) => (v && v.trim() ? v.trim() : null);
@@ -240,11 +325,14 @@ export async function upsertOrganization(
 export async function createPerson(input: PersonInput, createdBy: string | null, db: Queryable = { query }): Promise<string> {
   const id = newId();
   const orgId = await upsertOrganization(input.organization_name, input.organization_kind, db);
+  const visible = input.directory_visible === true;
   await db.query(
     `INSERT INTO people (id, full_name, email, phone, preferred_language, organization_id, title, bio, skills,
                          cap_topics, contribution_types, affiliations, availability, status, source, notes, created_by,
-                         funding_focus)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+                         funding_focus, categories, directory_visible, contact_mode, owner_user_id, origin, shared_summary,
+                         location, approved_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,
+             CASE WHEN $20::boolean THEN now() END)`,
     [
       id,
       input.full_name.trim(),
@@ -264,12 +352,19 @@ export async function createPerson(input: PersonInput, createdBy: string | null,
       blank(input.notes),
       createdBy,
       blank(input.funding_focus),
+      input.categories ?? categoriesFor(input.contribution_types ?? [], input.organization_name ? input.organization_kind : null),
+      visible,
+      input.contact_mode ?? "introduction",
+      input.owner_user_id ?? null,
+      blank(input.origin),
+      blank(input.shared_summary),
+      blank(input.location),
     ],
   );
   return id;
 }
 
-/** Updates only the fields present in `input`. */
+/** Updates only the fields present in `input`. Approving someone for the directory stamps approved_at once. */
 export async function updatePerson(id: string, input: Partial<PersonInput>, db: Queryable = { query }): Promise<void> {
   const sets: string[] = [];
   const params: unknown[] = [id];
@@ -294,6 +389,16 @@ export async function updatePerson(id: string, input: Partial<PersonInput>, db: 
   if (input.source !== undefined) set("source", input.source);
   if (input.notes !== undefined) set("notes", blank(input.notes));
   if (input.funding_focus !== undefined) set("funding_focus", blank(input.funding_focus));
+  if (input.categories !== undefined) set("categories", input.categories);
+  if (input.directory_visible !== undefined) {
+    set("directory_visible", input.directory_visible);
+    if (input.directory_visible) sets.push("approved_at = coalesce(approved_at, now())");
+  }
+  if (input.contact_mode !== undefined) set("contact_mode", input.contact_mode);
+  if (input.owner_user_id !== undefined) set("owner_user_id", input.owner_user_id);
+  if (input.origin !== undefined) set("origin", blank(input.origin));
+  if (input.shared_summary !== undefined) set("shared_summary", blank(input.shared_summary));
+  if (input.location !== undefined) set("location", blank(input.location));
   if (!sets.length) return;
   await db.query(`UPDATE people SET ${sets.join(", ")}, updated_at = now() WHERE id = $1`, params);
 }
@@ -333,7 +438,12 @@ export async function removeRelationship(id: string): Promise<void> {
   await query("DELETE FROM relationships WHERE id = $1", [id]);
 }
 
-export async function getRelationships(personId: string): Promise<RelationshipView[]> {
+/**
+ * Everyone this person is linked to. Staff get nothing for a person they
+ * can't see, and only links to people they can see.
+ */
+export async function getRelationships(personId: string, viewer: Viewer): Promise<RelationshipView[]> {
+  const admin = isAdmin(viewer);
   const rows = await query<{
     id: string; kind: RelationshipKind; note: string | null; source: string; direction: "out" | "in"; created_at: string;
     other_id: string; full_name: string; title: string | null; organization_name: string | null; affiliations: Affiliation[]; status: PersonStatus;
@@ -344,7 +454,8 @@ export async function getRelationships(personId: string): Promise<RelationshipVi
        FROM relationships r
        JOIN people p ON p.id = CASE WHEN r.person_id = $1 THEN r.related_person_id ELSE r.person_id END
        LEFT JOIN organizations o ON o.id = p.organization_id
-      WHERE r.person_id = $1 OR r.related_person_id = $1
+      WHERE (r.person_id = $1 OR r.related_person_id = $1)
+        ${admin ? "" : `AND ${staffVisibleSql("p")} AND EXISTS (SELECT 1 FROM people self WHERE self.id = $1 AND ${staffVisibleSql("self")})`}
       ORDER BY r.created_at DESC`,
     [personId],
   );
@@ -380,11 +491,13 @@ export type IntroPath = { degree: 1 | 2; chain: MiniPerson[]; edges: PathEdge[] 
 
 type Graph = { people: Map<string, MiniPerson>; adj: Map<string, { to: string; edge: PathEdge }[]> };
 
-async function loadGraph(): Promise<Graph> {
+/** The village as a graph. For staff, only people in the staff directory and the links between them. */
+async function loadGraph(viewer: Viewer): Promise<Graph> {
   const [people, edges] = await Promise.all([
     query<MiniPerson>(
       `SELECT p.id, p.full_name, p.title, o.name AS organization_name, p.affiliations, p.status
-         FROM people p LEFT JOIN organizations o ON o.id = p.organization_id`,
+         FROM people p LEFT JOIN organizations o ON o.id = p.organization_id
+        WHERE ${visibleToSql(viewer, "p")}`,
     ),
     query<{ person_id: string; related_person_id: string; kind: RelationshipKind; note: string | null }>(
       "SELECT person_id, related_person_id, kind, note FROM relationships",
@@ -392,6 +505,8 @@ async function loadGraph(): Promise<Graph> {
   ]);
   const graph: Graph = { people: new Map(people.map((p) => [p.id, p])), adj: new Map() };
   for (const e of edges) {
+    // A link to someone this viewer can't see is no path at all.
+    if (!graph.people.has(e.person_id) || !graph.people.has(e.related_person_id)) continue;
     const edge = { kind: e.kind, note: e.note };
     if (!graph.adj.has(e.person_id)) graph.adj.set(e.person_id, []);
     if (!graph.adj.has(e.related_person_id)) graph.adj.set(e.related_person_id, []);
@@ -431,9 +546,9 @@ function pathsTo(graph: Graph, targetId: string): IntroPath[] {
     });
 }
 
-/** How NVA's board and staff can reach one person. */
-export async function findIntroPaths(targetId: string): Promise<IntroPath[]> {
-  return pathsTo(await loadGraph(), targetId);
+/** How NVA's board and staff can reach one person (for staff: only through people they can see). */
+export async function findIntroPaths(targetId: string, viewer: Viewer): Promise<IntroPath[]> {
+  return pathsTo(await loadGraph(viewer), targetId);
 }
 
 /**
@@ -443,8 +558,12 @@ export async function findIntroPaths(targetId: string): Promise<IntroPath[]> {
  */
 export async function findConnectorsForNeed(
   filter: PeopleFilter,
+  viewer: Viewer,
 ): Promise<{ person: SearchHit; direct: boolean; paths: IntroPath[] }[]> {
-  const [{ people }, graph] = await Promise.all([searchPeople({ ...filter, limit: filter.limit ?? 25 }), loadGraph()]);
+  const [{ people }, graph] = await Promise.all([
+    searchPeople({ ...filter, limit: filter.limit ?? 25 }, viewer),
+    loadGraph(viewer),
+  ]);
   return people.map((person) => ({
     person,
     direct: isInner(graph.people.get(person.id)),
@@ -452,15 +571,18 @@ export async function findConnectorsForNeed(
   }));
 }
 
-/** Everyone and every link, for drawing the village map. */
-export async function getNetwork(limit = 400): Promise<{
+/** Everyone and every link this viewer may see, for drawing the village map. */
+export async function getNetwork(
+  viewer: Viewer,
+  limit = 400,
+): Promise<{
   nodes: (MiniPerson & { contribution_types: ContributionType[] })[];
   links: { source: string; target: string; kind: RelationshipKind }[];
 }> {
   const nodes = await query<MiniPerson & { contribution_types: ContributionType[] }>(
     `SELECT p.id, p.full_name, p.title, o.name AS organization_name, p.affiliations, p.status, p.contribution_types
        FROM people p LEFT JOIN organizations o ON o.id = p.organization_id
-      WHERE p.status <> 'inactive'
+      WHERE p.status <> 'inactive' AND ${visibleToSql(viewer, "p")}
       ORDER BY p.updated_at DESC LIMIT $1`,
     [limit],
   );
@@ -473,47 +595,41 @@ export async function getNetwork(limit = 400): Promise<{
   return { nodes, links };
 }
 
-// ---------- engagements ----------
+// ---------- engagements (the history) ----------
 
-export type EngagementView = {
-  id: string;
-  kind: EngagementKind;
-  happened_on: string;
-  notes: string | null;
-  user_name: string | null;
-  cap_id: string | null;
-  cap_title: string | null;
-  created_at: string;
-};
+/** One history entry as a profile shows it (see history.server.ts). */
+export type EngagementView = HistoryView;
 
+/**
+ * Manual logging from a profile ("Log activity"): who did it, what, when.
+ * The work itself (lessons, volunteering, internships, guest talks) is shared
+ * with staff and moves a lead or new contact to active; calls, meetings and
+ * notes stay admin-only. Callers check who may log what (STAFF_LOGGABLE_KINDS).
+ */
 export async function logEngagement(
   input: { personId: string; kind: EngagementKind; happenedOn?: string | null; notes?: string | null; capId?: string | null },
   userId: string | null,
-): Promise<void> {
-  await query(
-    `INSERT INTO engagements (id, person_id, user_id, cap_id, kind, happened_on, notes)
-     VALUES ($1,$2,$3,$4,$5,coalesce($6::date, CURRENT_DATE),$7)`,
-    [newId(), input.personId, userId, input.capId ?? null, input.kind, blank(input.happenedOn), blank(input.notes)],
+  db: Queryable = { query },
+): Promise<string> {
+  return recordHistory(
+    {
+      personId: input.personId,
+      kind: input.kind,
+      happenedOn: blank(input.happenedOn),
+      notes: input.notes,
+      capId: input.capId ?? null,
+      userId,
+      origin: "manual",
+      visibility: defaultVisibility(input.kind),
+      promoteStatus: (WORK_KINDS as readonly string[]).includes(input.kind),
+    },
+    db,
   );
-  if (input.kind === "lesson" || input.kind === "volunteer" || input.kind === "internship") {
-    await query("UPDATE people SET status = 'active', updated_at = now() WHERE id = $1 AND status IN ('lead','new')", [
-      input.personId,
-    ]);
-  } else {
-    await query("UPDATE people SET updated_at = now() WHERE id = $1", [input.personId]);
-  }
 }
 
-export async function getEngagements(personId: string): Promise<EngagementView[]> {
-  return query<EngagementView>(
-    `SELECT e.id, e.kind, e.happened_on::text AS happened_on, e.notes, u.name AS user_name, e.cap_id, c.title AS cap_title, e.created_at
-       FROM engagements e
-       LEFT JOIN users u ON u.id = e.user_id
-       LEFT JOIN caps c ON c.id = e.cap_id
-      WHERE e.person_id = $1
-      ORDER BY e.happened_on DESC, e.created_at DESC`,
-    [personId],
-  );
+/** A person's history as this viewer may see it, newest first. */
+export async function getEngagements(personId: string, viewer: Viewer): Promise<EngagementView[]> {
+  return listHistory(personId, viewer);
 }
 
 export async function deleteEngagement(id: string): Promise<void> {
@@ -522,28 +638,32 @@ export async function deleteEngagement(id: string): Promise<void> {
 
 // ---------- counts for dashboards ----------
 
-export async function getCounts(): Promise<{
+/** Directory numbers. Staff counts cover only the staff directory (and no sign-ups or leads). */
+export async function getCounts(viewer: Viewer): Promise<{
   people: number;
   active: number;
   newSignups: number;
   leads: number;
   byContribution: Record<string, number>;
 }> {
+  const admin = isAdmin(viewer);
+  const visible = visibleToSql(viewer, "people");
   const [totals] = await query<{ people: number; active: number; leads: number; new_signups: number }>(
     `SELECT count(*) FILTER (WHERE status <> 'inactive')::int AS people,
             count(*) FILTER (WHERE status = 'active')::int AS active,
             count(*) FILTER (WHERE status = 'lead')::int AS leads,
-            (SELECT count(*)::int FROM intake_submissions WHERE status = 'new') AS new_signups
-       FROM people`,
+            ${admin ? "(SELECT count(*)::int FROM intake_submissions WHERE status = 'new')" : "0"} AS new_signups
+       FROM people
+      WHERE ${visible}`,
   );
   const byType = await query<{ type: string; n: number }>(
     `SELECT t AS type, count(*)::int AS n FROM people, unnest(contribution_types) t
-      WHERE status <> 'inactive' GROUP BY t`,
+      WHERE status <> 'inactive' AND ${visible} GROUP BY t`,
   );
   return {
     people: totals?.people ?? 0,
     active: totals?.active ?? 0,
-    leads: totals?.leads ?? 0,
+    leads: admin ? (totals?.leads ?? 0) : 0,
     newSignups: totals?.new_signups ?? 0,
     byContribution: Object.fromEntries(byType.map((r) => [r.type, r.n])),
   };

@@ -63,7 +63,8 @@ export function RelativeTime({ iso, className }: { iso: string; className?: stri
 
 const INTAKE_STYLE = {
   new: "bg-gold-soft text-gold-ink",
-  reviewed: "bg-sage-soft text-sage-ink",
+  approved: "bg-sage-soft text-sage-ink",
+  rejected: "bg-rust-soft text-rust-ink",
   archived: "bg-stone text-smoke",
 } as const;
 

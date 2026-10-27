@@ -12,6 +12,7 @@ import { query } from "~/lib/db.server";
 import { PAGE_SIZE } from "~/lib/constants";
 import { parseDirectoryParams } from "~/lib/people-form.server";
 import { searchPeople } from "~/lib/people.server";
+import { visibleToSql } from "~/lib/permissions.server";
 import { cn } from "~/lib/utils";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
@@ -24,12 +25,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
   const url = new URL(request.url);
   const { params, filter } = parseDirectoryParams(url.searchParams);
+  // Staff see only the staff directory: the list, the topic choices and the count.
+  const visible = visibleToSql(user, "people");
   const [{ people, total }, topicRows, everyone] = await Promise.all([
-    searchPeople(filter),
+    searchPeople(filter, user),
     query<{ topic: string }>(
-      "SELECT DISTINCT t AS topic FROM people, unnest(cap_topics) t WHERE status <> 'inactive' ORDER BY t LIMIT 200",
+      `SELECT DISTINCT t AS topic FROM people, unnest(cap_topics) t WHERE status <> 'inactive' AND ${visible} ORDER BY t LIMIT 200`,
     ),
-    query<{ n: number }>("SELECT count(*)::int AS n FROM people WHERE status <> 'inactive'"),
+    query<{ n: number }>(`SELECT count(*)::int AS n FROM people WHERE status <> 'inactive' AND ${visible}`),
   ]);
   return {
     people,

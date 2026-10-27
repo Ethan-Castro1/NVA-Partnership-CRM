@@ -41,7 +41,7 @@ const ActionSchema = z.discriminatedUnion("intent", [
     intent: z.literal("create"),
     name: z.string().trim().max(120),
     email: z.string().trim().toLowerCase().max(320),
-    role: z.enum(ROLES).catch("teacher"),
+    role: z.enum(ROLES).catch("staff"),
     password: z.string().max(200),
   }),
   z.object({ intent: z.literal("role"), userId: id, role: z.enum(ROLES) }),
@@ -198,7 +198,7 @@ function CreateAccount({ minLength }: { minLength: number }) {
   const fetcher = useFetcher<StaffActionResult>();
   const formRef = useRef<HTMLFormElement>(null);
   const [password, setPasswordValue] = useState("");
-  const [role, setRole] = useState<string>("teacher");
+  const [role, setRole] = useState<string>("staff");
   const busy = fetcher.state !== "idle";
   const result = fetcher.state === "idle" ? fetcher.data : undefined;
   const fieldError = (field: "name" | "email" | "password") =>
@@ -209,7 +209,7 @@ function CreateAccount({ minLength }: { minLength: number }) {
     if (result?.ok && result.done === "created") {
       formRef.current?.reset();
       setPasswordValue("");
-      setRole("teacher");
+      setRole("staff");
     }
   }, [result]);
 
@@ -236,7 +236,7 @@ function CreateAccount({ minLength }: { minLength: number }) {
           <Field label={t("admin.col.role")} htmlFor="new-role">
             <Select name="role" value={role} onValueChange={setRole}>
               <SelectTrigger id="new-role" className="h-9 w-full bg-canvas">
-                <SelectValue>{t(`common.role.${role === "admin" ? "admin" : "teacher"}`)}</SelectValue>
+                <SelectValue>{t(`common.role.${role === "admin" ? "admin" : "staff"}`)}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {ROLES.map((r) => (

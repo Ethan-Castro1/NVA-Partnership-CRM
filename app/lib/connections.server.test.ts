@@ -10,6 +10,8 @@ import {
   type ConnectorResult,
 } from "./connections.server";
 
+const ADMIN = { id: "test-admin", role: "admin" } as const;
+
 function network(n: number, linkEvery = 3) {
   const nodes = Array.from({ length: n }, (_, i) => ({ id: `p${String(i).padStart(3, "0")}`, inner: i < 3 }));
   const links = nodes.slice(1).flatMap((node, i) => (i % linkEvery === 0 ? [{ source: nodes[i].id, target: node.id }] : []));
@@ -110,13 +112,13 @@ describe("getVillageMap", () => {
     await createPerson({ full_name: "Gone Person", status: "inactive" }, null);
     await addRelationship({ personId: board, relatedPersonId: lead, kind: "knows" }, null);
 
-    const map = await getVillageMap();
+    const map = await getVillageMap(ADMIN);
     expect(map.nodes).toHaveLength(2);
     const byId = new Map(map.nodes.map((n) => [n.id, n]));
     expect(byId.get(board)).toMatchObject({ inner: true, lead: false, color: null });
     // First way to help in CONTRIBUTION_TYPES order, not the order stored.
     expect(byId.get(lead)).toMatchObject({ inner: false, lead: true, contribution: "skills_lesson", color: "#cf6608" });
     expect(map.links).toEqual([{ source: board, target: lead, kind: "knows" }]);
-    expect(await getVillageMap()).toBe(map);
+    expect(await getVillageMap(ADMIN)).toBe(map);
   });
 });

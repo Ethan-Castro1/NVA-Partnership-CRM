@@ -24,7 +24,7 @@ describe("MCP", () => {
   });
 
   it("finds the staff member for a key, and forgets revoked keys", async () => {
-    const id = await createUser({ email: "mcp@nva.test", name: "Mcp Tester", password: "a-long-password-1", role: "teacher", locale: "en" });
+    const id = await createUser({ email: "mcp@nva.test", name: "Mcp Tester", password: "a-long-password-1", role: "staff", locale: "en" });
     const key = await createMcpKey(id, "My Claude");
     expect(key).toMatch(/^nva_/);
     expect((await userForMcpKey(key!))?.id).toBe(id);
@@ -37,8 +37,8 @@ describe("MCP", () => {
 
 describe("saved chats", () => {
   it("titles a chat by its first question and keeps it private", async () => {
-    const owner = await createUser({ email: "chat@nva.test", name: "Chat Owner", password: "a-long-password-1", role: "teacher", locale: "en" });
-    const other = await createUser({ email: "chat2@nva.test", name: "Someone Else", password: "a-long-password-1", role: "teacher", locale: "en" });
+    const owner = await createUser({ email: "chat@nva.test", name: "Chat Owner", password: "a-long-password-1", role: "staff", locale: "en" });
+    const other = await createUser({ email: "chat2@nva.test", name: "Someone Else", password: "a-long-password-1", role: "staff", locale: "en" });
     const messages = [{ id: "u1", role: "user", parts: [{ type: "text", text: "Who can teach sewing?" }] }] as AskMessage[];
     expect(chatTitle(messages)).toBe("Who can teach sewing?");
     await saveChat(owner, "chat-a", messages);
@@ -65,6 +65,6 @@ describe("people in an answer", () => {
     const b = await createPerson({ full_name: "Yusuf Plainname" }, null);
     const c = await createPerson({ full_name: "Nobody Mentioned" }, null);
     const answer = `Ask **Yusuf Plainname**, or [Zora Linkton](/app/people/${a}).`;
-    expect(await mentionedPeople(answer, new Set([a, b, c]))).toEqual([a, b]);
+    expect(await mentionedPeople(answer, new Set([a, b, c]), { id: "test-admin", role: "admin" })).toEqual([a, b]);
   });
 });

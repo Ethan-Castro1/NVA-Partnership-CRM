@@ -95,7 +95,7 @@ describe("rate limit", () => {
 
 describe("stored leads", () => {
   it("says AI isn't configured without an API key", async () => {
-    expect(await findWebLeads({ need: "welding", locale: "en", userId: "u" })).toEqual({
+    expect(await findWebLeads({ need: "welding", locale: "en", userId: "u", role: "admin" })).toEqual({
       ok: false,
       error: "connections.web.error.notConfigured",
     });
@@ -120,7 +120,7 @@ describe("stored leads", () => {
     const personId = await saveWebLeadAsContact(sam.id, null as unknown as string, "en");
     expect(personId).toBeTruthy();
     expect(await saveWebLeadAsContact(sam.id, null as unknown as string, "en")).toBeNull();
-    const person = await getPerson(personId!);
+    const person = await getPerson(personId!, { id: "test-admin", role: "admin" });
     expect(person).toMatchObject({ full_name: "Sam Shore", status: "lead", source: "web", title: "Scientist", organization_name: "Bay Lab" });
     expect(person!.notes).toContain("https://baylab.org/sam");
     expect(person!.notes).toContain("water testing");

@@ -14,6 +14,8 @@ import { makeT, type Locale } from "~/i18n";
 import { getCapsForPerson, listCaps } from "~/lib/caps.server";
 import { ExaError, exaSearch, isWebSearchConfigured } from "./exa.server";
 import { AFFILIATIONS, CAP_STATUSES, CONTRIBUTION_TYPES, type CapStatus } from "~/lib/constants";
+import { isAdmin } from "~/lib/permissions.server";
+import type { SessionUser } from "~/lib/types";
 import {
   findConnectorsForNeed,
   findIntroPaths,
@@ -26,7 +28,12 @@ import {
   type SearchHit,
 } from "~/lib/people.server";
 
-export type ToolContext = { userId: string };
+/**
+ * Who is asking. Every tool reads through the viewer-scoped people functions,
+ * so staff only ever get people in the staff directory, no private fields, and
+ * contact details only for people set to direct contact. Web search is admin-only.
+ */
+export type ToolContext = { user: SessionUser };
 
 /** What one tool call produced: the text for the tool_result and the people it mentioned. */
 export type ToolOutcome = { content: string; isError: boolean; personIds: string[] };
@@ -155,10 +162,11 @@ export const WEB_TOOL: Anthropic.Beta.Messages.BetaTool = {
 /**
  * The tools for one request. OpenRouter's Anthropic endpoint doesn't take
  * Anthropic's strict tool flag, so it's dropped there (zod still validates
- * every input before it runs).
+ * every input before it runs). Pass `user` so staff never get search_web.
  */
-export function toolsFor(options: { web: boolean; strict: boolean }): Anthropic.Beta.Messages.BetaTool[] {
-  const list = options.web ? [...TOOLS, WEB_TOOL] : TOOLS;
+export function toolsFor(options: { web: boolean; strict: boolean; user?: Pick<SessionUser, "role"> }): Anthropic.Beta.Messages.BetaTool[] {
+  const web = options.web && (!options.user || options.user.role === "admin");
+  const list = web ? [...TOOLS, WEB_TOOL] : TOOLS;
   return options.strict ? list : list.map(({ strict: _strict, ...tool }) => tool);
 }
 
@@ -226,6 +234,8 @@ function compactPerson(p: SearchHit) {
     status: p.status,
     availability: clip(p.availability, 140),
     preferred_language: p.preferred_language,
+    // 'introduction': staff should ask an admin to introduce them (no email or phone is shared).
+    contact: p.contact_mode,
     email: p.email,
     phone: p.phone,
     matched: [...new Set(p.matched)],
@@ -266,16 +276,19 @@ const json = (value: unknown) => JSON.stringify(value);
 type Executor<K extends ToolName> = (input: z.output<(typeof inputs)[K]>, ctx: ToolContext) => Promise<ToolOutcome>;
 
 const executors: { [K in ToolName]: Executor<K> } = {
-  async search_people(input) {
+  async search_people(input, ctx) {
     const limit = Math.min(Math.max(input.limit ?? 10, 1), 25);
-    const { people, total } = await searchPeople({
-      q: input.query,
-      contributionTypes: input.contribution_types,
-      affiliations: input.affiliations,
-      capTopics: input.cap_topics,
-      language: input.spanish_speaking ? "es" : undefined,
-      limit,
-    });
+    const { people, total } = await searchPeople(
+      {
+        q: input.query,
+        contributionTypes: input.contribution_types,
+        affiliations: input.affiliations,
+        capTopics: input.cap_topics,
+        language: input.spanish_speaking ? "es" : undefined,
+        limit,
+      },
+      ctx.user,
+    );
     return {
       content: json({ total, shown: people.length, people: people.map(compactPerson) }),
       isError: false,
@@ -283,12 +296,13 @@ const executors: { [K in ToolName]: Executor<K> } = {
     };
   },
 
-  async get_person(input) {
-    const person = await getPerson(input.person_id);
+  async get_person(input, ctx) {
+    const person = await getPerson(input.person_id, ctx.user);
     if (!person) return { content: "No person with that id.", isError: true, personIds: [] };
+    const admin = isAdmin(ctx.user);
     const [relationships, engagements, caps] = await Promise.all([
-      getRelationships(person.id),
-      getEngagements(person.id),
+      getRelationships(person.id, ctx.user),
+      getEngagements(person.id, ctx.user),
       getCapsForPerson(person.id),
     ]);
     return {
@@ -304,13 +318,23 @@ const executors: { [K in ToolName]: Executor<K> } = {
         cap_topics: person.cap_topics,
         affiliations: person.affiliations,
         status: person.status,
-        source: person.source,
         availability: clip(person.availability, 200),
+        location: person.location,
         preferred_language: person.preferred_language,
+        contact: person.contact_mode,
         email: person.email,
         phone: person.phone,
         bio: clip(person.bio, 600),
-        notes: clip(person.notes, 400),
+        summary: clip(person.shared_summary, 400),
+        // Private CRM fields: admins only.
+        ...(admin
+          ? {
+              source: person.source,
+              notes: clip(person.notes, 400),
+              funding_focus: clip(person.funding_focus, 300),
+              origin: clip(person.origin, 200),
+            }
+          : {}),
         knows: relationships.slice(0, 15).map((r) => ({
           kind: r.kind,
           direction: r.direction,
@@ -331,10 +355,10 @@ const executors: { [K in ToolName]: Executor<K> } = {
     };
   },
 
-  async find_intro_paths(input) {
-    const person = await getPerson(input.person_id);
+  async find_intro_paths(input, ctx) {
+    const person = await getPerson(input.person_id, ctx.user);
     if (!person) return { content: "No person with that id.", isError: true, personIds: [] };
-    const paths = (await findIntroPaths(person.id)).slice(0, 8);
+    const paths = (await findIntroPaths(person.id, ctx.user)).slice(0, 8);
     const inner = person.affiliations.some((a) => a === "board" || a === "staff");
     return {
       content: json({
@@ -347,12 +371,15 @@ const executors: { [K in ToolName]: Executor<K> } = {
     };
   },
 
-  async find_connectors_for_need(input) {
-    const matches = await findConnectorsForNeed({
-      q: input.query,
-      contributionTypes: input.contribution_types,
-      limit: 10,
-    });
+  async find_connectors_for_need(input, ctx) {
+    const matches = await findConnectorsForNeed(
+      {
+        q: input.query,
+        contributionTypes: input.contribution_types,
+        limit: 10,
+      },
+      ctx.user,
+    );
     return {
       content: json({
         matches: matches.map((m) => ({
@@ -368,7 +395,7 @@ const executors: { [K in ToolName]: Executor<K> } = {
 
   async list_caps(input, ctx) {
     const status = (CAP_STATUSES as readonly string[]).includes(input.status ?? "") ? (input.status as CapStatus) : undefined;
-    const caps = (await listCaps({ status, ownerId: input.mine ? ctx.userId : undefined })).slice(0, 20);
+    const caps = (await listCaps({ status, ownerId: input.mine ? ctx.user.id : undefined })).slice(0, 20);
     return {
       content: json({
         caps: caps.map((c) => ({
@@ -394,7 +421,8 @@ const executors: { [K in ToolName]: Executor<K> } = {
     };
   },
 
-  async search_web(input) {
+  async search_web(input, ctx) {
+    if (!isAdmin(ctx.user)) return { content: "Web search is only available to admins.", isError: true, personIds: [] };
     if (!isWebSearchConfigured()) return { content: "Web search is not set up (no EXA_API_KEY).", isError: true, personIds: [] };
     const category = input.kind === "people" ? "people" : input.kind === "organizations" ? "company" : undefined;
     try {

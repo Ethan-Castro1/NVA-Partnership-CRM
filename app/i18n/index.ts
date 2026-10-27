@@ -17,11 +17,17 @@ import auth from "./auth";
 import caps from "./caps";
 import common from "./common";
 import connections from "./connections";
+import crm from "./crm";
 import dashboard from "./dashboard";
 import type { Locale } from "./define";
+import directory from "./directory";
+import email from "./email";
 import intake from "./intake";
 import people from "./people";
 import publicPages from "./public";
+import requests from "./requests";
+import resources from "./resources";
+import settings from "./settings";
 
 export type { Locale } from "./define";
 export { LOCALES } from "./define";
@@ -38,6 +44,12 @@ const namespaces = {
   caps,
   admin,
   account,
+  crm,
+  requests,
+  email,
+  directory,
+  resources,
+  settings,
 };
 type Namespaces = typeof namespaces;
 

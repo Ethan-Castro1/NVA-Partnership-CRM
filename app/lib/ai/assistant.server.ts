@@ -14,6 +14,7 @@ import type { AssistantPerson, ChatTurn } from "~/components/assistant/types";
 import { makeT, type Locale, type MessageKey } from "~/i18n";
 import { CONTRIBUTION_TYPES, type ContributionType } from "~/lib/constants";
 import { findConnectorsForNeed, getPeopleByIds, searchTerms } from "~/lib/people.server";
+import type { Viewer } from "~/lib/permissions.server";
 import type { SessionUser } from "~/lib/types";
 import { APICallError, isStepCount, jsonSchema, streamText, tool, type ToolSet } from "ai";
 import { aiModel, aiProvider, getAnthropic, getOpenRouterModel, isAiConfigured, usesAnthropicDirectly } from "./client.server";
@@ -129,7 +130,7 @@ async function runWithClaude(
   const convo: BetaMessageParam[] = messages.map((m) => ({ role: m.role, content: m.content }));
   const seen = new Set<string>();
   const direct = usesAnthropicDirectly();
-  const tools = toolsFor({ web: isWebSearchConfigured(), strict: direct });
+  const tools = toolsFor({ web: isWebSearchConfigured(), strict: direct, user });
   const texts: string[] = [];
   let textCount = 0;
 
@@ -191,7 +192,7 @@ async function runWithClaude(
           calls.map(async (call): Promise<BetaToolResultBlockParam> => {
             const step: ToolStep = { id: call.id, name: call.name, input: call.input };
             events.toolStart?.(step);
-            const outcome = await executeTool(call.name, call.input, { userId: user.id });
+            const outcome = await executeTool(call.name, call.input, { user });
             outcome.personIds.forEach((id) => seen.add(id));
             events.toolEnd?.(step, { found: countFound(call.name, outcome), isError: outcome.isError });
             return { type: "tool_result", tool_use_id: call.id, content: outcome.content, is_error: outcome.isError };
@@ -228,7 +229,7 @@ async function runWithOpenRouter(
   const t = makeT(locale);
   const seen = new Set<string>();
   const tools: ToolSet = Object.fromEntries(
-    toolsFor({ web: isWebSearchConfigured(), strict: false }).map((def) => [
+    toolsFor({ web: isWebSearchConfigured(), strict: false, user }).map((def) => [
       def.name,
       tool({
         description: def.description,
@@ -236,7 +237,7 @@ async function runWithOpenRouter(
         execute: async (input: unknown, { toolCallId }: { toolCallId: string }) => {
           const step: ToolStep = { id: toolCallId, name: def.name, input };
           events.toolStart?.(step);
-          const outcome = await executeTool(def.name, input, { userId: user.id });
+          const outcome = await executeTool(def.name, input, { user });
           outcome.personIds.forEach((id) => seen.add(id));
           events.toolEnd?.(step, { found: countFound(def.name, outcome), isError: outcome.isError });
           return outcome.content;
@@ -286,18 +287,18 @@ async function runWithOpenRouter(
     return { ok: false, error: "assistant.errorGeneric" };
   }
   const answer = texts.join("\n\n") || t("assistant.emptyAnswer");
-  return { ok: true, answer, personIds: await mentionedPeople(answer, seen), mode: "ai" };
+  return { ok: true, answer, personIds: await mentionedPeople(answer, seen, user), mode: "ai" };
 }
 
 /**
  * People an answer is about, in order: those it links, then (for models that
  * forget the links) those it names. Only people a tool returned count.
  */
-export async function mentionedPeople(answer: string, seen: Set<string>): Promise<string[]> {
+export async function mentionedPeople(answer: string, seen: Set<string>, viewer: Viewer): Promise<string[]> {
   const linked = referencedPersonIds(answer).filter((id) => seen.has(id));
   const rest = [...seen].filter((id) => !linked.includes(id));
   if (!rest.length) return linked;
-  const rows = await getPeopleByIds(rest.slice(0, 60));
+  const rows = await getPeopleByIds(rest.slice(0, 60), viewer);
   const lower = answer.toLowerCase();
   const named = rows
     .map((p) => ({ id: p.id, at: lower.indexOf(p.full_name.toLowerCase()) }))
@@ -385,7 +386,11 @@ export function interpretQuestion(question: string): {
 const bullet = (text: string) => `- ${text}`;
 
 /** A deterministic, translated answer from the connection finder. */
-export async function fallbackAnswer(question: string, locale: Locale): Promise<{ answer: string; personIds: string[] }> {
+export async function fallbackAnswer(
+  question: string,
+  locale: Locale,
+  viewer: Viewer,
+): Promise<{ answer: string; personIds: string[] }> {
   const t = makeT(locale);
   const quoted = question.replace(/\s+/g, " ").trim().slice(0, 120);
   const { q, contributionTypes, spanish } = interpretQuestion(question);
@@ -396,16 +401,17 @@ export async function fallbackAnswer(question: string, locale: Locale): Promise<
   }
 
   const base = { q, language: spanish ? ("es" as const) : undefined, limit: 8 };
-  let matches = await findConnectorsForNeed({ ...base, contributionTypes });
+  let matches = await findConnectorsForNeed({ ...base, contributionTypes }, viewer);
   // A type word can be too strict ("CAP about the bay" when the right person only listed skills); retry without it.
-  if (!matches.length && contributionTypes.length && hasTerms) matches = await findConnectorsForNeed(base);
+  if (!matches.length && contributionTypes.length && hasTerms) matches = await findConnectorsForNeed(base, viewer);
 
   if (!matches.length) {
     const tips = [
       t("assistant.fallbackTipBroader"),
       t("assistant.fallbackTipBoard"),
       t("assistant.fallbackTipBrowse"),
-      t("assistant.fallbackTipWeb"),
+      // Web search for new leads is admin-only.
+      ...(viewer.role === "admin" ? [t("assistant.fallbackTipWeb")] : []),
     ];
     return { answer: [t("assistant.fallbackNone", { q: quoted }), tips.map(bullet).join("\n")].join("\n\n"), personIds: [] };
   }
@@ -461,7 +467,7 @@ export async function runAssistant({
   if (!lastUser) return { ok: false, error: "assistant.errorGeneric" };
 
   if (!isAiConfigured()) {
-    const { answer, personIds } = await fallbackAnswer(lastUser.content, locale);
+    const { answer, personIds } = await fallbackAnswer(lastUser.content, locale, user);
     return { ok: true, answer, personIds, mode: "fallback" };
   }
   return aiProvider() === "openrouter"
@@ -469,10 +475,10 @@ export async function runAssistant({
     : runWithClaude(history, locale, user, events);
 }
 
-/** Card data for the people an answer mentions, in the order mentioned. */
-export async function peopleForCards(ids: string[]): Promise<AssistantPerson[]> {
+/** Card data for the people an answer mentions, in the order mentioned (only people this viewer may see). */
+export async function peopleForCards(ids: string[], viewer: Viewer): Promise<AssistantPerson[]> {
   const wanted = ids.slice(0, 8);
-  const rows = await getPeopleByIds(wanted);
+  const rows = await getPeopleByIds(wanted, viewer);
   const byId = new Map(rows.map((r) => [r.id, r]));
   return wanted.flatMap((id) => {
     const p = byId.get(id);

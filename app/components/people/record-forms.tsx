@@ -12,7 +12,7 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Textarea } from "~/components/ui/textarea";
 import { useT, type MessageKey } from "~/i18n";
-import { ENGAGEMENT_KINDS, RELATIONSHIP_KINDS } from "~/lib/constants";
+import { ENGAGEMENT_KINDS, RELATIONSHIP_KINDS, type EngagementKind } from "~/lib/constants";
 import { NamedSelect, type SelectOption } from "./named-select";
 
 export type ProfileActionData =
@@ -60,7 +60,18 @@ function FormError({ errors }: { errors: Partial<Record<string, MessageKey>> }) 
   ) : null;
 }
 
-export function LogActivityForm({ caps, today, defaultCap }: { caps: SelectOption[]; today: string; defaultCap?: string }) {
+export function LogActivityForm({
+  caps,
+  today,
+  defaultCap,
+  kinds = ENGAGEMENT_KINDS,
+}: {
+  caps: SelectOption[];
+  today: string;
+  defaultCap?: string;
+  /** What this viewer may log (staff: STAFF_LOGGABLE_KINDS). */
+  kinds?: readonly EngagementKind[];
+}) {
   const { t } = useT();
   const { fetcher, formKey, saved, errors, busy } = useRecordFetcher("logEngagement");
   const err = (key: string) => (errors[key] ? t(errors[key]!) : undefined);
@@ -74,7 +85,7 @@ export function LogActivityForm({ caps, today, defaultCap }: { caps: SelectOptio
             name="kind"
             defaultValue="lesson"
             invalid={!!errors.kind}
-            options={ENGAGEMENT_KINDS.map((k) => ({ value: k, label: t(`common.engagement.${k}`) }))}
+            options={kinds.map((k) => ({ value: k, label: t(`common.engagement.${k}`) }))}
           />
         </Field>
         <Field label={t("people.profile.logDate")} htmlFor="log-date" error={err("happened_on")}>

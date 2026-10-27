@@ -15,7 +15,6 @@ export function StaffDashboard({ data, firstName, todayLabel }: { data: StaffDat
         <p className="text-sm text-smoke">{t("dashboard.greeting", { name: firstName })}</p>
       </div>
 
-      <h1 className="sr-only">{t("dashboard.title")}</h1>
       <NeedSearch />
 
       <div className="grid items-start gap-6 lg:grid-cols-2">

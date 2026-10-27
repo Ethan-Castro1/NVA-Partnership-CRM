@@ -466,7 +466,7 @@ export function PersonForm({
           </label>
           <div className="grid gap-1.5">
             <label htmlFor="pf-contact-mode" className="text-sm font-medium text-graphite">
-              {t("common.field.contactMode")}
+              {t("people.profile.contactModeLabel")}
             </label>
             <select
               id="pf-contact-mode"

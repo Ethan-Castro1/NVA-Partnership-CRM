@@ -69,7 +69,10 @@ export function AppSidebar({
             url: "/app/admin/requests",
             icon: <HandHelping />,
             badge: counts.introductions,
-            badgeLabel: t("common.nav.badgeIntros", { count: counts.introductions }),
+            badgeLabel:
+              counts.introductions === 1
+                ? t("common.nav.badgeIntrosOne")
+                : t("common.nav.badgeIntros", { count: counts.introductions }),
           },
           caps,
           { title: t("common.nav.communications"), url: "/app/communications", icon: <Mail /> },

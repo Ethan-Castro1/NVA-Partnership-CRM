@@ -1,8 +1,8 @@
 /**
  * The village map: everyone as a dot, every "knows" as a line, laid out on the
  * server (see layoutNetwork) so it paints without jank. Dots are coloured by
- * the first way someone helps, board and staff are ringed in gold, and leads
- * are hollow. After a search, matches and their intro paths light up and the
+ * the first way someone helps, board and staff are ringed in gold, and (for
+ * admins only) leads are hollow. After a search, matches and their intro paths light up and the
  * rest fades. Each dot is a link to the profile; a plain list of the
  * highlighted paths sits underneath as the text alternative.
  */
@@ -28,10 +28,13 @@ export function VillageMap({
   map,
   highlight,
   results,
+  showLeads = false,
 }: {
   map: VillageMapData;
   highlight: { matched: string[]; nodes: string[]; edges: string[] };
   results: ConnectorResult[];
+  /** Admins only: leads (not contacted yet) are hollow and get a legend entry. */
+  showLeads?: boolean;
 }) {
   const { t } = useT();
   const captionId = useId();
@@ -77,7 +80,13 @@ export function VillageMap({
           </g>
           <g>
             {ordered.map((node) => (
-              <MapDot key={node.id} node={node} lit={lit.has(node.id)} matched={matched.has(node.id)} faded={active && !lit.has(node.id)} />
+              <MapDot
+                key={node.id}
+                node={showLeads ? node : { ...node, lead: false }}
+                lit={lit.has(node.id)}
+                matched={matched.has(node.id)}
+                faded={active && !lit.has(node.id)}
+              />
             ))}
           </g>
         </svg>
@@ -87,7 +96,7 @@ export function VillageMap({
         <span id={captionId} className="sr-only">
           {t("connections.map.figureLabel", { people: map.nodes.length, links: map.links.length })}
         </span>
-        <MapLegend shown={new Set(map.nodes.flatMap((n) => (n.contribution ? [n.contribution] : [])))} />
+        <MapLegend shown={new Set(map.nodes.flatMap((n) => (n.contribution ? [n.contribution] : [])))} showLeads={showLeads} />
         <HighlightList active={active} results={results} />
       </figcaption>
     </figure>
@@ -138,7 +147,7 @@ function MapDot({ node, lit, matched, faded }: { node: MapNode; lit: boolean; ma
 }
 
 /** Colors for the ways to help that appear on this map (so staff never see a funder swatch). */
-function MapLegend({ shown }: { shown: ReadonlySet<string> }) {
+function MapLegend({ shown, showLeads }: { shown: ReadonlySet<string>; showLeads: boolean }) {
   const { t } = useT();
   const swatch = (children: React.ReactNode) => (
     <svg viewBox="0 0 20 20" className="size-4 shrink-0" aria-hidden="true">
@@ -166,10 +175,12 @@ function MapLegend({ shown }: { shown: ReadonlySet<string> }) {
         )}
         {t("connections.map.legendInner")}
       </li>
-      <li className="flex items-center gap-1.5">
-        {swatch(<circle cx="10" cy="10" r="5.5" fill={CANVAS} stroke={NEUTRAL} strokeWidth="2" />)}
-        {t("connections.map.legendLead")}
-      </li>
+      {showLeads && (
+        <li className="flex items-center gap-1.5">
+          {swatch(<circle cx="10" cy="10" r="5.5" fill={CANVAS} stroke={NEUTRAL} strokeWidth="2" />)}
+          {t("connections.map.legendLead")}
+        </li>
+      )}
     </ul>
   );
 }

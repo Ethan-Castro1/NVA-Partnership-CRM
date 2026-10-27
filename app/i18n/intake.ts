@@ -20,7 +20,7 @@ export default defineMessages(
     "section.referredBy": "Who told you about NVA?",
     "section.referredByHint": "If someone pointed you our way, we'd love to thank them.",
     "section.referrals": "Know someone else who could help?",
-    "section.referralsHint": "Share up to three people. We'll save them as someone you know and reach out kindly, only about NVA.",
+    "section.referralsHint": "Optional. Know someone we should meet? We'll contact them only about NVA.",
     "section.consent": "Permission to contact you",
 
     skillsLabel: "Your skills and expertise",
@@ -115,7 +115,7 @@ export default defineMessages(
     "section.referredBy": "¿Quién te habló de NVA?",
     "section.referredByHint": "Si alguien te habló de nosotros, nos encantaría darle las gracias.",
     "section.referrals": "¿Conoces a alguien más que podría ayudar?",
-    "section.referralsHint": "Comparte hasta tres personas. Las guardaremos como alguien que conoces y nos comunicaremos con ellas con amabilidad, solo para hablar de NVA.",
+    "section.referralsHint": "Opcional. ¿Conoces a alguien que deberíamos conocer? Solo nos comunicaremos con esa persona sobre NVA.",
     "section.consent": "Permiso para contactarte",
 
     skillsLabel: "Tus habilidades y experiencia",

@@ -41,11 +41,12 @@ export function ComposeStart({ aiOn, defaultLanguage }: { aiOn: boolean; default
 
   return (
     <div className="grid gap-4">
-      <Form method="post">
-        <Button type="submit" name="intent" value="blank" variant="brand" disabled={drafting}>
-          {t("email.compose.blank")}
+      {/* Opens an empty editor; nothing is stored until it is saved. */}
+      <div>
+        <Button asChild variant="brand" disabled={drafting}>
+          <Link to="?compose=1">{t("email.compose.blank")}</Link>
         </Button>
-      </Form>
+      </div>
       {aiOn ? (
         <MoreDetails label={t("email.compose.draftToggle")}>
           <Form method="post" className="grid gap-4">
@@ -115,7 +116,8 @@ export function DraftEditor({
   accounts,
   sendBlock,
 }: {
-  draft: DraftView;
+  /** null: a new email, stored as a draft on its first save or send. */
+  draft: DraftView | null;
   to: string | null;
   accounts: EmailAccountView[];
   sendBlock: SendBlock;
@@ -126,13 +128,14 @@ export function DraftEditor({
   const navigation = useNavigation();
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const mailbox = accounts.find((a) => a.id === accountId)?.email_address ?? "";
-  const figureFlags = draft.flags.filter((f) => f.startsWith("figure:"));
-  const otherFlags = draft.flags.filter((f) => !f.startsWith("figure:"));
+  const figureFlags = draft?.flags.filter((f) => f.startsWith("figure:")) ?? [];
+  const otherFlags = draft?.flags.filter((f) => !f.startsWith("figure:")) ?? [];
 
   return (
     <div className="grid gap-4">
       <Form method="post" id={formId} className="grid gap-4">
-        <input type="hidden" name="draftId" value={draft.id} />
+        {draft && <input type="hidden" name="draftId" value={draft.id} />}
+        {draft && (
         <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-smoke">
           {draft.ai_generated && (
             <span className="inline-flex items-center gap-1 rounded-full bg-gold-soft px-2 py-0.5 font-medium text-gold-ink">
@@ -143,6 +146,7 @@ export function DraftEditor({
           <span className="font-medium text-graphite">{t(`email.purpose.${draft.purpose}`)}</span>
           {draft.ai_generated && <span>· {t("email.draft.review")}</span>}
         </p>
+        )}
 
         {(otherFlags.length > 0 || figureFlags.length > 0) && (
           <div className="grid gap-1.5 rounded-xl bg-rust-soft px-3.5 py-3 text-sm text-rust-ink" role="note">
@@ -162,10 +166,10 @@ export function DraftEditor({
         )}
 
         <Field label={t("email.draft.subject")} htmlFor={`${uid}-subject`}>
-          <Input id={`${uid}-subject`} name="subject" defaultValue={draft.subject} maxLength={300} required className="h-10 bg-canvas" />
+          <Input id={`${uid}-subject`} name="subject" defaultValue={draft?.subject ?? ""} maxLength={300} required className="h-10 bg-canvas" />
         </Field>
         <Field label={t("email.draft.body")} htmlFor={`${uid}-body`}>
-          <Textarea id={`${uid}-body`} name="body" defaultValue={draft.body} rows={14} maxLength={20000} required className="bg-canvas leading-relaxed" />
+          <Textarea id={`${uid}-body`} name="body" defaultValue={draft?.body ?? ""} rows={14} maxLength={20000} required className="bg-canvas leading-relaxed" />
         </Field>
 
         {accounts.length > 1 && (
@@ -217,22 +221,35 @@ export function DraftEditor({
               </DialogFooter>
             </DialogContent>
           </Dialog>
-          <Button
-            type="submit"
-            name="intent"
-            value="discard"
-            variant="ghost"
-            formNoValidate
-            disabled={navigation.state !== "idle"}
-          >
-            <Trash2 aria-hidden="true" />
-            {t("email.draft.discard")}
-          </Button>
+          {draft ? (
+            <Button
+              type="submit"
+              name="intent"
+              value="discard"
+              variant="ghost"
+              formNoValidate
+              disabled={navigation.state !== "idle"}
+            >
+              <Trash2 aria-hidden="true" />
+              {t("email.draft.discard")}
+            </Button>
+          ) : (
+            // Nothing is stored yet, so discarding is just leaving.
+            <Button asChild variant="ghost">
+              <Link to=".">
+                <Trash2 aria-hidden="true" />
+                {t("email.draft.discard")}
+              </Link>
+            </Button>
+          )}
         </div>
-        {sendBlock && <p className="text-xs text-smoke">{t(SEND_BLOCK_KEY[sendBlock])}</p>}
+        <p className="text-xs text-smoke">
+          {t("email.draft.notSent")}
+          {sendBlock && ` ${t(SEND_BLOCK_KEY[sendBlock])}`}
+        </p>
       </Form>
 
-      {draft.ai_generated && draft.facts_used.length > 0 && (
+      {draft?.ai_generated && draft.facts_used.length > 0 && (
         <details className="rounded-xl border border-stone bg-canvas px-3.5 py-2.5 text-sm">
           <summary className="flex cursor-pointer items-center gap-1.5 font-medium">
             <ListChecks className="size-4" aria-hidden="true" />

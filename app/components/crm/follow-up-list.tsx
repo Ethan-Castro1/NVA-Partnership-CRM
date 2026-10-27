@@ -12,8 +12,9 @@
  * - empty: what to show when there are none (default: "No follow-ups.").
  * - className
  */
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useFetcher } from "react-router";
+import { toast } from "sonner";
 import { CalendarClock, Check, Circle, Hourglass, Loader2, MoreHorizontal } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import {
@@ -114,6 +115,25 @@ function FollowUpRow({
 
   const post = (fields: Record<string, string>) => other.submit({ id: item.id, ...fields }, { method: "post", action: FOLLOW_UP_ACTION });
 
+  // A short "Marked done" / "Moved to Nov 3" once the change saves. Fired as soon as the action
+  // answers (while the lists reload), because a finished row can leave the list right after.
+  const toasted = useRef<object | null>(null);
+  const rescheduledTo = useRef<string | null>(null);
+  if (other.formData?.get("intent") === "reschedule") rescheduledTo.current = String(other.formData.get("dueOn") ?? "");
+  useEffect(() => {
+    if (complete.state !== "submitting" && complete.data?.ok && toasted.current !== complete.data) {
+      toasted.current = complete.data;
+      toast.success(t("crm.fu.toast.done"));
+    }
+  }, [complete.state, complete.data, t]);
+  useEffect(() => {
+    if (other.state !== "submitting" && other.data?.ok && toasted.current !== other.data && rescheduledTo.current) {
+      toasted.current = other.data;
+      toast.success(t("crm.fu.toast.moved", { date: crmDate(rescheduledTo.current, locale, today) }));
+      rescheduledTo.current = null;
+    }
+  }, [other.state, other.data, t, locale, today]);
+
   return (
     <li className={cn("py-3.5", completing && "opacity-60")}>
       <div className="flex items-start gap-3">
@@ -147,13 +167,13 @@ function FollowUpRow({
         <div className="min-w-0 flex-1">
           <p className={cn("text-[0.95rem] leading-snug", done ? "text-graphite" : "font-medium text-ink")}>{item.action}</p>
           <p className="mt-0.5 truncate text-xs text-smoke">
-            {item.awaiting_response && !done && (
-              <span className="mr-2 inline-flex items-center gap-1 font-medium text-purple-ink">
-                <Hourglass className="size-3" aria-hidden="true" />
-                {t("crm.fu.row.awaiting")}
-              </span>
-            )}
             {joinDots([
+              item.awaiting_response && !done && (
+                <span key="a" className="inline-flex items-center gap-1 font-medium text-purple-ink">
+                  <Hourglass className="size-3" aria-hidden="true" />
+                  {t("crm.fu.row.awaiting")}
+                </span>
+              ),
               showPerson && (
                 <Link key="p" to={`/app/people/${item.person_id}`} className="font-medium text-graphite underline-offset-4 hover:text-ink hover:underline">
                   {item.person_name}
@@ -177,6 +197,22 @@ function FollowUpRow({
         <div className="flex shrink-0 items-center gap-2 text-xs">
           <DueLabel item={item} today={today} />
           {!done && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={busy}
+              aria-expanded={mode === "reschedule"}
+              aria-label={t("crm.fu.action.rescheduleLabel", { action: item.action })}
+              title={t("crm.fu.action.reschedule")}
+              onClick={() => setMode(mode === "reschedule" ? null : "reschedule")}
+              className="text-graphite max-sm:size-10 max-sm:px-0"
+            >
+              <CalendarClock aria-hidden="true" />
+              <span className="max-sm:sr-only">{t("crm.fu.action.reschedule")}</span>
+            </Button>
+          )}
+          {!done && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon-sm" disabled={busy} aria-label={t("crm.fu.action.more")} title={t("crm.fu.action.more")}>
@@ -184,10 +220,6 @@ function FollowUpRow({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-60">
-                <DropdownMenuItem onSelect={() => setMode("reschedule")}>
-                  <CalendarClock aria-hidden="true" />
-                  {t("crm.fu.action.reschedule")}
-                </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => setMode("next")}>
                   <Check aria-hidden="true" />
                   {t("crm.fu.action.completeAndNext")}

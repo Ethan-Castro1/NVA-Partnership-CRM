@@ -31,7 +31,7 @@ function Subtitle({ person, className }: { person: SearchHit; className?: string
 function CategorySummary({ person, className }: { person: SearchHit; className?: string }) {
   const { t } = useT();
   const [first, ...rest] = person.categories;
-  if (!first) return <span className="text-xs text-smoke">{"–"}</span>;
+  if (!first) return null;
   const all = person.categories.map((c) => t(`common.category.${c}`)).join(", ");
   return (
     <span className={cn("inline-flex max-w-full items-center gap-1.5 text-xs text-graphite", className)} title={all}>

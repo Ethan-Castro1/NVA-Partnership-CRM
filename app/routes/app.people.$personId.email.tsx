@@ -73,6 +73,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const current = draftParam ? await getDraft(draftParam, person.id) : null;
   const sent = sentParam ? await getDraft(sentParam, person.id) : null;
   const followUpDue = url.searchParams.get("followup");
+  // "Write email" opens an empty editor; the draft is only stored once it is saved or sent.
+  const composing = url.searchParams.get("compose") === "1";
+  const savedParam = url.searchParams.get("saved") === "1";
+  const sendError = url.searchParams.get("error");
 
   const to = person.email && isEmailAddress(person.email.trim()) ? person.email.trim() : null;
   const sendBlock: SendBlock = setup.demoMode ? "demo" : !accounts.length ? "noMailbox" : !to ? "noAddress" : null;
@@ -84,6 +88,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     to,
     drafts,
     current: current?.status === "draft" ? current : null,
+    composing,
+    justSaved: savedParam && current?.status === "draft",
+    sendError: sendError && SEND_ERRORS.has(sendError) ? (`email.error.${sendError}` as MessageKey) : null,
     sent: sent?.status === "sent" ? { id: sent.id, messageId: sent.email_message_id } : null,
     followUpDue: followUpDue && isIsoDate(followUpDue) ? followUpDue : null,
     messages,
@@ -98,8 +105,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   };
 }
 
+/** sendDraft's errors, passed back in the URL when a new email failed to send (its draft is kept). */
+const SEND_ERRORS = new Set(["notApproved", "notAdmin", "demo", "noAccount", "noRecipient", "notDraft", "empty", "auth", "busy", "failed"]);
+
 const id = z.string().min(1).max(100);
-const edits = { draftId: id, subject: z.string().max(MAX_SUBJECT).default(""), body: z.string().max(MAX_BODY).default("") };
+// No draftId: a new email that hasn't been stored yet (it is created on the first save or send).
+const edits = { draftId: id.optional(), subject: z.string().max(MAX_SUBJECT).default(""), body: z.string().max(MAX_BODY).default("") };
 const ActionSchema = z.discriminatedUnion("intent", [
   z.object({
     intent: z.literal("draft"),
@@ -164,6 +175,10 @@ export async function action({ request, params }: Route.ActionArgs) {
       return redirect(`${base}?draft=${draftId}`);
     }
     case "save": {
+      if (!input.draftId) {
+        const draftId = await createDraft({ personId: person.id, authorId: admin.id, purpose: "custom", subject: input.subject, body: input.body, aiGenerated: false });
+        return redirect(`${base}?draft=${draftId}&saved=1`);
+      }
       if (!(await updateDraft(input.draftId, person.id, input))) return fail("email.error.notDraft", 409);
       return data<ActionResult>({ ok: true, message: "email.draft.saved" });
     }
@@ -172,17 +187,25 @@ export async function action({ request, params }: Route.ActionArgs) {
       return redirect(base);
     }
     case "send": {
-      // Keep the admin's latest edits, then send only with explicit approval.
-      if (!(await updateDraft(input.draftId, person.id, input))) return fail("email.error.notDraft", 409);
+      // Keep the admin's latest edits (a new email is stored first), then send only with explicit approval.
+      const isNew = !input.draftId;
+      const draftId =
+        input.draftId ??
+        (await createDraft({ personId: person.id, authorId: admin.id, purpose: "custom", subject: input.subject, body: input.body, aiGenerated: false }));
+      if (!isNew && !(await updateDraft(draftId, person.id, input))) return fail("email.error.notDraft", 409);
       const result = await sendDraft({
-        draftId: input.draftId,
+        draftId,
         personId: person.id,
         admin,
         approved: input.approve === "yes",
         accountId: input.accountId || null,
       });
-      if (!result.ok) return fail(`email.error.${result.error}`, result.error === "notApproved" ? 400 : result.error === "demo" ? 403 : 400);
-      return redirect(`${base}?sent=${input.draftId}`);
+      if (!result.ok) {
+        // The new email is a draft now: reopen it with the error so nothing typed is lost.
+        if (isNew) return redirect(`${base}?draft=${draftId}&error=${result.error}`);
+        return fail(`email.error.${result.error}`, result.error === "notApproved" ? 400 : result.error === "demo" ? 403 : 400);
+      }
+      return redirect(`${base}?sent=${draftId}`);
     }
     case "followup": {
       let messageId: string | null = null;
@@ -240,6 +263,16 @@ export default function PersonEmail() {
             {t("email.mailboxNeedsReconnect", { mailbox: m })}
           </p>
         ))}
+        {d.justSaved && !result && (
+          <p role="status" className="rounded-xl bg-sage-soft px-3.5 py-2.5 text-sm text-sage-ink">
+            {t("email.draft.saved")}
+          </p>
+        )}
+        {d.sendError && !result && (
+          <p role="alert" className="rounded-xl bg-rust-soft px-3.5 py-2.5 text-sm text-rust-ink">
+            {t(d.sendError)}
+          </p>
+        )}
         {result && (
           <p
             role={result.ok ? "status" : "alert"}
@@ -267,16 +300,24 @@ export default function PersonEmail() {
                 <FollowUpOffer personName={d.person.full_name} dueDefault={d.dueDefault} messageId={d.sent.messageId} skipHref={base} />
               </div>
             </Panel>
-          ) : d.current ? (
+          ) : d.current || d.composing ? (
             <Panel
               title={t("email.draft.title")}
               action={
-                <Button asChild variant="ghost" size="sm">
-                  <Link to={base}>{t("email.draft.new")}</Link>
-                </Button>
+                d.current && (
+                  <Button asChild variant="ghost" size="sm">
+                    <Link to={base}>{t("email.draft.new")}</Link>
+                  </Button>
+                )
               }
             >
-              <DraftEditor key={d.current.id + d.current.updated_at} draft={d.current} to={d.to} accounts={d.accounts} sendBlock={d.sendBlock} />
+              <DraftEditor
+                key={d.current ? d.current.id + d.current.updated_at : "new"}
+                draft={d.current}
+                to={d.to}
+                accounts={d.accounts}
+                sendBlock={d.sendBlock}
+              />
             </Panel>
           ) : (
             <Panel title={t("email.compose.title")}>

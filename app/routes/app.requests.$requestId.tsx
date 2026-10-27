@@ -6,7 +6,7 @@
  * request and also reply, assign people, share and set the status.
  */
 import { Form, Link, data, useNavigation } from "react-router";
-import { ArrowLeft, CheckCircle2, X } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Mail, X } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Route } from "./+types/app.requests.$requestId";
 import { Field, PageHeader, Panel, Sheet } from "~/components/nva";
@@ -171,6 +171,11 @@ export default function RequestDetail({ loaderData, actionData }: Route.Componen
   const when = requestWhen(r, locale);
   const result = actionData as ActionResult | undefined;
   const onRequest = new Set(r.people.map((p) => p.id));
+  // An open introduction: the next step is emailing the person they asked to meet.
+  const introPerson =
+    admin && r.kind === "introduction" && r.status === "open"
+      ? (r.people.find((p) => p.request_role === "interest") ?? r.people[0] ?? null)
+      : null;
 
   return (
     <div className="mx-auto grid min-w-0 grid-cols-[minmax(0,1fr)] w-full max-w-3xl gap-6">
@@ -186,7 +191,7 @@ export default function RequestDetail({ loaderData, actionData }: Route.Componen
         title={r.need}
         description={
           <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-            <RequestStatusBadge status={r.status} />
+            <RequestStatusBadge status={r.status} />{" "}
             <span>
               {[
                 r.kind === "introduction" ? t("requests.item.intro") : null,
@@ -225,7 +230,7 @@ export default function RequestDetail({ loaderData, actionData }: Route.Componen
       <Sheet className="grid gap-5 p-5 md:p-6">
         <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           <Fact label={t("requests.detail.when")}>{when || <span className="text-smoke">{t("requests.detail.noDate")}</span>}</Fact>
-          {r.participant_count != null && <Fact label={t("requests.detail.participants")}>{r.participant_count}</Fact>}
+          {r.participant_count != null && r.kind !== "introduction" && <Fact label={t("requests.detail.participants")}>{r.participant_count}</Fact>}
           {r.cap_title && (
             <Fact label={t("requests.detail.cap")}>
               <Link to={`/app/caps/${r.cap_id}`} className="underline-offset-4 hover:underline">
@@ -371,6 +376,26 @@ export default function RequestDetail({ loaderData, actionData }: Route.Componen
           <div className="grid gap-6">
             <Form method="post" className="grid gap-4">
               <input type="hidden" name="intent" value="admin-save" />
+              {introPerson && (
+                <div>
+                  <Button asChild variant="brand">
+                    <Link to={`/app/people/${introPerson.id}/email`}>
+                      <Mail aria-hidden="true" />
+                      {t("requests.admin.emailPerson", { name: introPerson.full_name })}
+                    </Link>
+                  </Button>
+                </div>
+              )}
+              <Field label={t("requests.admin.reply", { name: r.requester_name })} htmlFor="response" optional>
+                <Textarea
+                  id="response"
+                  name="response"
+                  rows={3}
+                  maxLength={2000}
+                  defaultValue={r.response ?? ""}
+                  placeholder={t("requests.admin.replyPlaceholder")}
+                />
+              </Field>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label={t("requests.admin.status")} htmlFor="status">
                   <NativeSelect id="status" name="status" defaultValue={r.status} key={r.status}>
@@ -392,23 +417,13 @@ export default function RequestDetail({ loaderData, actionData }: Route.Componen
                   </NativeSelect>
                 </Field>
               </div>
-              <Field label={t("requests.admin.reply", { name: r.requester_name })} htmlFor="response" optional>
-                <Textarea
-                  id="response"
-                  name="response"
-                  rows={3}
-                  maxLength={2000}
-                  defaultValue={r.response ?? ""}
-                  placeholder={t("requests.admin.replyPlaceholder")}
-                />
-              </Field>
               <MoreDetails label={t("requests.form.more")}>
                 <Field label={t("requests.admin.completeNote")} htmlFor="admin-note" optional>
                   <Textarea id="admin-note" name="note" rows={2} maxLength={1000} placeholder={t("requests.complete.notePlaceholder")} />
                 </Field>
               </MoreDetails>
               <div>
-                <Button type="submit" variant="brand" disabled={busy}>
+                <Button type="submit" variant={introPerson ? "outline" : "brand"} disabled={busy}>
                   {t("requests.admin.save")}
                 </Button>
               </div>

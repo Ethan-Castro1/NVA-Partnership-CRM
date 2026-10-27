@@ -47,12 +47,11 @@ function ReasonText({ c }: { c: Route.ComponentProps["loaderData"]["connections"
 export default function MyConnections({ loaderData }: Route.ComponentProps) {
   const { t } = useT();
   const { connections } = loaderData;
-  const count = connections.length === 1 ? t("directory.countOne") : t("directory.countMany", { count: connections.length });
   return (
     <div className="mx-auto grid w-full max-w-3xl min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <PageHeader
         title={t("requests.connections.title")}
-        description={connections.length ? <span className="font-medium text-graphite">{count}</span> : undefined}
+        description={t("resources.myConnections.subtitle")}
       />
       {connections.length === 0 ? (
         <EmptyState

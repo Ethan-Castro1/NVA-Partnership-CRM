@@ -211,14 +211,10 @@ function ChatView({ chat, variant }: { chat: Chat<AskMessage>; variant: Variant 
           )}
         </div>
         <p className="mt-1.5 px-1 text-xs text-smoke">
-          {tooLong ? (
-            t("assistant.errorTooLong")
-          ) : (
-            <>
-              {t("assistant.enterHint")}
-              {root?.aiConfigured === false && <span className="block sm:inline sm:before:content-['_']">{t("common.ai.notConfigured")}</span>}
-            </>
-          )}
+          {tooLong
+            ? t("assistant.errorTooLong")
+            : // Plain search (AI off): say where answers come from; each answer carries its own small tag.
+              t(root?.aiConfigured === false ? "assistant.enterHintSearch" : "assistant.enterHint")}
         </p>
       </form>
     </div>

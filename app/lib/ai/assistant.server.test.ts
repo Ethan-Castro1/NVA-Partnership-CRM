@@ -55,6 +55,18 @@ describe("the no-API-key fallback", () => {
     expect(answer).toBe("1 persona coincide.");
   });
 
+  it("keeps every fallback line in Spanish (no English template words)", async () => {
+    const english = /\b(?:people match|person matches|Nobody|Browse|Try|Tell me|Send a request|See them)\b/;
+    const sewing = await fallbackAnswer("¿Quién puede dar una lección de costura?", "es", user);
+    expect(sewing.personIds[0]).toBe(mei);
+    expect(sewing.answer).toMatch(/^\d+ persona(?:s)? coincide/);
+    for (const question of ["¿Quién sabe de vidrio soplado?", "¿Quién puede ayudar?"]) {
+      const { answer } = await fallbackAnswer(question, "es", user);
+      expect(answer).not.toMatch(english);
+    }
+    expect((await fallbackAnswer("¿Quién sabe de vidrio soplado?", "es", user)).answer).toContain("Nadie en nuestros registros");
+  });
+
   it("finds the same people, in the same order, as the People & Skills search", async () => {
     for (const question of ["Who can teach a sewing lesson?", "someone to host a welding internship", "Who speaks Spanish and can teach tailoring?"]) {
       const { personIds } = await fallbackAnswer(question, "en", user);

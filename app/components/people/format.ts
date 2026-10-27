@@ -41,3 +41,8 @@ export function withNode(template: string, node: ReactNode, token = "{name}"): R
   if (at === -1) return template;
   return createElement(Fragment, null, template.slice(0, at), node, template.slice(at + token.length));
 }
+
+/** "carpentry" -> "Carpentry", for skills typed in lowercase. Leaves the rest of the text alone. */
+export function capitalizeFirst(text: string): string {
+  return text ? text.charAt(0).toLocaleUpperCase() + text.slice(1) : text;
+}

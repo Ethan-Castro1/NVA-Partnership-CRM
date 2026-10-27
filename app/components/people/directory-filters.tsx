@@ -5,8 +5,10 @@
  * "no filter" values are left out of the URL.
  *
  * Staff: search, ways to help, CAP topic, connection and language.
- * Admins also get status, categories, staff-directory visibility, contact
- * mode, relationship owner and how the record came in.
+ * Admins: search and category chips up front; status, staff-directory
+ * visibility, contact mode, relationship owner and how the record came in sit
+ * under More filters. (Admins don't get the ways-to-help chips: the categories
+ * cover them. A ?type= link still filters and Clear filters drops it.)
  */
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Form, Link, useLocation, useNavigate } from "react-router";
@@ -93,7 +95,8 @@ export function DirectoryFilters({
     if (target.type === "checkbox" || target.tagName === "SELECT") apply(event.currentTarget);
   };
 
-  const adminExtras = !!(params.visibility || params.mode || params.owner || params.source || params.types.length);
+  const statusFiltered = !!params.status && !NO_FILTER.has(params.status);
+  const adminExtras = !!(statusFiltered || params.visibility || params.mode || params.owner || params.source);
   const filtered =
     params.q ||
     params.types.length ||
@@ -147,27 +150,6 @@ export function DirectoryFilters({
               className="h-11 rounded-full pl-10"
             />
           </div>
-          {isAdmin && (
-            <div className="sm:w-48">
-              <label htmlFor="people-status" className="sr-only">
-                {t("directory.statusLabel")}
-              </label>
-              <NamedSelect
-                id="people-status"
-                name="status"
-                defaultValue={params.status || "current"}
-                className="h-11 rounded-full data-[size=default]:h-11"
-                options={[
-                  { value: "current", label: t("directory.statusCurrent") },
-                  ...PERSON_STATUSES.map((s) => ({
-                    value: s,
-                    label: t(`common.status.${s}`),
-                  })),
-                  { value: "all", label: t("directory.statusAll") },
-                ]}
-              />
-            </div>
-          )}
           <Button type="submit" size="lg" className="shrink-0">
             {t("common.action.search")}
           </Button>
@@ -175,6 +157,10 @@ export function DirectoryFilters({
 
         {isAdmin ? (
           <fieldset className="min-w-0">
+            {/* Ways to help from a link (e.g. ?type=funder) stay applied while other filters change. */}
+            {params.types.map((type) => (
+              <input key={type} type="hidden" name="type" value={type} />
+            ))}
             <legend className="sr-only">{t("directory.categoriesLabel")}</legend>
             <div className="relative -mx-4 -my-1 flex gap-1.5 overflow-x-auto px-4 py-1 [scrollbar-width:none] md:mx-0 md:my-0 md:flex-wrap md:overflow-visible md:px-0 md:py-0">
               {CONTACT_CATEGORIES.map((category) => (
@@ -206,9 +192,23 @@ export function DirectoryFilters({
               <ChevronDown className="size-4 text-smoke transition-transform group-open:rotate-180" aria-hidden="true" />
             </summary>
             <div className="mt-3 grid gap-4">
-              {isAdmin && typePills}
               {isAdmin && (
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <Field label={t("directory.statusLabel")} htmlFor="people-status">
+                    <NamedSelect
+                      id="people-status"
+                      name="status"
+                      defaultValue={params.status || "current"}
+                      options={[
+                        { value: "current", label: t("directory.statusCurrent") },
+                        ...PERSON_STATUSES.map((s) => ({
+                          value: s,
+                          label: t(`common.status.${s}`),
+                        })),
+                        { value: "all", label: t("directory.statusAll") },
+                      ]}
+                    />
+                  </Field>
                   <Field label={t("directory.visibilityLabel")} htmlFor="people-vis">
                     <NamedSelect
                       id="people-vis"

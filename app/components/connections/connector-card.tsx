@@ -12,6 +12,7 @@ import { Button } from "~/components/ui/button";
 import { useT, type MessageKey } from "~/i18n";
 import type { ConnectorResult } from "~/lib/connections.server";
 import { useTopicLabel } from "~/components/caps/cap-bits";
+import { capitalizeFirst } from "~/components/people/format";
 import { PathChain } from "./path-chain";
 
 const VISIBLE_PATHS = 1;
@@ -31,7 +32,7 @@ export function ConnectorCard({
   const { t } = useT();
   const topicLabel = useTopicLabel();
   const { person, direct, paths } = result;
-  const matched = person.matched.map(topicLabel);
+  const matched = person.matched.map((value) => capitalizeFirst(topicLabel(value)));
   const onCap = !!cap && cap.partnerIds.includes(person.id);
   const subtitle = [person.title, person.organization_name].filter(Boolean).join(", ");
   const shown = paths.slice(0, VISIBLE_PATHS);

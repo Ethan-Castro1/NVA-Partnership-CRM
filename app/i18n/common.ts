@@ -46,6 +46,7 @@ export default defineMessages(
     "nav.badgeOverdue": "{count} overdue",
     "nav.badgeSignups": "{count} new",
     "nav.badgeIntros": "{count} introductions waiting",
+    "nav.badgeIntrosOne": "1 introduction waiting",
 
     "lang.label": "Language",
     "lang.en": "English",
@@ -62,7 +63,7 @@ export default defineMessages(
     "action.search": "Search",
     "action.clear": "Clear",
     "action.back": "Back",
-    "action.viewAll": "View all",
+    "action.viewAll": "See all",
     "action.open": "Open",
     "action.submit": "Submit",
     "action.continue": "Continue",
@@ -70,9 +71,8 @@ export default defineMessages(
     "action.copy": "Copy",
     "action.copied": "Copied",
     "action.undo": "Undo",
-    "sidebar.toggle": "Show or hide the menu",
+    "sidebar.toggle": "Menu",
     "sidebar.title": "Menu",
-    "sidebar.description": "Pages in Village Partners",
     "action.export": "Export CSV",
     "action.filter": "Filter",
 
@@ -288,7 +288,6 @@ export default defineMessages(
     "field.origin": "How the relationship began",
     "field.sharedSummary": "Summary for staff",
 
-    "ai.notConfigured": "AI answers are turned off. Search still works.",
     "footer.privacy": "This tool holds information about adult partners and volunteers only. Never enter student information.",
   },
   {
@@ -331,6 +330,7 @@ export default defineMessages(
     "nav.badgeOverdue": "{count} atrasados",
     "nav.badgeSignups": "{count} nuevas",
     "nav.badgeIntros": "{count} presentaciones pendientes",
+    "nav.badgeIntrosOne": "1 presentación pendiente",
 
     "lang.label": "Idioma",
     "lang.en": "English",
@@ -355,9 +355,8 @@ export default defineMessages(
     "action.copy": "Copiar",
     "action.copied": "Copiado",
     "action.undo": "Deshacer",
-    "sidebar.toggle": "Mostrar u ocultar el menú",
+    "sidebar.toggle": "Menú",
     "sidebar.title": "Menú",
-    "sidebar.description": "Páginas de Socios de la Aldea",
     "action.export": "Exportar CSV",
     "action.filter": "Filtrar",
 
@@ -541,7 +540,7 @@ export default defineMessages(
     "capPartnerStatus.declined": "No disponible",
 
     "role.admin": "Administración",
-    "role.staff": "Personal",
+    "role.staff": "Personal escolar",
 
     "language.en": "Inglés",
     "language.es": "Español",
@@ -573,7 +572,6 @@ export default defineMessages(
     "field.origin": "Cómo empezó la relación",
     "field.sharedSummary": "Resumen para el personal",
 
-    "ai.notConfigured": "Las respuestas con IA están desactivadas. La búsqueda sigue funcionando.",
     "footer.privacy": "Esta herramienta solo guarda información de socios y voluntarios adultos. Nunca ingreses información de estudiantes.",
   },
 );

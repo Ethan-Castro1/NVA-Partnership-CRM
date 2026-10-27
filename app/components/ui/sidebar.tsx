@@ -13,7 +13,6 @@ import { Separator } from "~/components/ui/separator"
 import {
   Sheet,
   SheetContent,
-  SheetDescription,
   SheetHeader,
   SheetTitle,
 } from "~/components/ui/sheet"
@@ -23,7 +22,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip"
-import { PanelLeftIcon } from "lucide-react"
+import { MenuIcon, PanelLeftIcon } from "lucide-react"
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
@@ -195,10 +194,10 @@ function Sidebar({
             } as React.CSSProperties
           }
           side={side}
+          aria-describedby={undefined}
         >
           <SheetHeader className="sr-only">
             <SheetTitle>{t("common.sidebar.title")}</SheetTitle>
-            <SheetDescription>{t("common.sidebar.description")}</SheetDescription>
           </SheetHeader>
           <div className="flex h-full w-full flex-col">{children}</div>
         </SheetContent>
@@ -257,7 +256,7 @@ function SidebarTrigger({
   onClick,
   ...props
 }: React.ComponentProps<typeof Button>) {
-  const { toggleSidebar } = useSidebar()
+  const { toggleSidebar, isMobile } = useSidebar()
   const { t } = useT()
 
   return (
@@ -266,14 +265,15 @@ function SidebarTrigger({
       data-slot="sidebar-trigger"
       variant="ghost"
       size="icon-sm"
-      className={cn(className)}
+      // 44px on phones (a touch target); the compact 28px beside the desktop sidebar.
+      className={cn("max-md:size-11 max-md:[&_svg]:size-5", className)}
       onClick={(event) => {
         onClick?.(event)
         toggleSidebar()
       }}
       {...props}
     >
-      <PanelLeftIcon />
+      {isMobile ? <MenuIcon /> : <PanelLeftIcon />}
       <span className="sr-only">{t("common.sidebar.toggle")}</span>
     </Button>
   )

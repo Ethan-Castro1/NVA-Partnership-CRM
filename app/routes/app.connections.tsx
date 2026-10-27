@@ -76,7 +76,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     searching,
     results: sorted,
     highlight: highlightFor(sorted),
-    map,
+    // Pipeline status (lead or not) is CRM detail; staff get the map without it.
+    map: admin ? map : { ...map, nodes: map.nodes.map((node) => ({ ...node, lead: false })) },
     innerCircle: inner.people
       .map((p) => ({ id: p.id, full_name: p.full_name }))
       .sort((a, b) => a.full_name.localeCompare(b.full_name)),
@@ -266,7 +267,7 @@ export default function Connections() {
         }
       >
         <div className="rounded-card bg-canvas p-3 md:p-4">
-          <VillageMap map={map} highlight={highlight} results={results} />
+          <VillageMap map={map} highlight={highlight} results={results} showLeads={isAdmin} />
         </div>
       </Panel>
 

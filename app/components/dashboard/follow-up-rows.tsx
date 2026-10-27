@@ -1,7 +1,7 @@
 /**
  * The dashboard's follow-ups: the shared FollowUpList, grouped into due now,
  * coming up and waiting on a reply (headings only when more than one group has
- * rows). On phones only the first three rows show in all; "View all" has the rest.
+ * rows). On phones only the first three rows show in all; "See all" has the rest.
  */
 import { FollowUpList } from "~/components/crm";
 import type { FollowUpItem } from "~/lib/follow-ups.server";

@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link, useRouteLoaderData } from "react-router";
 import { ArrowUpRight } from "lucide-react";
 import { ContributionChips, PersonAvatar, StatusBadge, TagList } from "~/components/nva";
 import { MatchReasons } from "~/components/resources/match-reasons";
@@ -6,9 +6,16 @@ import { ResourceActions } from "~/components/resources/resource-actions";
 import { useT } from "~/i18n";
 import type { AssistantPerson } from "./types";
 
+/** Relationship status is CRM data; only admins see it. */
+function useShowStatus(): boolean {
+  const root = useRouteLoaderData("root") as { user?: { role?: string } | null } | undefined;
+  return root?.user?.role === "admin";
+}
+
 /** A person the assistant mentioned: who they are, how they can help, and a way to their profile. */
 export function PersonCard({ person, example = false }: { person: AssistantPerson; example?: boolean }) {
   const { t } = useT();
+  const showStatus = useShowStatus();
   const role =
     person.title && person.organization_name
       ? t("assistant.roleAt", { title: person.title, org: person.organization_name })
@@ -21,7 +28,7 @@ export function PersonCard({ person, example = false }: { person: AssistantPerso
           <h3 className="truncate font-medium text-ink">{person.full_name}</h3>
           {role && <p className="truncate text-sm text-smoke">{role}</p>}
         </div>
-        <StatusBadge status={person.status} />
+        {showStatus && <StatusBadge status={person.status} />}
       </div>
       <ContributionChips types={person.contribution_types} />
       <TagList tags={person.skills} max={4} />
@@ -46,6 +53,7 @@ export function PersonCard({ person, example = false }: { person: AssistantPerso
  */
 export function PersonRow({ person, example = false }: { person: AssistantPerson; example?: boolean }) {
   const { t } = useT();
+  const showStatus = useShowStatus();
   const role =
     person.title && person.organization_name
       ? t("assistant.roleAt", { title: person.title, org: person.organization_name })
@@ -67,7 +75,7 @@ export function PersonRow({ person, example = false }: { person: AssistantPerson
           )}
           {role && <span className="truncate text-xs text-smoke">{role}</span>}
         </span>
-        <StatusBadge status={person.status} />
+        {showStatus && <StatusBadge status={person.status} />}
       </div>
       <MatchReasons reasons={person.reasons} max={2} />
       {!example && (

@@ -27,7 +27,7 @@ export default defineMessages(
     "visibilityAny": "Shown or hidden",
     "visibilityOn": "Shown to staff",
     "visibilityOff": "Hidden from staff",
-    "modeLabel": "How staff reach them",
+    "modeLabel": "How teachers contact them",
     "modeAny": "Any",
     "ownerLabel": "Relationship owner",
     "ownerAny": "Anyone",
@@ -62,6 +62,7 @@ export default defineMessages(
     "next": "Next",
     "pageOf": "Page {page} of {pages}",
     "organizations": "Organizations",
+    "moreActions": "More actions",
     "addContact": "Add a contact",
 
     // ----- quick add -----
@@ -85,7 +86,7 @@ export default defineMessages(
     "quick.noOwner": "No owner",
     "quick.visibility": "Show in the staff directory",
     "quick.visibilityHint": "Off by default. Staff only see people you approve.",
-    "quick.mode": "How staff reach them",
+    "quick.mode": "How teachers contact them",
     "quick.followUp": "Follow-up",
     "quick.followUpHint": "Optional. It shows on your dashboard when it's due.",
     "quick.followUpOn": "Date",
@@ -162,7 +163,7 @@ export default defineMessages(
     "visibilityAny": "Visibles u ocultos",
     "visibilityOn": "Visibles para el personal",
     "visibilityOff": "Ocultos al personal",
-    "modeLabel": "Cómo los contacta el personal",
+    "modeLabel": "Cómo los contactan los docentes",
     "modeAny": "Cualquiera",
     "ownerLabel": "Responsable de la relación",
     "ownerAny": "Cualquiera",
@@ -197,6 +198,7 @@ export default defineMessages(
     "next": "Siguiente",
     "pageOf": "Página {page} de {pages}",
     "organizations": "Organizaciones",
+    "moreActions": "Más acciones",
     "addContact": "Agregar un contacto",
 
     // ----- quick add -----
@@ -220,7 +222,7 @@ export default defineMessages(
     "quick.noOwner": "Sin responsable",
     "quick.visibility": "Mostrar en el directorio del personal",
     "quick.visibilityHint": "Apagado por defecto. El personal solo ve a quienes apruebes.",
-    "quick.mode": "Cómo los contacta el personal",
+    "quick.mode": "Cómo los contactan los docentes",
     "quick.followUp": "Seguimiento",
     "quick.followUpHint": "Opcional. Aparece en tu panel cuando toca.",
     "quick.followUpOn": "Fecha",

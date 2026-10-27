@@ -20,6 +20,9 @@ export default defineMessages(
     "actions.unsave": "Remove from saved",
     "actions.more": "More actions for {name}",
     "actions.saveError": "Couldn't save. Try again.",
+    "actions.savedToast": "Saved to {link}",
+    "actions.myConnections": "My Connections",
+    "myConnections.subtitle": "People you saved, asked about, or worked with.",
 
     "why.label": "Why:",
     "why.skill": "{value} background",
@@ -58,6 +61,9 @@ export default defineMessages(
     "actions.unsave": "Quitar de guardados",
     "actions.more": "Más acciones para {name}",
     "actions.saveError": "No se pudo guardar. Inténtalo de nuevo.",
+    "actions.savedToast": "Guardado en {link}",
+    "actions.myConnections": "Mis conexiones",
+    "myConnections.subtitle": "Personas que guardaste, por las que preguntaste o con las que trabajaste.",
 
     "why.label": "Por qué:",
     "why.skill": "experiencia en {value}",

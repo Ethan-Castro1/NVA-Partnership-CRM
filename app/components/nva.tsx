@@ -316,7 +316,7 @@ export function LanguageToggle({ className, variant = "pill" }: { className?: st
         lang={locale === "en" ? "es" : "en"}
         className={cn(
           "inline-flex items-center gap-1.5 text-sm transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
-          variant === "pill" ? "h-9 rounded-full border border-stone bg-canvas px-3.5 hover:bg-taupe" : "rounded-md px-1 hover:underline",
+          variant === "pill" ? "h-11 rounded-full border border-stone bg-canvas px-3.5 hover:bg-taupe md:h-9" : "rounded-md px-1 hover:underline",
         )}
       >
         <Languages className="size-4" aria-hidden="true" />

@@ -182,7 +182,7 @@ export default function CapDetail() {
         description={
           cap.status !== "active" || cap.driving_question ? (
             <>
-              {cap.status !== "active" && <CapStatusBadge status={cap.status} className="mr-2 align-middle" />}
+              {cap.status !== "active" && <CapStatusBadge status={cap.status} className="mr-2 align-middle" />}{" "}
               {cap.driving_question}
             </>
           ) : undefined

@@ -8,6 +8,7 @@ import { PageHeader, Sheet } from "~/components/nva";
 import { Button } from "~/components/ui/button";
 import { makeT, useT } from "~/i18n";
 import { requireUser } from "~/lib/auth.server";
+import { isAdmin } from "~/lib/permissions.server";
 import { listCaps, listMyCaps } from "~/lib/caps.server";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
@@ -25,7 +26,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const caps = mine
     ? (await listMyCaps(user, { includeComplete: true })).filter((c) => (c.status === "complete") === finished)
     : await listCaps(finished ? { status: "complete" } : { excludeComplete: true }, user);
-  return { caps, mine, finished };
+  return { caps, mine, finished, admin: isAdmin(user) };
 }
 
 function capsUrl(mine: boolean, finished: boolean): string {
@@ -37,7 +38,7 @@ function capsUrl(mine: boolean, finished: boolean): string {
 }
 
 export default function Caps() {
-  const { caps, mine, finished } = useLoaderData<typeof loader>();
+  const { caps, mine, finished, admin } = useLoaderData<typeof loader>();
   const { t } = useT();
   const whose = [
     { to: capsUrl(false, finished), label: t("caps.list.all"), current: !mine },
@@ -52,11 +53,10 @@ export default function Caps() {
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <PageHeader
         title={t("caps.title")}
-        description={
-          <span className="font-medium text-graphite">{caps.length === 1 ? t("caps.list.countOne") : t("caps.list.count", { count: caps.length })}</span>
-        }
+        description={t("caps.list.intro")}
         actions={
-          <Button asChild variant="brand" size="lg">
+          // Staff mostly browse here, so New CAP stays available but isn't the gold button for them.
+          <Button asChild variant={admin ? "brand" : "outline"} size="lg">
             <Link to="/app/caps/new">
               <Plus aria-hidden="true" />
               {t("caps.list.new")}
@@ -65,9 +65,12 @@ export default function Caps() {
         }
       />
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <SegmentedLinks label={t("caps.list.tabsLabel")} tabs={whose} />
         <SegmentedLinks label={t("caps.list.stateLabel")} tabs={state} />
+        {caps.length > 0 && (
+          <span className="ml-auto text-sm text-smoke">{caps.length === 1 ? t("caps.list.countOne") : t("caps.list.count", { count: caps.length })}</span>
+        )}
       </div>
 
       {caps.length ? (

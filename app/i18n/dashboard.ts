@@ -7,12 +7,14 @@ export default defineMessages(
 
     greeting: "Welcome back, {name}",
     examplesLabel: "Try one of these",
-    viewAll: "View all",
+    viewAll: "See all",
 
     // Search box (staff)
     "search.title": "What do you need help with?",
     "search.placeholder": "Describe what your class or activity needs",
     "search.button": "Search",
+    "askHelp.question": "Need something arranged?",
+    "askHelp.link": "Ask for help",
     "search.example.carpentry": "Find someone to teach students basic carpentry.",
     "search.example.healthcare": "Find a guest speaker who works in healthcare.",
     "search.example.event": "Find volunteers for an upcoming school event.",
@@ -79,6 +81,8 @@ export default defineMessages(
     "search.title": "¿Con qué necesitas ayuda?",
     "search.placeholder": "Describe lo que necesita tu clase o actividad",
     "search.button": "Buscar",
+    "askHelp.question": "¿Necesitas que organicemos algo?",
+    "askHelp.link": "Pide ayuda",
     "search.example.carpentry": "Busca a alguien que enseñe carpintería básica a los estudiantes.",
     "search.example.healthcare": "Busca un orador invitado que trabaje en salud.",
     "search.example.event": "Busca voluntarios para un próximo evento escolar.",

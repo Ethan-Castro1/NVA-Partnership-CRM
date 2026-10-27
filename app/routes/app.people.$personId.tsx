@@ -71,7 +71,7 @@ import {
 } from "~/lib/people.server";
 import { listRequestsForPerson } from "~/lib/requests.server";
 import { isSaved } from "~/lib/saved.server";
-import { formatDate } from "~/components/people/format";
+import { capitalizeFirst, formatDate } from "~/components/people/format";
 import { cn } from "~/lib/utils";
 
 export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
@@ -151,7 +151,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     };
   }
 
-  const [paths, relationships, crm, others, intake] = await Promise.all([
+  const [paths, relationships, crm, others, intake, firstEntry] = await Promise.all([
     findIntroPaths(person.id, user),
     getRelationships(person.id, user),
     getPersonCrm(user, person.id, { today }),
@@ -164,11 +164,25 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     queryOne<{ id: string }>("SELECT id FROM intake_submissions WHERE person_id = $1 ORDER BY submitted_at DESC LIMIT 1", [
       person.id,
     ]),
+    // The earliest history date and who added the contact, so "Added" agrees with the history.
+    queryOne<{ first_on: string | null; created_by: string | null }>(
+      `SELECT (SELECT min(happened_on)::text FROM engagements WHERE person_id = $1) AS first_on,
+              (SELECT u.name FROM engagements e JOIN users u ON u.id = e.user_id
+                WHERE e.person_id = $1 AND e.kind = 'contact_created'
+                ORDER BY e.happened_on, e.created_at LIMIT 1) AS created_by`,
+      [person.id],
+    ),
   ]);
+  const createdOn = schoolDateOf(person.created_at);
+  const firstOn = firstEntry?.first_on?.slice(0, 10) ?? null;
 
   return {
     view: "admin" as const,
     person,
+    added: {
+      on: firstOn && (!createdOn || firstOn < createdOn) ? firstOn : (createdOn ?? firstOn),
+      by: firstEntry?.created_by ?? person.owner_name ?? null,
+    },
     paths,
     relationships,
     caps,
@@ -185,6 +199,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     logKinds: ADMIN_LOGGABLE_KINDS as readonly (typeof ADMIN_LOGGABLE_KINDS)[number][],
     today,
   };
+}
+
+/** A timestamp as the school's calendar date (YYYY-MM-DD). */
+function schoolDateOf(value: string | Date | null | undefined): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : schoolToday(date);
 }
 
 const fail = (intent: string, errors: Partial<Record<string, MessageKey>>, status = 400) =>
@@ -383,7 +404,7 @@ function AccessControls({ visible, mode }: { visible: boolean; mode: ContactMode
       </label>
       <div className="grid gap-1.5">
         <span id="access-mode-label" className="text-xs text-smoke">
-          {t("common.field.contactMode")}
+          {t("people.profile.contactModeLabel")}
         </span>
         <Select
           value={currentMode}
@@ -508,31 +529,92 @@ function ContactLines({ name, email, phone }: { name: string; email: string | nu
 const addLinkClass =
   "inline-flex min-h-8 shrink-0 items-center gap-1 rounded-full text-xs font-medium text-graphite underline decoration-stone underline-offset-4 hover:text-ink hover:decoration-gold focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none max-md:min-h-10";
 
-/** An empty side section as one muted line: "CAPs  None yet  + Add to a CAP". The add form opens underneath. */
-function EmptyLine({ title, action, addLabel, children }: { title: string; action?: ReactNode; addLabel?: string; children?: ReactNode }) {
+/** An empty side section as one muted line: "Requests  None yet  + New request". */
+function EmptyLine({ title, action }: { title: string; action?: ReactNode }) {
   const { t } = useT();
-  const line = (trigger?: ReactNode) => (
-    <div className="flex min-h-10 flex-wrap items-center justify-between gap-x-3 gap-y-1 py-1.5">
+  return (
+    <li className="flex min-h-10 flex-wrap items-center justify-between gap-x-3 gap-y-1 py-1.5">
       <p className="text-sm text-smoke">
         <span className="font-medium text-graphite">{title}</span>
         <span className="sr-only">:</span> <span className="ml-1.5">{t("people.profile.noneYet")}</span>
       </p>
-      {trigger ?? action}
-    </div>
-  );
-  if (!children || !addLabel) return <li>{line()}</li>;
-  return (
-    <li>
-      <Collapsible className="grid">
-        {line(
-          <CollapsibleTrigger className={addLinkClass}>
-            <Plus className="size-3.5" aria-hidden="true" />
-            {addLabel}
-          </CollapsibleTrigger>,
-        )}
-        <CollapsibleContent className="pb-3">{children}</CollapsibleContent>
-      </Collapsible>
+      {action}
     </li>
+  );
+}
+
+/**
+ * Empty CRM sections as one quiet line: "Add: opportunity · request · CAP · connection".
+ * Opportunity and request open their forms; CAP and connection open a small form underneath.
+ */
+function AddLine({
+  personId,
+  opportunity,
+  request,
+  cap,
+  connection,
+}: {
+  personId: string;
+  opportunity: boolean;
+  request: boolean;
+  cap: ReactNode;
+  connection: ReactNode;
+}) {
+  const { t } = useT();
+  const [open, setOpen] = useState<"cap" | "connection" | null>(null);
+  const person = encodeURIComponent(personId);
+  const items: ReactNode[] = [];
+  if (opportunity)
+    items.push(
+      <Link key="opp" to={`/app/opportunities/new?person=${person}`} className={addLinkClass}>
+        {t("people.profile.addOpportunityShort")}
+      </Link>,
+    );
+  if (request)
+    items.push(
+      <Link key="req" to={`/app/requests/new?person=${person}`} className={addLinkClass}>
+        {t("people.profile.addRequestShort")}
+      </Link>,
+    );
+  const toggle = (which: "cap" | "connection", label: string) => (
+    <button
+      key={which}
+      type="button"
+      aria-expanded={open === which}
+      onClick={() => setOpen((cur) => (cur === which ? null : which))}
+      className={cn(addLinkClass, open === which && "text-ink decoration-gold")}
+    >
+      {label}
+    </button>
+  );
+  if (cap) items.push(toggle("cap", t("people.profile.addCapShort")));
+  if (connection) items.push(toggle("connection", t("people.profile.addConnectionShort")));
+
+  return (
+    <div className="grid gap-3 rounded-card bg-taupe px-5 py-2.5">
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-smoke">
+        <span className="inline-flex items-center gap-1 font-medium text-graphite">
+          <Plus className="size-3.5" aria-hidden="true" />
+          {t("people.profile.addLabel")}
+        </span>
+        {items.map((item, i) => (
+          <span key={i} className="inline-flex items-center gap-2">
+            {i > 0 && <span aria-hidden="true">·</span>}
+            {item}
+          </span>
+        ))}
+      </p>
+      {open === "cap" && cap && (
+        <div id="add-cap" className="pb-2">
+          {cap}
+        </div>
+      )}
+      {open === "connection" && connection && (
+        <div id="add-connection" className="pb-2">
+          {connection}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -558,37 +640,44 @@ function ProfileTitle({ name }: { name: string }) {
   );
 }
 
-/** Ways to help, skills, CAP topics and availability: the part both variants share. */
-function HelpDetails({
-  person,
-}: {
-  person: { contribution_types: PersonView["contribution_types"]; skills: string[]; cap_topics: string[]; availability: string | null };
-}) {
+type HelpPerson = { contribution_types: PersonView["contribution_types"]; skills: string[]; cap_topics: string[]; availability: string | null };
+
+/** Whether HelpDetails has anything to show (so an empty "About them" can disappear). */
+function hasHelpDetails(person: HelpPerson, showTopics: boolean): boolean {
+  return Boolean(
+    person.contribution_types.length || person.skills.length || (showTopics && person.cap_topics.length) || person.availability,
+  );
+}
+
+/**
+ * Ways to help, skills, CAP topics (admins only) and availability: the part both
+ * variants share. Empty parts are left out.
+ */
+function HelpDetails({ person, showTopics }: { person: HelpPerson; showTopics: boolean }) {
   const { t } = useT();
   const ways = CONTRIBUTION_TYPES.filter((type) => person.contribution_types.includes(type));
+  const topics = showTopics ? person.cap_topics : [];
   return (
     <>
-      <DetailBlock label={t("common.field.contributions")}>
-        {ways.length ? (
+      {ways.length > 0 && (
+        <DetailBlock label={t("common.field.contributions")}>
           <div className="flex flex-wrap gap-1.5">
             {ways.map((type) => (
               <ContributionChip key={type} type={type} long className="h-7 text-sm" />
             ))}
           </div>
-        ) : (
-          <p className="text-sm text-smoke">{t("people.profile.notAdded")}</p>
-        )}
-      </DetailBlock>
-      {(person.skills.length > 0 || person.cap_topics.length > 0) && (
+        </DetailBlock>
+      )}
+      {(person.skills.length > 0 || topics.length > 0) && (
         <div className="grid gap-5 sm:grid-cols-2">
           {person.skills.length > 0 && (
             <DetailBlock label={t("common.field.skills")}>
-              <TagList tags={person.skills} />
+              <TagList tags={person.skills.map(capitalizeFirst)} />
             </DetailBlock>
           )}
-          {person.cap_topics.length > 0 && (
+          {topics.length > 0 && (
             <DetailBlock label={t("common.field.capTopics")}>
-              <TopicList topics={person.cap_topics} />
+              <TopicList topics={topics} />
             </DetailBlock>
           )}
         </div>
@@ -630,13 +719,26 @@ function AdminProfile({ data: d }: { data: AdminData }) {
   const { person } = d;
   const defaultCap = useDefaultCap(d.capOptions);
   const subtitle = subtitleOf(t, person);
-  const sourceLine = person.source ? t("people.profile.sourceLine", { source: t(`common.source.${person.source}`) }) : null;
+  // "Added by staff" says nothing the name doesn't; other sources (sign-up form, referral...) still show.
+  const sourceLine =
+    person.source && person.source !== "admin"
+      ? t("people.profile.sourceLine", { source: t(`common.source.${person.source}`) })
+      : null;
+  const addedDate = formatDate(d.added.on, locale);
+  const addedLine = d.added.by
+    ? `${t("people.profile.addedBy", { name: d.added.by })}${addedDate ? ` · ${addedDate}` : ""}`
+    : addedDate
+      ? t("people.profile.addedOn", { date: addedDate })
+      : null;
   const reachEmpty = d.paths.length === 0 && !person.affiliations.some((a) => INNER_CIRCLE.includes(a));
   const empties = {
+    opportunities: d.crm.opportunities.length === 0,
     requests: d.requests.length === 0,
     caps: d.caps.length === 0,
     connections: d.relationships.length === 0,
   };
+  const showAbout =
+    hasHelpDetails(person, true) || Boolean(person.shared_summary || person.bio || person.funding_focus || person.notes);
 
   return (
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
@@ -705,8 +807,9 @@ function AdminProfile({ data: d }: { data: AdminData }) {
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
+          {showAbout && (
           <Panel title={t("people.profile.details")} bodyClassName="grid gap-5">
-            <HelpDetails person={person} />
+            <HelpDetails person={person} showTopics />
             {person.shared_summary && (
               <DetailBlock label={t("common.field.sharedSummary")}>
                 <Prose>{person.shared_summary}</Prose>
@@ -735,8 +838,11 @@ function AdminProfile({ data: d }: { data: AdminData }) {
               </DetailBlock>
             )}
           </Panel>
+          )}
 
-          <OpportunitiesPanel personId={person.id} opportunities={d.crm.opportunities} today={d.crm.today} />
+          {!empties.opportunities && (
+            <OpportunitiesPanel personId={person.id} opportunities={d.crm.opportunities} today={d.crm.today} />
+          )}
           <FollowUpsPanel
             personId={person.id}
             followUps={d.crm.followUps}
@@ -840,24 +946,26 @@ function AdminProfile({ data: d }: { data: AdminData }) {
                 </dd>
               </div>
             </dl>
-            <p className="-mt-1 text-xs text-smoke">
-              {t("people.profile.addedOn", { date: formatDate(person.created_at, locale) })}
-              {sourceLine && (
-                <>
-                  {" · "}
-                  {d.intakeId ? (
-                    <Link
-                      to={`/app/admin/intake/${d.intakeId}`}
-                      className="underline decoration-stone underline-offset-4 hover:text-ink hover:decoration-gold"
-                    >
-                      {sourceLine}
-                    </Link>
-                  ) : (
-                    sourceLine
-                  )}
-                </>
-              )}
-            </p>
+            {(addedLine || sourceLine) && (
+              <p className="-mt-1 text-xs text-smoke">
+                {addedLine}
+                {sourceLine && (
+                  <>
+                    {addedLine && " · "}
+                    {d.intakeId ? (
+                      <Link
+                        to={`/app/admin/intake/${d.intakeId}`}
+                        className="underline decoration-stone underline-offset-4 hover:text-ink hover:decoration-gold"
+                      >
+                        {sourceLine}
+                      </Link>
+                    ) : (
+                      sourceLine
+                    )}
+                  </>
+                )}
+              </p>
+            )}
             <div className="grid gap-3 border-t border-stone pt-4">
               <h3 className="text-eyebrow text-smoke">{t("people.profile.accessTitle")}</h3>
               <AccessControls visible={person.directory_visible} mode={person.contact_mode} />
@@ -890,31 +998,14 @@ function AdminProfile({ data: d }: { data: AdminData }) {
             </Panel>
           )}
 
-          {(empties.requests || empties.caps || empties.connections || reachEmpty) && (
-            <ul className="grid divide-y divide-stone/70 rounded-card bg-taupe px-5 py-1.5">
-              {empties.requests && (
-                <EmptyLine
-                  title={t("requests.panel.title")}
-                  action={
-                    <Link to={`/app/requests/new?person=${encodeURIComponent(person.id)}`} className={addLinkClass}>
-                      <Plus className="size-3.5" aria-hidden="true" />
-                      {t("requests.panel.new")}
-                    </Link>
-                  }
-                />
-              )}
-              {empties.caps && (
-                <EmptyLine title={t("people.profile.capsTitle")} addLabel={t("people.profile.addToCap")}>
-                  <CapForm caps={d.capOptions} />
-                </EmptyLine>
-              )}
-              {empties.connections && (
-                <EmptyLine title={t("people.profile.connectionsTitle")} addLabel={t("people.profile.addConnection")}>
-                  <ConnectionForm people={d.peopleOptions} personName={person.full_name} />
-                </EmptyLine>
-              )}
-              {reachEmpty && <EmptyLine title={t("people.profile.reachTitle")} />}
-            </ul>
+          {(empties.opportunities || empties.requests || empties.caps || empties.connections) && (
+            <AddLine
+              personId={person.id}
+              opportunity={empties.opportunities}
+              request={empties.requests}
+              cap={empties.caps ? <CapForm caps={d.capOptions} /> : null}
+              connection={empties.connections ? <ConnectionForm people={d.peopleOptions} personName={person.full_name} /> : null}
+            />
           )}
         </div>
       </div>
@@ -949,10 +1040,15 @@ function StaffProfile({ data: d }: { data: StaffData }) {
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
-          <Panel title={t("people.profile.details")} bodyClassName="grid gap-5">
-            {person.summary && <Prose>{person.summary}</Prose>}
-            <HelpDetails person={person} />
-          </Panel>
+          {(person.summary || hasHelpDetails(person, false)) && (
+            <Panel title={t("people.profile.details")} bodyClassName="grid gap-5">
+              {person.summary && <Prose>{person.summary}</Prose>}
+              <HelpDetails person={person} showTopics={false} />
+            </Panel>
+          )}
+
+          {/* With no visits yet, the requests come first and History is just its "Log work" action. */}
+          {d.history.length === 0 && d.requests.length > 0 && <RequestsPanel personId={person.id} requests={d.requests} />}
 
           <Panel
             title={t("people.profile.historyTitle")}
@@ -969,16 +1065,19 @@ function StaffProfile({ data: d }: { data: StaffData }) {
             <LogBox title={t("people.profile.logWork")} startOpen={Boolean(defaultCap)}>
               <LogActivityForm caps={d.capOptions} today={d.today} defaultCap={defaultCap} kinds={d.logKinds} />
             </LogBox>
-            <HistoryTimeline
-              engagements={d.history}
-              isAdmin={false}
-              personId={person.id}
-              staffAuthored={d.staffAuthored}
-              emptyLabel={t("people.profile.historyStaffEmpty")}
-            />
+            {/* With a request about this person, "no visits yet" would read as "nothing happened". */}
+            {(d.history.length > 0 || d.requests.length === 0) && (
+              <HistoryTimeline
+                engagements={d.history}
+                isAdmin={false}
+                personId={person.id}
+                staffAuthored={d.staffAuthored}
+                emptyLabel={t("people.profile.historyStaffEmpty")}
+              />
+            )}
           </Panel>
 
-          {d.requests.length > 0 && <RequestsPanel personId={person.id} requests={d.requests} />}
+          {d.history.length > 0 && d.requests.length > 0 && <RequestsPanel personId={person.id} requests={d.requests} />}
         </div>
 
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
@@ -1011,20 +1110,17 @@ function StaffProfile({ data: d }: { data: StaffData }) {
             </Panel>
           ) : null}
 
-          {(d.requests.length === 0 || d.caps.length === 0) && (
-            <ul className="grid divide-y divide-stone/70 rounded-card bg-taupe px-5 py-1.5">
-              {d.requests.length === 0 && (
-                <EmptyLine
-                  title={t("requests.panel.title")}
-                  action={
-                    <Link to={`/app/requests/new?person=${encodeURIComponent(person.id)}`} className={addLinkClass}>
-                      <Plus className="size-3.5" aria-hidden="true" />
-                      {t("requests.panel.new")}
-                    </Link>
-                  }
-                />
-              )}
-              {d.caps.length === 0 && <EmptyLine title={t("people.profile.capsTitle")} />}
+          {d.requests.length === 0 && (
+            <ul className="grid rounded-card bg-taupe px-5 py-1.5">
+              <EmptyLine
+                title={t("requests.panel.title")}
+                action={
+                  <Link to={`/app/requests/new?person=${encodeURIComponent(person.id)}`} className={addLinkClass}>
+                    <Plus className="size-3.5" aria-hidden="true" />
+                    {t("requests.panel.new")}
+                  </Link>
+                }
+              />
             </ul>
           )}
         </div>

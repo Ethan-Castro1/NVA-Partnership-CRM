@@ -120,12 +120,24 @@ export function CapCard({ cap }: { cap: CapSummary }) {
 function partnerSummary(t: TFunction, total: number, confirmed: number): string | null {
   if (!total) return null;
   if (total === 1) return confirmed ? t("caps.card.partnerCountOneConfirmed") : t("caps.card.partnerCountOne");
-  return confirmed
-    ? t("caps.card.partnerCountConfirmed", { count: total, confirmed })
-    : t("caps.card.partnerCount", { count: total });
+  if (!confirmed) return t("caps.card.partnerCount", { count: total });
+  return confirmed === 1
+    ? t("caps.card.partnerCountOneOfMany", { count: total })
+    : t("caps.card.partnerCountConfirmed", { count: total, confirmed });
 }
 
-/** CAPs as a compact list: title over teacher, blocks and labels, with the status and partners on the right. */
+/** "Needs a partner": a CAP still running with no confirmed partner. */
+export function NeedsPartnerTag({ className }: { className?: string }) {
+  const { t } = useT();
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 text-xs font-medium whitespace-nowrap text-rust-ink", className)}>
+      <span className="size-1.5 shrink-0 rounded-full bg-rust" aria-hidden="true" />
+      {t("caps.card.needsPartner")}
+    </span>
+  );
+}
+
+/** CAPs as a compact list: title over teacher, blocks and labels, with the status, "Needs a partner" and partners on the right. */
 export function CapRows({ caps }: { caps: CapSummary[] }) {
   const { t } = useT();
   return (
@@ -134,6 +146,7 @@ export function CapRows({ caps }: { caps: CapSummary[] }) {
         const days = cap.blocks.map((b) => `${t("caps.block.name", { block: b })} ${t(`caps.days.${BLOCK_DAYS[b]}`)}`).join(", ");
         const meta = [cap.teacher || cap.owner_name, days, ...cap.labels.map((l) => t(`caps.label.${l}`))].filter(Boolean);
         const partners = partnerSummary(t, cap.partner_count, cap.confirmed_count);
+        const needsPartner = cap.confirmed_count === 0 && cap.status !== "complete";
         return (
           <li key={cap.id} className="flex items-center gap-3 py-3">
             <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-0.5">
@@ -142,9 +155,10 @@ export function CapRows({ caps }: { caps: CapSummary[] }) {
               </Link>
               <p className="truncate text-xs text-smoke">{meta.join(" · ")}</p>
             </div>
-            {(partners || cap.status !== "active") && (
-              <div className="flex shrink-0 flex-col items-end gap-1 text-right max-sm:max-w-[5.5rem]">
+            {(partners || needsPartner || cap.status !== "active") && (
+              <div className="flex shrink-0 flex-col items-end gap-1 text-right max-sm:max-w-[7rem]">
                 {cap.status !== "active" && <CapStatusBadge status={cap.status} />}
+                {needsPartner && <NeedsPartnerTag />}
                 {partners && <span className={cn("text-xs", cap.confirmed_count ? "text-sage-ink" : "text-smoke")}>{partners}</span>}
               </div>
             )}

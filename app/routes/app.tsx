@@ -51,9 +51,9 @@ function AppShell() {
       </a>
       <AppSidebar user={user} counts={navCounts} />
       <SidebarInset className={cn("bg-canvas transition-[padding]", panelVisible && PANEL_WIDTH_CLASS)}>
-        <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-3 border-b border-stone bg-canvas/90 px-4 backdrop-blur transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-14 md:px-6">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="h-5" />
+        <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-2 sm:gap-3 border-b border-stone bg-canvas/90 px-4 backdrop-blur transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-14 md:px-6">
+          <SidebarTrigger className="-ml-1 max-md:-ml-3" />
+          <Separator orientation="vertical" className="h-5 data-vertical:self-center max-sm:hidden" />
           <Form method="get" action="/app/people" role="search" className="relative w-full max-w-md">
             <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-smoke" aria-hidden="true" />
             <label htmlFor="global-search" className="sr-only">

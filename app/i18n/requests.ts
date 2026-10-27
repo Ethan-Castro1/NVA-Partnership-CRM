@@ -101,6 +101,7 @@ export default defineMessages(
     "admin.title": "Arrange it",
     "admin.status": "Status",
     "admin.reply": "Reply to {name}",
+    "admin.emailPerson": "Email {name}",
     "admin.replyPlaceholder": "Who is coming, when and where.",
     "admin.owner": "Looked after by",
     "admin.ownerNone": "Nobody yet",
@@ -130,6 +131,7 @@ export default defineMessages(
     "list.col.status": "Status",
     "list.empty": "Nothing here right now.",
     "list.introductions": "{count} introductions waiting",
+    "list.introductionsOne": "1 introduction waiting",
 
     // Shared list pieces
     "item.intro": "Introduction",
@@ -248,6 +250,7 @@ export default defineMessages(
     "admin.title": "Organizarlo",
     "admin.status": "Estado",
     "admin.reply": "Responder a {name}",
+    "admin.emailPerson": "Escribirle a {name}",
     "admin.replyPlaceholder": "Quién viene, cuándo y dónde.",
     "admin.owner": "A cargo de",
     "admin.ownerNone": "Nadie todavía",
@@ -276,6 +279,7 @@ export default defineMessages(
     "list.col.status": "Estado",
     "list.empty": "No hay nada aquí por ahora.",
     "list.introductions": "{count} presentaciones en espera",
+    "list.introductionsOne": "1 presentación en espera",
 
     "item.intro": "Presentación",
     "item.with": "Con {names}",
@@ -286,7 +290,7 @@ export default defineMessages(
     "panel.new": "Nueva solicitud",
 
     "mine.title": "Mis solicitudes abiertas",
-    "mine.viewAll": "Ver todas",
+    "mine.viewAll": "Ver todo",
     "mine.empty": "No hay solicitudes abiertas.",
 
     "connections.title": "Mis conexiones",

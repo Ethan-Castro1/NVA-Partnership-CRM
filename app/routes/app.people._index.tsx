@@ -5,12 +5,13 @@
  * with CRM filters, the CSV export and quick add.
  */
 import { Link, useLoaderData, useLocation, useNavigation } from "react-router";
-import { Building2, ChevronLeft, ChevronRight, Download, Plus } from "lucide-react";
+import { Building2, ChevronLeft, ChevronRight, Download, MoreHorizontal, Plus } from "lucide-react";
 import type { Route } from "./+types/app.people._index";
 import { DirectoryFilters } from "~/components/people/directory-filters";
 import { PeopleResults } from "~/components/people/people-results";
 import { EmptyState, PageHeader } from "~/components/nva";
 import { Button } from "~/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "~/components/ui/dropdown-menu";
 import { makeT, useT } from "~/i18n";
 import { requireUser } from "~/lib/auth.server";
 import { PAGE_SIZE } from "~/lib/constants";
@@ -64,18 +65,27 @@ export default function PeopleDirectory() {
                   {t("directory.organizations")}
                 </Link>
               </Button>
-              <Button asChild variant="outline">
-                <Link to="/app/admin/export.csv" reloadDocument>
-                  <Download aria-hidden="true" />
-                  {t("common.action.export")}
-                </Link>
-              </Button>
               <Button asChild variant="brand">
                 <Link to="/app/people/new">
                   <Plus aria-hidden="true" />
                   {t("directory.addContact")}
                 </Link>
               </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon" className="max-md:size-10" aria-label={t("directory.moreActions")}>
+                    <MoreHorizontal aria-hidden="true" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-auto min-w-40">
+                  <DropdownMenuItem asChild>
+                    <Link to="/app/admin/export.csv" reloadDocument>
+                      <Download aria-hidden="true" />
+                      {t("common.action.export")}
+                    </Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </>
           )
         }

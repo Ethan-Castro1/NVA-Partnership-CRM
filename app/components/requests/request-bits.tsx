@@ -103,16 +103,17 @@ export function RequestRows({
               className="group grid grid-cols-[minmax(0,1fr)] gap-0.5 rounded-md focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
             >
               <span className="flex items-start justify-between gap-3">
-                <span className="min-w-0 font-medium group-hover:underline">{r.need}</span>
+                <span className="min-w-0 font-medium group-hover:underline">{r.need}</span>{" "}
                 <RequestStatusBadge status={r.status} className="mt-0.5 shrink-0" />
               </span>
               <span className="truncate text-xs text-smoke">
                 {r.kind === "introduction" && (
-                  <span className="mr-2 inline-flex items-center gap-1 font-medium text-graphite">
+                  <span className="inline-flex items-center gap-1 font-medium text-graphite">
                     <Handshake className="size-3" aria-hidden="true" />
                     {t("requests.item.intro")}
                   </span>
                 )}
+                {r.kind === "introduction" && meta.length > 0 && " · "}
                 {meta.join(" · ")}
               </span>
             </Link>

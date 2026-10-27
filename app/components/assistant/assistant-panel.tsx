@@ -7,7 +7,7 @@
  * page shows the same chat instead.
  */
 import { Link, useLocation } from "react-router";
-import { Maximize2, Sparkles, SquarePen, X } from "lucide-react";
+import { Maximize2, MessagesSquare, SquarePen, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { VillageMark } from "~/components/nva";
 import { Button } from "~/components/ui/button";
@@ -166,9 +166,10 @@ export function AssistantToggle({ className }: { className?: string }) {
       onClick={() => setPanelOpen(!panelOpen)}
       aria-pressed={panelOpen}
       aria-label={t("assistant.openPanel")}
-      className={cn("shrink-0", className)}
+      // A quiet way in: a plain button, icon only (44px) on phones.
+      className={cn("shrink-0 font-normal text-graphite max-sm:size-11 max-sm:px-0", className)}
     >
-      <Sparkles aria-hidden="true" className="text-gold-ink" />
+      <MessagesSquare aria-hidden="true" />
       <span className="hidden sm:inline" aria-hidden="true">
         {t("assistant.openPanel")}
       </span>

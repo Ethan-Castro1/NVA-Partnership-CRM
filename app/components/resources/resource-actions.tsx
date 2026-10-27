@@ -12,19 +12,26 @@
  * a small ⋯ menu, shown on the profile (non-compact) or with `showMenu`.
  * `variant="icons"` is the admin table cell: a contact icon and a ⋯ menu
  * holding Call, Save and Track as a request.
- * Save posts to /app/saved, which checks the viewer can see the person.
+ * Save posts to /app/saved, which checks the viewer can see the person. The
+ * pressed state reads "Saved" (aria-pressed on the button, a checked item in
+ * the table menu, a visible label on the profile), and a save shows a small
+ * "Saved to My Connections" toast with a link there.
  *
  *   <ResourceActions person={hit} saved={savedIds.has(hit.id)} compact />
  */
+import { useEffect, useRef } from "react";
 import { Link, useFetcher, useRouteLoaderData } from "react-router";
+import { toast } from "sonner";
 import { Bookmark, BookmarkCheck, ClipboardList, Handshake, Mail, MoreHorizontal, Phone, UserRound } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
+import { withNode } from "~/components/people/format";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
 import { useT } from "~/i18n";
 import type { ContactMode } from "~/lib/constants";
@@ -108,6 +115,25 @@ export function ResourceActions({
   const toggleSave = () =>
     fetcher.submit({ personId: person.id, intent: isSaved ? "unsave" : "save" }, { method: "post", action: "/app/saved" });
 
+  // One toast per finished save (not on unsave, and not again on re-render).
+  const toasted = useRef<unknown>(null);
+  useEffect(() => {
+    const result = fetcher.state === "idle" ? fetcher.data : undefined;
+    if (!result || toasted.current === result) return;
+    toasted.current = result;
+    if (result.ok && result.saved) {
+      toast.success(
+        withNode(
+          t("resources.actions.savedToast"),
+          <Link to="/app/my-connections" className="font-medium underline underline-offset-4">
+            {t("resources.actions.myConnections")}
+          </Link>,
+          "{link}",
+        ),
+      );
+    }
+  }, [fetcher.state, fetcher.data, t]);
+
   const saveLabel = t("resources.actions.saveLabel", { name });
   const contactHref = person.email ? `mailto:${person.email}` : person.phone ? telHref(person.phone) : null;
   const contactLabel = person.email ? t("resources.actions.email", { name }) : t("resources.actions.phone", { name });
@@ -123,10 +149,10 @@ export function ResourceActions({
         </DropdownMenuItem>
       )}
       {variant === "icons" && (
-        <DropdownMenuItem onSelect={toggleSave}>
+        <DropdownMenuCheckboxItem checked={isSaved} onCheckedChange={toggleSave}>
           {isSaved ? <BookmarkCheck aria-hidden /> : <Bookmark aria-hidden />}
-          {isSaved ? t("resources.actions.unsave") : t("resources.actions.save")}
-        </DropdownMenuItem>
+          {isSaved ? t("resources.actions.saved") : t("resources.actions.save")}
+        </DropdownMenuCheckboxItem>
       )}
       {canTrack && (
         <DropdownMenuItem asChild>
@@ -224,23 +250,42 @@ export function ResourceActions({
 
       <fetcher.Form method="post" action="/app/saved" className="contents">
         <input type="hidden" name="personId" value={person.id} />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="submit"
-              name="intent"
-              value={isSaved ? "unsave" : "save"}
-              variant="ghost"
-              size={compact ? "icon-sm" : "icon"}
-              aria-pressed={isSaved}
-              aria-label={saveLabel}
-              className={cn(touch, isSaved && "text-gold-ink")}
-            >
-              {isSaved ? <BookmarkCheck aria-hidden className="fill-gold-soft" /> : <Bookmark aria-hidden />}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{isSaved ? t("resources.actions.saved") : t("resources.actions.save")}</TooltipContent>
-        </Tooltip>
+        {compact ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="submit"
+                name="intent"
+                value={isSaved ? "unsave" : "save"}
+                variant="ghost"
+                size="icon-sm"
+                aria-pressed={isSaved}
+                aria-label={saveLabel}
+                className={cn(touch, isSaved && "text-gold-ink")}
+              >
+                {isSaved ? <BookmarkCheck aria-hidden className="fill-gold-soft" /> : <Bookmark aria-hidden />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{isSaved ? t("resources.actions.saved") : t("resources.actions.save")}</TooltipContent>
+          </Tooltip>
+        ) : (
+          // On the profile the state is spelled out: "Save" or "Saved".
+          <Button
+            type="submit"
+            name="intent"
+            value={isSaved ? "unsave" : "save"}
+            variant="ghost"
+            aria-pressed={isSaved}
+            className={cn(touch, isSaved && "text-gold-ink")}
+          >
+            {isSaved ? (
+              <BookmarkCheck aria-hidden data-icon="inline-start" className="fill-gold-soft" />
+            ) : (
+              <Bookmark aria-hidden data-icon="inline-start" />
+            )}
+            {isSaved ? t("resources.actions.saved") : t("resources.actions.save")}
+          </Button>
+        )}
       </fetcher.Form>
 
       {menu && hasMenuItems && moreMenu}

@@ -4,6 +4,7 @@
  * of the same kind share one phrase.
  */
 import { useTopicLabel } from "~/components/caps/cap-bits";
+import { capitalizeFirst } from "~/components/people/format";
 import { useT, type MessageKey } from "~/i18n";
 import type { MatchReason, MatchReasonKind } from "~/lib/search-language";
 import { cn } from "~/lib/utils";
@@ -32,7 +33,8 @@ export function MatchReasons({
 
   const phrases = groups.slice(0, max).map(({ kind, values }) => {
     if (kind === "offers") return t(`resources.why.offers.${values[0]}` as MessageKey);
-    const shown = kind === "cap" ? values.map(topicLabel) : values;
+    // Skills are often typed in lowercase ("carpentry"); show them capitalized.
+    const shown = kind === "cap" ? values.map(topicLabel) : kind === "skill" ? values.map(capitalizeFirst) : values;
     return t(`resources.why.${kind}` as MessageKey, { value: shown.join(", ") });
   });
 

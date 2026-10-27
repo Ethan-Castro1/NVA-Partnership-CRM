@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Form, data, redirect, useActionData, useNavigation } from "react-router";
+import { ChevronRight } from "lucide-react";
 import type { Route } from "./+types/join";
 import {
   CheckRow,
@@ -11,7 +12,7 @@ import {
   ReferralRows,
   Req,
 } from "~/components/intake/form-parts";
-import { REFERRAL_SLOTS, type IntakeErrors, type IntakeFormValues } from "~/components/intake/form-types";
+import { REFERRAL_SLOTS, isBlankReferral, type IntakeErrors, type IntakeFormValues } from "~/components/intake/form-types";
 import { PublicTopBar, SkipLink } from "~/components/intake/public-shell";
 import { Field, FullLogo } from "~/components/nva";
 import { Button } from "~/components/ui/button";
@@ -317,9 +318,23 @@ export default function Join() {
               </div>
             </FormSection>
 
-            <FormSection legend={t("intake.section.referrals")} hint={t("intake.section.referralsHint")}>
-              <ReferralRows rows={v?.referrals ?? EMPTY_ROWS} errors={errors} />
-            </FormSection>
+            {/* Optional, so it stays closed behind a link until they open it (or come back with something filled in). */}
+            <details
+              className="group border-t border-stone pt-7"
+              open={!!v?.referrals.some((row) => !isBlankReferral(row)) || Object.keys(errors).some((k) => k.startsWith("referrals."))}
+            >
+              <summary className="grid cursor-pointer list-none gap-1 rounded-md focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none [&::-webkit-details-marker]:hidden">
+                <span className="inline-flex min-h-10 w-fit items-center gap-1.5 font-medium text-ink underline decoration-gold decoration-2 underline-offset-4">
+                  <ChevronRight className="size-4 shrink-0 transition-transform group-open:rotate-90" aria-hidden="true" />
+                  {t("intake.section.referrals")}
+                </span>
+                <span className="text-sm text-smoke">{t("intake.section.referralsHint")}</span>
+              </summary>
+              <fieldset className="mt-4 grid gap-4">
+                <legend className="sr-only">{t("intake.section.referrals")}</legend>
+                <ReferralRows rows={v?.referrals ?? EMPTY_ROWS} errors={errors} />
+              </fieldset>
+            </details>
 
             {/* f. Consent */}
             <FormSection legend={<Req>{t("intake.section.consent")}</Req>} error={err("consent")} errorId="consent-error">

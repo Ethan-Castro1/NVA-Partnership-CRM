@@ -12,7 +12,7 @@ import { cn } from "~/lib/utils";
 export const linkClass =
   "rounded-sm font-medium text-ink hover:underline hover:decoration-gold hover:decoration-2 hover:underline-offset-4 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none";
 
-/** On phones, a dashboard list shows its first three rows; "View all" has the rest. */
+/** On phones, a dashboard list shows its first three rows; "See all" has the rest. */
 export const MOBILE_LIMIT = "max-sm:[&>li:nth-child(n+4)]:hidden";
 
 export function ViewAll({ to, label }: { to: string; label?: string }) {
@@ -31,16 +31,21 @@ export function ViewAll({ to, label }: { to: string; label?: string }) {
 
 const EXAMPLES = ["carpentry", "healthcare", "event", "environment", "internships"] as const;
 
-/** The staff hero: "What do you need help with?" Submits to /app/people?q=; the examples are one-click searches. */
+/**
+ * The staff hero: "What do you need help with?" (the page's h1). Submits to /app/people?q=; the examples are
+ * one-click searches, and a quiet link asks the partnership team to arrange something instead.
+ */
 export function NeedSearch() {
   const { t } = useT();
   const inputId = "need-search";
   return (
     <section aria-labelledby={`${inputId}-label`} className="rounded-card bg-canvas p-5 shadow-whisper md:p-8">
       <Form method="get" action="/app/people" role="search" className="grid gap-3">
-        <label id={`${inputId}-label`} htmlFor={inputId} className="text-heading">
-          {t("dashboard.search.title")}
-        </label>
+        <h1 className="text-heading">
+          <label id={`${inputId}-label`} htmlFor={inputId}>
+            {t("dashboard.search.title")}
+          </label>
+        </h1>
         <div className="flex flex-col gap-2 sm:flex-row">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-smoke" aria-hidden="true" />
@@ -76,6 +81,15 @@ export function NeedSearch() {
             );
           })}
         </ul>
+        <p className="mt-1 text-sm text-graphite">
+          {t("dashboard.askHelp.question")}{" "}
+          <Link
+            to="/app/requests/new"
+            className="font-medium text-ink underline decoration-gold decoration-2 underline-offset-4 hover:decoration-ink focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+          >
+            {t("dashboard.askHelp.link")}
+          </Link>
+        </p>
       </div>
     </section>
   );

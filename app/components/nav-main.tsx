@@ -43,7 +43,7 @@ export function NavMain({ label, items }: { label?: string; items: NavItem[] }) 
                 asChild
                 isActive={active}
                 tooltip={item.title}
-                className="data-[active=true]:bg-gold-soft data-[active=true]:font-semibold [&>svg]:text-graphite data-[active=true]:[&>svg]:text-gold-ink"
+                className="h-10 gap-3 px-3 text-[15px] data-[active=true]:bg-gold-soft data-[active=true]:font-semibold [&>svg]:size-[18px] [&>svg]:text-graphite data-[active=true]:[&>svg]:text-gold-ink"
               >
                 <NavLink to={item.url} end={item.end}>
                   {item.icon}
@@ -55,7 +55,7 @@ export function NavMain({ label, items }: { label?: string; items: NavItem[] }) 
                 <SidebarMenuBadge
                   aria-hidden={item.badgeLabel ? true : undefined}
                   className={cn(
-                    "rounded-full px-1.5 tabular-nums",
+                    "!top-2.5 right-2 rounded-full px-1.5 tabular-nums",
                     item.badgeTone === "alert" ? "bg-rust-soft text-rust-ink" : "bg-gold-soft text-gold-ink",
                   )}
                 >

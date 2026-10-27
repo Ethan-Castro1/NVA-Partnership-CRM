@@ -103,7 +103,7 @@ export function AppSidebar({
                   <span className="truncate font-display text-[0.78rem] font-bold tracking-[0.06em] uppercase">
                     {t("common.schoolName")}
                   </span>
-                  <span className="truncate text-xs text-smoke">{t("common.appName")}</span>
+                  <span className="truncate text-[13px] text-smoke">{t("common.appName")}</span>
                 </span>
               </Link>
             </SidebarMenuButton>

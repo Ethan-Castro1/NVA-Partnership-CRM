@@ -28,9 +28,9 @@ export function NavUser({ user }: { user: SessionUser }) {
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
               <PersonAvatar name={user.name} className="size-8" />
-              <div className="grid flex-1 text-left text-sm leading-tight">
+              <div className="grid flex-1 text-left text-[15px] leading-tight">
                 <span className="truncate font-medium">{user.name}</span>
-                <span className="truncate text-xs text-smoke">{t(`common.role.${user.role}`)}</span>
+                <span className="truncate text-[13px] text-smoke">{t(`common.role.${user.role}`)}</span>
               </div>
               <ChevronsUpDownIcon className="ml-auto size-4" />
             </SidebarMenuButton>

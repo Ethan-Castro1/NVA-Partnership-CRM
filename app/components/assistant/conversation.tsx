@@ -7,6 +7,7 @@
 import { useChat } from "@ai-sdk/react";
 import { CirclePlay, RotateCcw, SendHorizontal, Square } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useRouteLoaderData } from "react-router";
 import type { Chat } from "@ai-sdk/react";
 import { VillageMark } from "~/components/nva";
 import { Button } from "~/components/ui/button";
@@ -30,7 +31,9 @@ export function AssistantConversation({ variant }: { variant: Variant }) {
 
 function ChatView({ chat, variant }: { chat: Chat<AskMessage>; variant: Variant }) {
   const { t } = useT();
+  const root = useRouteLoaderData("root") as { aiConfigured?: boolean } | undefined;
   const { messages, sendMessage, status, error, stop, regenerate } = useChat<AskMessage>({ chat });
+  const page = variant === "page";
   const [draft, setDraft] = useState("");
   const [example, setExample] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
@@ -63,7 +66,7 @@ function ChatView({ chat, variant }: { chat: Chat<AskMessage>; variant: Variant 
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className={cn("min-h-0 flex-1 overflow-y-auto", variant === "panel" ? "px-4 py-4" : "py-2")}>
+      <div className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto", page ? "py-2" : "px-4 py-4")}>
         {messages.length === 0 ? (
           example ? (
             <ExampleConversation
@@ -73,14 +76,14 @@ function ChatView({ chat, variant }: { chat: Chat<AskMessage>; variant: Variant 
               }}
             />
           ) : (
-            <div className="flex flex-col items-start gap-4 py-2">
+            <div className={cn("flex flex-col gap-4 py-2", page ? "my-auto items-center text-center" : "items-start")}>
               <VillageMark className="size-10" />
               <div className="space-y-1">
                 <h2 className="text-section">{t("assistant.emptyTitle")}</h2>
                 <p className="text-sm text-smoke">{t("assistant.emptyBody")}</p>
               </div>
-              <ExamplePrompts onPick={send} label={t("dashboard.examplesLabel")} />
-              <Button type="button" variant="ghost" size="sm" onClick={() => setExample(true)} className="-ml-2">
+              <ExamplePrompts onPick={send} label={t("dashboard.examplesLabel")} className={cn(page && "max-w-2xl justify-center")} />
+              <Button type="button" variant="ghost" size="sm" onClick={() => setExample(true)} className={cn(!page && "-ml-2")}>
                 <CirclePlay aria-hidden="true" />
                 {t("assistant.exampleButton")}
               </Button>
@@ -123,7 +126,7 @@ function ChatView({ chat, variant }: { chat: Chat<AskMessage>; variant: Variant 
           event.preventDefault();
           send(draft);
         }}
-        className={cn("shrink-0", variant === "panel" ? "border-t border-stone bg-canvas p-3" : "mt-4 rounded-card bg-taupe p-3 md:p-4")}
+        className={cn("shrink-0", page ? "mt-3 rounded-card bg-taupe p-3" : "border-t border-stone bg-canvas p-3")}
       >
         <label htmlFor={`ask-${variant}`} className="sr-only">
           {t("assistant.inputLabel")}
@@ -132,7 +135,7 @@ function ChatView({ chat, variant }: { chat: Chat<AskMessage>; variant: Variant 
           <Textarea
             ref={inputRef}
             id={`ask-${variant}`}
-            rows={variant === "panel" ? 1 : 2}
+            rows={1}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={onKeyDown}
@@ -150,7 +153,16 @@ function ChatView({ chat, variant }: { chat: Chat<AskMessage>; variant: Variant 
             </Button>
           )}
         </div>
-        <p className="mt-1.5 px-1 text-xs text-smoke">{tooLong ? t("assistant.errorTooLong") : t("assistant.enterHint")}</p>
+        <p className="mt-1.5 px-1 text-xs text-smoke">
+          {tooLong ? (
+            t("assistant.errorTooLong")
+          ) : (
+            <>
+              {t("assistant.enterHint")}
+              {root?.aiConfigured === false && <span className="block sm:inline sm:before:content-['_']">{t("common.ai.notConfigured")}</span>}
+            </>
+          )}
+        </p>
       </form>
     </div>
   );

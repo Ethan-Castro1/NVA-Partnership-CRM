@@ -2,7 +2,7 @@
 import { Link } from "react-router";
 import { CalendarDays, UserRound, Users } from "lucide-react";
 import { Sheet, TagList } from "~/components/nva";
-import { useT } from "~/i18n";
+import { useT, type TFunction } from "~/i18n";
 import type { CapStatus } from "~/lib/constants";
 import { BLOCK_DAYS, catalogCap, capTopicShort, type CapBlock, type CapLabel } from "~/lib/cap-catalog";
 import type { CapSummary } from "~/lib/caps.server";
@@ -116,7 +116,16 @@ export function CapCard({ cap }: { cap: CapSummary }) {
   );
 }
 
-/** CAPs as a compact list, two lines a row: title and partners, then teacher, blocks and labels. */
+/** "3 partners" or "3 partners, 1 confirmed"; nothing when there are none. */
+function partnerSummary(t: TFunction, total: number, confirmed: number): string | null {
+  if (!total) return null;
+  if (total === 1) return confirmed ? t("caps.card.partnerCountOneConfirmed") : t("caps.card.partnerCountOne");
+  return confirmed
+    ? t("caps.card.partnerCountConfirmed", { count: total, confirmed })
+    : t("caps.card.partnerCount", { count: total });
+}
+
+/** CAPs as a compact list: title over teacher, blocks and labels, with the status and partners on the right. */
 export function CapRows({ caps }: { caps: CapSummary[] }) {
   const { t } = useT();
   return (
@@ -124,23 +133,21 @@ export function CapRows({ caps }: { caps: CapSummary[] }) {
       {caps.map((cap) => {
         const days = cap.blocks.map((b) => `${t("caps.block.name", { block: b })} ${t(`caps.days.${BLOCK_DAYS[b]}`)}`).join(", ");
         const meta = [cap.teacher || cap.owner_name, days, ...cap.labels.map((l) => t(`caps.label.${l}`))].filter(Boolean);
+        const partners = partnerSummary(t, cap.partner_count, cap.confirmed_count);
         return (
-          <li key={cap.id} className="grid grid-cols-[minmax(0,1fr)] gap-0.5 py-3">
-            <div className="flex items-start justify-between gap-3">
+          <li key={cap.id} className="flex items-center gap-3 py-3">
+            <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-0.5">
               <Link to={`/app/caps/${cap.id}`} className="min-w-0 font-medium underline-offset-4 hover:underline">
                 {cap.title}
               </Link>
-              {cap.status !== "active" ? (
-                <CapStatusBadge status={cap.status} className="mt-0.5 shrink-0" />
-              ) : (
-                <span className={cn("shrink-0 text-xs", cap.confirmed_count ? "text-sage-ink" : "text-smoke")}>
-                  {cap.partner_count
-                    ? t("caps.card.partnersShort", { confirmed: cap.confirmed_count, total: cap.partner_count })
-                    : t("caps.card.noPartners")}
-                </span>
-              )}
+              <p className="truncate text-xs text-smoke">{meta.join(" · ")}</p>
             </div>
-            <p className="truncate text-xs text-smoke">{meta.join(" · ")}</p>
+            {(partners || cap.status !== "active") && (
+              <div className="flex shrink-0 flex-col items-end gap-1 text-right max-sm:max-w-[5.5rem]">
+                {cap.status !== "active" && <CapStatusBadge status={cap.status} />}
+                {partners && <span className={cn("text-xs", cap.confirmed_count ? "text-sage-ink" : "text-smoke")}>{partners}</span>}
+              </div>
+            )}
           </li>
         );
       })}

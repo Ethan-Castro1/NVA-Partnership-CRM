@@ -84,14 +84,18 @@ export default function PeopleDirectory() {
       <DirectoryFilters params={params} topics={topics} isAdmin={isAdmin} owners={owners} />
 
       <section aria-labelledby="people-results" aria-busy={loading} className={cn("grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 transition-opacity", loading && "opacity-60")}>
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
+        {/* Holds only screen-reader text on a single page without a search, so it takes no room then. */}
+        <div className={pages <= 1 && !params.q ? "sr-only" : "flex flex-wrap items-baseline justify-between gap-2"}>
           <h2 id="people-results" className="sr-only">
             {t("directory.resultsHeading")}
           </h2>
+          {/* Paging text shows only with more than one page (screen readers always hear the count). */}
           {total > 0 && (
             <p className="text-sm text-smoke" aria-live="polite">
-              {t("directory.showing", { from, to, total })}
-              {params.q && <span className="block sm:inline sm:before:content-['_·_']">{t("directory.matchesFor", { q: params.q })}</span>}
+              <span className={cn(pages <= 1 && "sr-only")}>{t("directory.showing", { from, to, total })}</span>
+              {params.q && (
+                <span className={cn(pages > 1 && "block sm:inline sm:before:content-['_·_']")}>{t("directory.matchesFor", { q: params.q })}</span>
+              )}
             </p>
           )}
         </div>

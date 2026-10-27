@@ -1,17 +1,16 @@
 /**
- * "Ask the village" as a full page: saved chats on the left, the
- * conversation on the right. It shows the same chat as the side panel
+ * "Ask the village" as a full page: saved chats in a slim left column (a
+ * "Past chats" menu on phones), the conversation filling the rest. It shows the same chat as the side panel
  * (AssistantProvider), so a conversation can move between the two.
  * /app/ask?q=... asks that question in a new chat.
  */
 import { useEffect, useRef } from "react";
-import { Link, useLoaderData, useNavigate, useRouteLoaderData } from "react-router";
+import { Link, useLoaderData, useNavigate } from "react-router";
 import type { Route } from "./+types/app.ask";
 import { useAssistant } from "~/components/assistant/assistant-provider";
-import { ChatHistoryList } from "~/components/assistant/chat-history";
+import { ChatHistoryList, ChatHistoryMenu } from "~/components/assistant/chat-history";
 import { AssistantConversation } from "~/components/assistant/conversation";
 import { MAX_MESSAGE_CHARS } from "~/components/assistant/types";
-import { AiNotice } from "~/components/nva";
 import { ArrowLeft, SquarePen } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { makeT, useT } from "~/i18n";
@@ -31,7 +30,6 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export default function Ask() {
   const { q } = useLoaderData<typeof loader>();
-  const root = useRouteLoaderData("root") as { aiConfigured?: boolean } | undefined;
   const { t } = useT();
   const { ask, newChat } = useAssistant();
   const navigate = useNavigate();
@@ -45,28 +43,32 @@ export default function Ask() {
     navigate("/app/ask", { replace: true, preventScrollReset: true });
   }, [q, ask, navigate]);
 
+  // A chat layout: the page fills the window below the top bar (less the main padding and
+  // the one-line footer), the messages scroll inside it and the question box stays at the bottom.
   return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Button asChild variant="ghost" size="icon-sm" className="-ml-2">
+    <div className="flex h-[calc(100dvh-10.5rem)] min-h-[26rem] min-w-0 flex-col gap-4">
+      <div className="flex shrink-0 items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <Button asChild variant="ghost" size="icon-sm" className="-ml-2 max-md:hidden">
             <Link to="/app" aria-label={t("common.action.back")}>
               <ArrowLeft aria-hidden="true" />
             </Link>
           </Button>
-          <h1 className="font-display text-2xl font-bold tracking-tight">{t("assistant.title")}</h1>
+          <h1 className="truncate font-display text-xl font-bold tracking-tight md:text-2xl">{t("assistant.title")}</h1>
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={newChat}>
-          <SquarePen aria-hidden="true" />
-          {t("assistant.newChat")}
-        </Button>
+        <div className="flex shrink-0 items-center gap-1">
+          <ChatHistoryMenu labeled className="lg:hidden" />
+          <Button type="button" variant="outline" size="sm" onClick={newChat} className="max-sm:size-10 max-sm:px-0 max-md:h-10">
+            <SquarePen aria-hidden="true" />
+            <span className="max-sm:sr-only">{t("assistant.newChat")}</span>
+          </Button>
+        </div>
       </div>
-      {root?.aiConfigured === false && <AiNotice />}
-      <div className="grid gap-8 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start">
-        <aside className="order-2 lg:sticky lg:top-24 lg:order-1">
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-[200px_minmax(0,1fr)]">
+        <aside className="hidden min-h-0 overflow-y-auto border-r border-stone pr-3 lg:block">
           <ChatHistoryList />
         </aside>
-        <section className="order-1 mx-auto flex min-h-[60vh] w-full max-w-3xl flex-col lg:order-2">
+        <section className="mx-auto flex min-h-0 w-full max-w-3xl flex-col">
           <AssistantConversation variant="page" />
         </section>
       </div>

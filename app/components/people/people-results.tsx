@@ -2,7 +2,8 @@
  * Directory results. Names link to the profile; each row has one main action
  * (Contact or Request introduction) and a Save icon.
  *
- * Staff: compact cards, two across on wide screens, with one "Why:" line.
+ * Staff: compact cards, two across on wide screens: name, title and actions on
+ * one row, then one line of ways to help (or "Why:" when searching).
  * Admins: a CRM table on wide screens (person, categories, status, staff
  * access, a contact icon and a ⋯ menu; the whole row opens the profile) and
  * compact cards on phones, so nothing scrolls sideways at 375px.
@@ -17,13 +18,13 @@ import { useT } from "~/i18n";
 import type { SearchHit } from "~/lib/people.server";
 import { cn } from "~/lib/utils";
 
-function Subtitle({ person }: { person: SearchHit }) {
+function Subtitle({ person, className }: { person: SearchHit; className?: string }) {
   const { t } = useT();
   const text =
     person.title && person.organization_name
       ? t("directory.atOrg", { title: person.title, org: person.organization_name })
       : (person.title ?? person.organization_name);
-  return text ? <span className="block truncate text-xs text-smoke">{text}</span> : null;
+  return text ? <span className={cn("block truncate text-xs text-smoke", className)}>{text}</span> : null;
 }
 
 /** The first category and "+N" for the rest. */
@@ -72,32 +73,34 @@ function NameLink({ person, className }: { person: SearchHit; className?: string
   );
 }
 
-/** One result as a compact card: used for staff everywhere and for admins on phones. */
+/**
+ * One result as a compact card: used for staff everywhere and for admins on phones.
+ * Name and title on the left, the actions on the right of the same row, then one line
+ * (ways to help, or "Why:" when searching; admins see status and categories).
+ */
 function ResultCard({ person, saved, isAdmin }: { person: SearchHit; saved: boolean; isAdmin: boolean }) {
+  const why = !isAdmin && person.reasons?.length;
   return (
-    <Sheet className="relative grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-2.5 p-4 focus-within:ring-3 focus-within:ring-ring/50">
-      <div className="flex items-start gap-3">
-        <PersonAvatar name={person.full_name} />
+    <Sheet className="relative grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-2 px-4 py-3 focus-within:ring-3 focus-within:ring-ring/50">
+      <div className="flex items-center gap-3">
+        <PersonAvatar name={person.full_name} className="size-9" />
         <div className="min-w-0 flex-1">
           <NameLink person={person} className="after:rounded-card" />
-          <Subtitle person={person} />
+          {/* Two lines on phones, where the actions leave less room. */}
+          <Subtitle person={person} className="max-sm:line-clamp-2 max-sm:whitespace-normal" />
         </div>
-        {isAdmin && <StatusBadge status={person.status} />}
+        <ResourceActions person={person} saved={saved} compact className="shrink-0 flex-nowrap" />
       </div>
       {isAdmin ? (
-        <div className="mt-auto flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2 pl-12">
+          <StatusBadge status={person.status} />
           <CategorySummary person={person} className="min-w-0" />
-          <ResourceActions person={person} saved={saved} compact className="shrink-0 flex-nowrap" />
         </div>
+      ) : why ? (
+        <MatchReasons reasons={person.reasons} max={2} className="truncate pl-12" />
       ) : (
-        <>
-          {person.reasons?.length ? (
-            <MatchReasons reasons={person.reasons} max={2} className="line-clamp-1" />
-          ) : (
-            <ContributionChips types={person.contribution_types} />
-          )}
-          <ResourceActions person={person} saved={saved} compact className="mt-auto" />
-        </>
+        // One row of chips; any that would wrap are clipped.
+        <ContributionChips types={person.contribution_types} className="h-6 overflow-hidden pl-12" />
       )}
     </Sheet>
   );
@@ -115,14 +118,17 @@ export function PeopleResults({
   const { t } = useT();
   const saved = new Set(savedIds);
 
+  // Two across only when the results area itself is wide (not when the assistant panel squeezes it).
   const cards = (
-    <ul className={cn("grid grid-cols-[minmax(0,1fr)] gap-3", isAdmin ? "md:hidden" : "md:grid-cols-2")}>
-      {people.map((person) => (
-        <li key={person.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)]">
-          <ResultCard person={person} saved={saved.has(person.id)} isAdmin={isAdmin} />
-        </li>
-      ))}
-    </ul>
+    <div className={cn("@container min-w-0", isAdmin && "md:hidden")}>
+      <ul className="grid grid-cols-[minmax(0,1fr)] gap-3 @3xl:grid-cols-2">
+        {people.map((person) => (
+          <li key={person.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)]">
+            <ResultCard person={person} saved={saved.has(person.id)} isAdmin={isAdmin} />
+          </li>
+        ))}
+      </ul>
+    </div>
   );
   if (!isAdmin) return cards;
 

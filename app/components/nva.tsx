@@ -83,9 +83,10 @@ export function PageHeader({
 }) {
   return (
     <div className={cn("flex flex-col gap-4 md:flex-row md:items-end md:justify-between", className)}>
-      <div className="min-w-0 max-w-3xl space-y-2">
+      <div className="min-w-0 max-w-3xl space-y-1">
         {eyebrow && <p className="text-eyebrow text-gold-ink">{eyebrow}</p>}
-        <h1 className="text-heading">{title}</h1>
+        {/* CRM-sized titles: 24px on phones, 30px from md up (the dashboard welcome stays larger). */}
+        <h1 className="font-display text-2xl leading-tight font-bold tracking-[-0.02em] md:text-[1.875rem]">{title}</h1>
         {description && <p className="text-[0.95rem] leading-relaxed text-smoke">{description}</p>}
       </div>
       {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}

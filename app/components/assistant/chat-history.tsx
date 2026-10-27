@@ -25,16 +25,16 @@ export function ChatHistoryList() {
   const { t } = useT();
   const { chat, history, openChat, deleteChat, loadingChatId } = useAssistant();
   return (
-    <nav aria-label={t("assistant.history")} className="grid gap-1.5">
+    <nav aria-label={t("assistant.history")} className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-1.5">
       <h2 className="px-1 text-xs font-medium text-smoke">{t("assistant.history")}</h2>
       {history.length === 0 ? (
         <p className="px-1 text-sm text-smoke">{t("assistant.historyEmpty")}</p>
       ) : (
-        <ul className="grid gap-0.5">
+        <ul className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-0.5">
           {history.map((item) => {
             const current = item.id === chat.id;
             return (
-              <li key={item.id} className="group flex items-center gap-1">
+              <li key={item.id} className="group flex min-w-0 items-center gap-1">
                 <button
                   type="button"
                   onClick={() => void openChat(item.id)}
@@ -66,15 +66,23 @@ export function ChatHistoryList() {
   );
 }
 
-export function ChatHistoryMenu() {
+/** `labeled` shows "Past chats" next to the icon (the full page on phones). */
+export function ChatHistoryMenu({ labeled = false, className }: { labeled?: boolean; className?: string }) {
   const { t, locale } = useT();
   const { chat, history, openChat } = useAssistant();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="ghost" size="icon-sm" aria-label={t("assistant.history")}>
-          <History aria-hidden="true" />
-        </Button>
+        {labeled ? (
+          <Button type="button" variant="ghost" size="sm" className={cn("max-md:h-10", className)}>
+            <History aria-hidden="true" />
+            {t("assistant.history")}
+          </Button>
+        ) : (
+          <Button type="button" variant="ghost" size="icon-sm" aria-label={t("assistant.history")} className={className}>
+            <History aria-hidden="true" />
+          </Button>
+        )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-72 rounded-xl">
         <DropdownMenuLabel>{t("assistant.history")}</DropdownMenuLabel>

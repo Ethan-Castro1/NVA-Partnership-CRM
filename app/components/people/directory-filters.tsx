@@ -10,7 +10,7 @@
  */
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Form, Link, useLocation, useNavigate } from "react-router";
-import { Languages, Search } from "lucide-react";
+import { ChevronDown, Languages, Search, SlidersHorizontal } from "lucide-react";
 import { Field } from "~/components/nva";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -200,8 +200,10 @@ export function DirectoryFilters({
             open={!!(params.aff || params.topic || params.spanish || (isAdmin && adminExtras))}
             className="group min-w-0 flex-1"
           >
-            <summary className="flex min-h-8 w-fit cursor-pointer items-center rounded-full text-sm text-smoke hover:text-ink focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none max-md:min-h-10">
+            <summary className="-ml-3 flex h-8 w-fit cursor-pointer list-none items-center gap-1.5 rounded-full px-3 text-sm font-medium text-graphite transition-colors select-none hover:bg-taupe hover:text-ink focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none max-md:h-10 [&::-webkit-details-marker]:hidden">
+              <SlidersHorizontal className="size-4 text-smoke" aria-hidden="true" />
               {t("directory.moreFilters")}
+              <ChevronDown className="size-4 text-smoke transition-transform group-open:rotate-180" aria-hidden="true" />
             </summary>
             <div className="mt-3 grid gap-4">
               {isAdmin && typePills}

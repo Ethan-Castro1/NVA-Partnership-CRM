@@ -88,24 +88,24 @@ export default function Ask() {
   const toggleLabel = sidebarShown ? t("assistant.historyHide") : t("assistant.historyShow");
   const toggle = () => (wide ? setHistoryOpen(!historyOpen) : setSheetOpen(true));
 
-  // A chat layout: the page fills the window below the top bar (less the main padding), the messages
-  // scroll inside it and the question box stays at the bottom.
+  // A chat layout: the page fills the window below the top bar (the layout drops its padding here), the history
+  // sits against the app sidebar, the messages scroll inside and the question box stays at the bottom.
   return (
-    <div className="flex h-[calc(100dvh-7rem)] min-h-[26rem] min-w-0 gap-6 md:h-[calc(100dvh-8rem)]">
+    <div className="flex min-h-0 min-w-0 flex-1">
       <aside
         aria-hidden={!sidebarShown || undefined}
         inert={!sidebarShown || undefined}
         className={cn(
-          "hidden shrink-0 overflow-hidden transition-[width,opacity] duration-200 ease-out lg:block",
-          sidebarShown ? "w-64 opacity-100" : "w-0 opacity-0",
+          "hidden shrink-0 overflow-hidden border-stone transition-[width,opacity] duration-200 ease-out lg:block",
+          sidebarShown ? "w-64 border-r opacity-100" : "w-0 opacity-0",
         )}
       >
-        <div className="flex h-full w-64 flex-col border-r border-stone pr-4">
+        <div className="flex h-full w-64 flex-col p-3">
           <ChatHistoryList className="flex-1" />
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col gap-2">
+      <div className="flex min-w-0 flex-1 flex-col gap-2 px-4 pt-3 pb-3 md:px-6">
         <div className="flex shrink-0 items-center gap-1.5">
           <Tooltip>
             <TooltipTrigger asChild>

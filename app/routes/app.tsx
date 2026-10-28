@@ -34,6 +34,8 @@ function AppShell() {
   const { t } = useT();
   const panelVisible = usePanelVisible();
   const location = useLocation();
+  // The Ask page is a full-window chat: no page padding or max width, so its history sits against the sidebar.
+  const fullBleed = location.pathname === "/app/ask";
   const q = location.pathname === "/app/people" ? new URLSearchParams(location.search).get("q") ?? "" : "";
 
   return (
@@ -50,7 +52,7 @@ function AppShell() {
         {t("common.skipToContent")}
       </a>
       <AppSidebar user={user} counts={navCounts} />
-      <SidebarInset className={cn("bg-canvas transition-[padding]", panelVisible && PANEL_WIDTH_CLASS)}>
+      <SidebarInset className={cn("bg-canvas transition-[padding]", panelVisible && PANEL_WIDTH_CLASS, fullBleed && "h-dvh")}>
         <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-2 sm:gap-3 border-b border-stone bg-canvas/90 px-4 backdrop-blur transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-14 md:px-6">
           <SidebarTrigger className="-ml-1 max-md:-ml-3" />
           <Separator orientation="vertical" className="h-5 data-vertical:self-center max-sm:hidden" />
@@ -73,11 +75,17 @@ function AppShell() {
             <LanguageToggle />
           </div>
         </header>
-        <main id="main" className="mx-auto w-full max-w-[1280px] flex-1 px-4 py-6 md:px-8 md:py-8">
+        <main
+          id="main"
+          className={cn(
+            "w-full flex-1",
+            fullBleed ? "flex min-h-0 flex-col" : "mx-auto max-w-[1280px] px-4 py-6 md:px-8 md:py-8",
+          )}
+        >
           <Outlet />
         </main>
         {/* The Ask page says the same thing under its question box. */}
-        {location.pathname !== "/app/ask" && (
+        {!fullBleed && (
           <footer className="mx-auto w-full max-w-[1280px] px-4 pb-6 text-xs text-smoke md:px-8">{t("common.footer.privacy")}</footer>
         )}
       </SidebarInset>

@@ -64,8 +64,7 @@ export function PromptInput({ id, value, onChange, onSubmit, onStop, busy, hint,
           aria-describedby={`${id}-hint`}
           className={cn("max-h-48 px-4 pt-3.5 text-[0.95rem]", large ? "min-h-20" : "min-h-12")}
         />
-        <InputGroupAddon align="block-end" className="justify-between gap-2 px-3 pb-2.5">
-          <span className="truncate text-xs font-normal text-smoke max-sm:hidden">{t("assistant.composerKeys")}</span>
+        <InputGroupAddon align="block-end" className="justify-end gap-2 px-3 pb-2.5">
           {busy ? (
             <InputGroupButton
               type="button"

@@ -60,7 +60,7 @@ GitHub variable or secret on this repo:
 | `EMAIL_TOKEN_KEY` | secret | `openssl rand -base64 32`, for connecting mailboxes. Keep it: changing it disconnects them |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | secrets | optional: Gmail, redirect URI `<APP_URL>/app/admin/email/callback` |
 | `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MS_TENANT_ID` | secrets / variable | optional: Outlook, same redirect URI |
-| `EXA_API_KEY` | secret | optional: web search for new partners (see "Data leaving AWS") |
+| `EXA_API_KEY` | secret | web search for new partners (Connections, and the admin assistant's search_web) |
 
 Never set `DEMO_LOGIN`, `SEED_DEMO` or `PGLITE_DIR` on Easel. `MCP_CONNECTOR` stays unset (see below).
 
@@ -78,8 +78,8 @@ password (and the demo buttons with `DEMO_LOGIN`) still work.
 
 - **Playlab API** (the AI): Playlab itself.
 - **Gmail / Outlook** (optional): NVA's own mailboxes, through OAuth; email subjects and snippets are stored in Aurora.
-- **Exa** (optional web search): only the admin's search words go out. Confirm Exa is an approved subprocessor
-  before setting `EXA_API_KEY`.
+- **Exa** (web search for new partners, kept by decision on 2026-10-28): only the admin's search words go out, and
+  only for admins. Results are public web pages; leads are saved in Aurora as suggestions until an admin adds them.
 - **MCP connector:** off. It would send directory data to each person's own Claude or ChatGPT account, which the
   approved subprocessors don't cover. `MCP_CONNECTOR=true` turns it back on; that's a decision for NVA and Playlab.
 - Fonts are served by the app itself (Fontsource), not Google.

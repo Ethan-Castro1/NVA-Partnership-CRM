@@ -113,7 +113,7 @@ contacts, opportunities, follow-ups, staff requests, sign-up review, email). Spe
   locally. Only one process can open PGlite: stop `npm run dev` before `npm run seed`.
 - **Core logic:** `app/lib/people.server.ts` (search, profiles, relationships, intro paths),
   `app/lib/caps.server.ts`, `app/lib/auth.server.ts`, `app/lib/ai/*` (the Playlab API: `PLAYLAB_API_KEY` +
-  `PLAYLAB_PROJECT_ID`, a published Playlab app; setup in `docs/playlab-app.md`. `ANTHROPIC_API_KEY` still works when those are unset).
+  `PLAYLAB_PROJECT_ID`, a published Playlab app; setup in `docs/playlab-app.md`; the app's instructions are generated, `npm run playlab:instructions`. `ANTHROPIC_API_KEY` still works when those are unset).
 - **Bilingual:** every string goes through `useT()`/`t("namespace.key")`; one dictionary
   file per feature in `app/i18n/`, Spanish must have every English key (TypeScript checks).
   No em dashes in user-facing copy.

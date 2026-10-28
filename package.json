@@ -9,7 +9,8 @@
     "typecheck": "react-router typegen && tsc",
     "test": "vitest run",
     "seed": "tsx scripts/seed.ts",
-    "dev:login": "react-router dev"
+    "dev:login": "react-router dev",
+    "playlab:instructions": "tsx scripts/playlab-instructions.ts"
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.146",

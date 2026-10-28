@@ -20,7 +20,15 @@ import { savedIdsAmong } from "~/lib/saved.server";
 import type { SessionUser } from "~/lib/types";
 import { aiModel, aiProvider, getAnthropic, isAiConfigured } from "./client.server";
 import { isWebSearchConfigured } from "./exa.server";
-import { PlaylabConversation, PlaylabError, parseToolCalls, toolCallFilter, withoutToolCalls } from "./playlab.server";
+import {
+  PLAYLAB_TASKS,
+  PlaylabConversation,
+  PlaylabError,
+  instructionsInApp,
+  parseToolCalls,
+  toolCallFilter,
+  withoutToolCalls,
+} from "./playlab.server";
 import { executeTool, toolsFor, type ToolOutcome } from "./tools.server";
 
 type BetaMessageParam = Anthropic.Beta.Messages.BetaMessageParam;
@@ -278,24 +286,33 @@ export const TOOL_PROTOCOL = `You cannot see NVA's database directly. You look t
 - When you have what you need, write your final answer for the staff member, with no tool requests in it.
 - Never write a tool result yourself, never guess what a tool would return, and never mention tool requests in your answer.`;
 
-function toolList(user: SessionUser): string {
-  return toolsFor({ web: isWebSearchConfigured(), strict: false, user })
+/** The tools a role can ask for, as the model reads them (web: list search_web for admins). */
+export function toolList(user: Pick<SessionUser, "role">, web = isWebSearchConfigured()): string {
+  return toolsFor({ web, strict: false, user })
     .map((def) => `- ${def.name}: ${def.description}\n  input (JSON Schema): ${JSON.stringify(def.input_schema)}`)
     .join("\n");
 }
 
-/** The first message of a Playlab run: the instructions, the tools, the chat so far and the question. */
+/** The Playlab task for this viewer's chat. */
+export const assistantTask = (user: Pick<SessionUser, "role">) => (user.role === "admin" ? PLAYLAB_TASKS.admin : PLAYLAB_TASKS.staff);
+
+/**
+ * The first message of a Playlab run: the task (or, without
+ * PLAYLAB_INSTRUCTIONS_IN_APP, the instructions and tools), who is asking,
+ * the chat so far and the question.
+ */
 export function playlabFirstMessage(history: ChatTurn[], locale: Locale, user: SessionUser): string {
   const earlier = history.slice(0, -1);
   const question = history[history.length - 1]?.content ?? "";
+  const head = instructionsInApp()
+    ? [
+        `Task: ${assistantTask(user)}`,
+        contextBlock(locale, user) +
+          (user.role === "admin" && !isWebSearchConfigured() ? " search_web is not available in this conversation." : ""),
+      ]
+    : ["# Instructions", systemPromptFor(user), contextBlock(locale, user), "# Looking things up", TOOL_PROTOCOL, "Tools:", toolList(user)];
   return [
-    "# Instructions",
-    systemPromptFor(user),
-    contextBlock(locale, user),
-    "# Looking things up",
-    TOOL_PROTOCOL,
-    "Tools:",
-    toolList(user),
+    ...head,
     ...(earlier.length
       ? [
           "# The conversation so far",

@@ -4,15 +4,32 @@
  * key (PLAYLAB_API_KEY).
  *
  * The API talks to an app, not to a raw model: there is no system prompt and
- * no tool calling. So each request is one Playlab conversation whose first
- * message carries the task's instructions (the Playlab app's own instructions
- * just say to follow them, see docs/playlab-app.md). Structured answers come
+ * no tool calling. So each request is one Playlab conversation. The task's
+ * instructions live in the Playlab app (playlab-instructions.server.ts, pasted
+ * in once so Playlab can cache them) and each message names its task; with
+ * PLAYLAB_INSTRUCTIONS_IN_APP unset, the message carries the full
+ * instructions instead (see docs/playlab-app.md). Structured answers come
  * back as JSON in the reply (playlabJson), and the assistant's lookups use a
  * small text protocol (TOOL_PROTOCOL in assistant.server.ts) parsed here by
  * parseToolCalls.
  */
 
 const DEFAULT_URL = "https://www.playlab.ai/api/v1";
+
+/** The task names a message starts with ("Task: ..."); each has its own section in the Playlab app's instructions. */
+export const PLAYLAB_TASKS = {
+  staff: "ask-the-village-staff",
+  admin: "ask-the-village-admin",
+  draft: "email-draft",
+  leads: "web-leads",
+} as const;
+
+export type PlaylabTask = (typeof PLAYLAB_TASKS)[keyof typeof PLAYLAB_TASKS];
+
+/** True once the Playlab app holds the instructions (playlabAppInstructions), so messages send only the task and its data. */
+export function instructionsInApp(): boolean {
+  return process.env.PLAYLAB_INSTRUCTIONS_IN_APP === "true";
+}
 
 export function isPlaylabConfigured(): boolean {
   return Boolean(process.env.PLAYLAB_API_KEY && process.env.PLAYLAB_PROJECT_ID);
@@ -144,24 +161,37 @@ export function extractJson(text: string): unknown {
 }
 
 /**
- * Asks for one JSON object: instructions and data go in the message, with the
- * shape it must have. Asks once more in the same conversation when the reply
- * has no JSON. Null when it still has none.
+ * Asks for one JSON object of the given shape. The instructions are the
+ * Playlab app's section for `task`, or (without PLAYLAB_INSTRUCTIONS_IN_APP)
+ * `system` sent in the message. Asks once more in the same conversation when
+ * the reply has no JSON. Null when it still has none.
  */
-export async function playlabJson({ system, prompt, shape }: { system: string; prompt: string; shape: unknown }): Promise<unknown> {
+export async function playlabJson({
+  task,
+  system,
+  prompt,
+  shape,
+}: {
+  task: PlaylabTask;
+  system: string;
+  prompt: string;
+  shape: unknown;
+}): Promise<unknown> {
   const conversation = new PlaylabConversation();
-  const message = [
-    "# Instructions",
-    system,
-    "# Task",
-    prompt,
-    "# Reply format",
-    `Reply with only one JSON object that matches this JSON Schema, and nothing else (no words before or after it):\n${JSON.stringify(shape)}`,
-  ].join("\n\n");
+  const message = instructionsInApp()
+    ? `Task: ${task}\n\n${prompt}`
+    : [
+        "# Instructions",
+        system,
+        "# Task",
+        prompt,
+        "# Reply format",
+        `Reply with only one JSON object that matches this JSON Schema, and nothing else (no words before or after it):\n${JSON.stringify(shape)}`,
+      ].join("\n\n");
   const first = extractJson(await conversation.send(message));
   if (first !== null) return first;
   return extractJson(
-    await conversation.send("Your reply was not a JSON object. Reply again with only the JSON object, in the format above."),
+    await conversation.send("Your reply was not a JSON object. Reply again with only the JSON object, in the format for this task."),
   );
 }
 

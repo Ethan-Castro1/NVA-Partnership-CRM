@@ -1,7 +1,9 @@
+import { readFileSync } from "node:fs";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createPerson } from "~/lib/people.server";
 import type { SessionUser } from "~/lib/types";
 import { playlabFirstMessage, runAssistant, type ToolStep } from "./assistant.server";
+import { playlabAppInstructions } from "./playlab-instructions.server";
 import {
   extractJson,
   parseToolCalls,
@@ -95,7 +97,7 @@ describe("the tool protocol", () => {
 describe("playlabJson", () => {
   it("asks once more when the reply has no JSON", async () => {
     const { sent } = fakePlaylab([["Sorry, here you go."], ['{"subject": "Hi"}']]);
-    expect(await playlabJson({ system: "Write.", prompt: "An email.", shape: { type: "object" } })).toEqual({ subject: "Hi" });
+    expect(await playlabJson({ task: "email-draft", system: "Write.", prompt: "An email.", shape: { type: "object" } })).toEqual({ subject: "Hi" });
     expect(sent).toHaveLength(2);
     expect(sent[0]).toContain("# Reply format");
   });
@@ -160,5 +162,33 @@ describe("the assistant on Playlab", () => {
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: "Invalid API key." }, { status: 401 })));
     const result = await runAssistant({ messages: [{ role: "user", content: "Who sews?" }], locale: "en", user: admin });
     expect(result).toEqual({ ok: false, error: "assistant.errorAuth" });
+  });
+});
+
+describe("instructions held in the Playlab app", () => {
+  it("docs/playlab-instructions.txt matches the code (run npm run playlab:instructions -- --write)", () => {
+    expect(readFileSync("docs/playlab-instructions.txt", "utf8")).toBe(`${playlabAppInstructions()}\n`);
+  });
+
+  it("has a section per task, with each role's tools, and no em dashes", () => {
+    const text = playlabAppInstructions();
+    for (const task of ["ask-the-village-staff", "ask-the-village-admin", "email-draft", "web-leads"]) {
+      expect(text).toContain(`## Task: ${task}`);
+    }
+    const staff = text.slice(text.indexOf("## Task: ask-the-village-staff"), text.indexOf("## Task: ask-the-village-admin"));
+    expect(staff).not.toContain("list_follow_ups");
+    expect(text).not.toContain("\u2014");
+  });
+
+  it("sends only the task and the request once PLAYLAB_INSTRUCTIONS_IN_APP is on", async () => {
+    vi.stubEnv("PLAYLAB_INSTRUCTIONS_IN_APP", "true");
+    const message = playlabFirstMessage([{ role: "user", content: "Who sews?" }], "es", staff);
+    expect(message.startsWith("Task: ask-the-village-staff\n\nInterface language: Spanish")).toBe(true);
+    expect(message).not.toContain("<tool_call>");
+
+    const { sent } = fakePlaylab([['{"ok": true}']]);
+    vi.stubEnv("PLAYLAB_INSTRUCTIONS_IN_APP", "true");
+    await playlabJson({ task: "email-draft", system: "LONG RULES", prompt: "LANGUAGE: English", shape: {} });
+    expect(sent[0]).toBe("Task: email-draft\n\nLANGUAGE: English");
   });
 });

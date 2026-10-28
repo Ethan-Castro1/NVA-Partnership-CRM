@@ -5,7 +5,7 @@ per environment. Village Partners is the `partners` app of the `nva` school.
 
 | Environment | Tenant | Deploys | URL |
 |---|---|---|---|
-| dev | `exdnva` | every push to `main` (once `EASEL_DEPLOY` is `true`) | `https://partners-nva.dev.labschools.ai` (VPN only) |
+| dev | `exdnva` | every push to `main` (once the app is set up, below) | `https://partners-nva.dev.labschools.ai` (VPN only) |
 | prod | `extnva` | by hand: Actions → Deploy → Run workflow (`prod`, `apply`), from `main` | `https://partners-nva.labschools.ai` |
 
 ## What this repo provides
@@ -21,13 +21,14 @@ per environment. Village Partners is the `partners` app of the `nva` school.
 
 ## Setup (once)
 
-1. **Register the app** in duplocloud-infrastructure's `config/exttenant/schools.tfvars`, and merge:
+1. **Register the app:** a PR to duplocloud-infrastructure adding this to `config/exttenant/schools.tfvars` (copy
+   #143, North Cedar's), with Luke Shepard as reviewer. He approves and applies it, which creates dev:
    ```hcl
    # New Village Academy (Annapolis): Village Partners, the partnership CRM
    nva = {
      apps = {
        partners = {
-         repo = "playlab-education/NVA-CRM-Build-Easel"
+         repo = "playlab-education/nva-crm-build-easel" # lowercase: the image repo is named after it
          db   = "partners" # Postgres, as DATABASE_URL; no s3: the app stores no files
        }
      }
@@ -42,8 +43,8 @@ per environment. Village Partners is the `partners` app of the `nva` school.
    - `http://localhost:5173/auth/callback`
 4. **Set the GitHub variables and secrets** below (repo level for both environments, or on the `exdnva` / `extnva`
    environments for one).
-5. **Turn on deploys:** set the repo variable `EASEL_DEPLOY` to `true`, then push to `main` (or run the Deploy
-   workflow). Until then, pushes to `main` only run the tests, so nothing tries to deploy before step 1 is merged.
+5. **Push to `main`.** That deploys dev. Until the infra apply has run, pushes only run the tests: the apply sets
+   this repo's `EXTAPP_SCHOOL` variable, and the deploy job waits for it.
 
 ## Settings
 

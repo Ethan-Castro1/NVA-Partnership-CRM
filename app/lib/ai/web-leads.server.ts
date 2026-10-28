@@ -12,8 +12,8 @@ import { makeT, type Locale } from "~/i18n";
 import { INNER_CIRCLE, type Role } from "../constants";
 import { newId, query, queryOne, transaction } from "../db.server";
 import { createPerson, getPerson } from "../people.server";
-import { APICallError, generateText, jsonSchema, tool } from "ai";
-import { aiModel, aiProvider, getAnthropic, getOpenRouterModel, isAiConfigured } from "./client.server";
+import { aiModel, aiProvider, getAnthropic, isAiConfigured } from "./client.server";
+import { PlaylabError, playlabJson } from "./playlab.server";
 import { ExaError, exaSearch, isWebSearchConfigured, type ExaCategory, type ExaResult } from "./exa.server";
 
 /** Web results a search may save as leads (and Exa results per query). */
@@ -282,7 +282,7 @@ function systemPrompt(locale: Locale): string {
   ].join("\n");
 }
 
-/** Claude picks and writes up the best leads from the Exa results. */
+/** The model picks and writes up the best leads from the Exa results. */
 async function leadsWithClaude(
   results: ExaResult[],
   need: string,
@@ -309,24 +309,14 @@ async function leadsWithClaude(
     },
   ];
 
-  if (aiProvider() === "openrouter") {
-    // GLM through OpenRouter: one call that must answer with record_leads.
-    const { toolCalls } = await generateText({
-      model: getOpenRouterModel(),
-      system: systemPrompt(locale),
-      messages: [{ role: "user", content: messages[0].content as string }],
-      tools: {
-        record_leads: tool({
-          description: RECORD_LEADS_TOOL.description,
-          inputSchema: jsonSchema(RECORD_LEADS_TOOL.input_schema as Parameters<typeof jsonSchema>[0]),
-        }),
-      },
-      toolChoice: { type: "tool", toolName: "record_leads" },
-      maxOutputTokens: 8000,
-      providerOptions: { openrouter: { reasoning: { effort: "low" } } },
+  if (aiProvider() === "playlab") {
+    // The Playlab app answers with the record_leads input as JSON.
+    const input = await playlabJson({
+      system: `${systemPrompt(locale)}\n\nInstead of calling record_leads, reply with its input as JSON. ${RECORD_LEADS_TOOL.description}`,
+      prompt: messages[0].content as string,
+      shape: RECORD_LEADS_TOOL.input_schema,
     });
-    const call = toolCalls.find((c) => c.toolName === "record_leads");
-    return call ? parseRecordLeads(call.input, seen) : [];
+    return parseRecordLeads(input, seen);
   }
 
   const client = getAnthropic();
@@ -352,8 +342,8 @@ async function leadsWithClaude(
 }
 
 function exaErrorKey(error: unknown): WebSearchError {
-  if (error instanceof ExaError || error instanceof Anthropic.APIError || APICallError.isInstance(error)) {
-    const status = (APICallError.isInstance(error) ? error.statusCode : error.status) ?? 0;
+  if (error instanceof ExaError || error instanceof Anthropic.APIError || error instanceof PlaylabError) {
+    const status = error.status ?? 0;
     if (status === 401 || status === 403) return "connections.web.error.auth";
     if (status === 402 || status === 429 || status === 529 || status >= 500) return "connections.web.error.busy";
   }

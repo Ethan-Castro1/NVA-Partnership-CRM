@@ -1,21 +1,20 @@
 /**
- * The one place the app chooses its AI model.
+ * The one place the app chooses its AI provider.
  *
- * - OPENROUTER_API_KEY (NVA's setup): GLM 5.3 Flash ("z-ai/glm-5.3-flash")
- *   through OpenRouter, called with the AI SDK and the OpenRouter provider
- *   (getOpenRouterModel). Fast and inexpensive, with tool calling.
+ * - PLAYLAB_API_KEY + PLAYLAB_PROJECT_ID (NVA's setup): the Playlab API
+ *   (playlab.server.ts). The model is whichever one the Playlab app is set to.
  * - ANTHROPIC_API_KEY: Claude directly from Anthropic, with the Anthropic SDK.
  * - Neither: AI features say so and plain search keeps working.
  *
- * AI_MODEL overrides the model for either provider.
+ * AI_MODEL overrides the Claude model (Anthropic only; Playlab's is set in the app).
  */
 import Anthropic from "@anthropic-ai/sdk";
-import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { isPlaylabConfigured } from "./playlab.server";
 
-export type AiProvider = "openrouter" | "anthropic";
+export type AiProvider = "playlab" | "anthropic";
 
 export function aiProvider(): AiProvider | null {
-  if (process.env.OPENROUTER_API_KEY) return "openrouter";
+  if (isPlaylabConfigured()) return "playlab";
   if (process.env.ANTHROPIC_API_KEY) return "anthropic";
   return null;
 }
@@ -24,50 +23,16 @@ export function isAiConfigured(): boolean {
   return aiProvider() !== null;
 }
 
+/** The model, for Claude calls and the Settings page. */
 export function aiModel(): string {
-  if (process.env.AI_MODEL) return process.env.AI_MODEL;
-  return aiProvider() === "openrouter" ? "z-ai/glm-5.3-flash" : "claude-opus-5-5";
+  if (aiProvider() === "playlab") return "Playlab";
+  return process.env.AI_MODEL || "claude-opus-5-5";
 }
 
-let openRouter: ReturnType<typeof createOpenRouter> | undefined;
-
-/** The OpenRouter model for AI SDK calls (streamText, generateText). */
-export function getOpenRouterModel() {
-  openRouter ??= createOpenRouter({
-    apiKey: process.env.OPENROUTER_API_KEY,
-    headers: {
-      "HTTP-Referer": process.env.APP_URL || "https://nva-village-partners.vercel.app",
-      "X-Title": "NVA Village Partners",
-    },
-  });
-  return openRouter(aiModel());
-}
-
-/** Anthropic-only request features (beta headers such as refusal fallbacks, strict tools). */
-export function usesAnthropicDirectly(): boolean {
-  return aiProvider() === "anthropic";
-}
-
-let client: { provider: AiProvider; sdk: Anthropic } | undefined;
+let client: Anthropic | undefined;
 
 export function getAnthropic(): Anthropic {
-  const provider = aiProvider();
-  if (!provider) throw new Error("No AI key is set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)");
-  if (client?.provider !== provider) {
-    const sdk =
-      provider === "openrouter"
-        ? new Anthropic({
-            baseURL: "https://openrouter.ai/api",
-            // OpenRouter takes its key as a bearer token; send no x-api-key.
-            apiKey: null,
-            authToken: process.env.OPENROUTER_API_KEY,
-            defaultHeaders: {
-              "HTTP-Referer": process.env.APP_URL || "https://nva-village-partners.vercel.app",
-              "X-OpenRouter-Title": "NVA Village Partners",
-            },
-          })
-        : new Anthropic();
-    client = { provider, sdk };
-  }
-  return client.sdk;
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set");
+  client ??= new Anthropic();
+  return client;
 }

@@ -242,7 +242,7 @@ export const WEB_TOOL: Anthropic.Beta.Messages.BetaTool = {
 /**
  * The tools one viewer gets. Staff: the directory tools only (no web search,
  * no CRM tools). Admins: admin wording, the CRM tools and, when configured,
- * web search. OpenRouter's Anthropic endpoint doesn't take Anthropic's strict
+ * web search. The Playlab text protocol has no use for Anthropic's strict
  * tool flag, so it's dropped there (zod still validates every input).
  */
 export function toolsFor(options: { web: boolean; strict: boolean; user: Pick<SessionUser, "role"> }): Anthropic.Beta.Messages.BetaTool[] {

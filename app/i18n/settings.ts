@@ -70,7 +70,7 @@ export default defineMessages(
 
     "ai.title": "AI",
     "ai.on": "On.",
-    "ai.off": "Off. Set OPENROUTER_API_KEY or ANTHROPIC_API_KEY to turn it on.",
+    "ai.off": "Off. Set PLAYLAB_API_KEY and PLAYLAB_PROJECT_ID (or ANTHROPIC_API_KEY) to turn it on.",
     "ai.model": "Model: {model}",
 
     "staff.title": "Staff accounts",
@@ -145,7 +145,7 @@ export default defineMessages(
 
     "ai.title": "IA",
     "ai.on": "Encendida.",
-    "ai.off": "Apagada. Configura OPENROUTER_API_KEY o ANTHROPIC_API_KEY para activarla.",
+    "ai.off": "Apagada. Configura PLAYLAB_API_KEY y PLAYLAB_PROJECT_ID (o ANTHROPIC_API_KEY) para activarla.",
     "ai.model": "Modelo: {model}",
 
     "staff.title": "Cuentas del personal",

@@ -1,9 +1,9 @@
 /**
  * "Ask the village": a chat assistant over NVA's own partner database.
  *
- * With an AI key set (see client.server.ts), Claude answers using the tools in tools.server.ts
+ * With an AI key set (see client.server.ts), the model answers using the tools in tools.server.ts
  * (a manual tool loop, so every call is validated and we keep the people it
- * looked at). Without a key, a deterministic search answers instead, using
+ * looked at): Claude's own tool calls, or a text protocol on Playlab. Without a key, a deterministic search answers instead, using
  * the same connection finder, so the page is still useful.
  *
  * Runs report progress through AssistantEvents so the chat can stream text and
@@ -18,9 +18,9 @@ import { hasSearchIntent, parseSearch } from "~/lib/search-language";
 import type { Viewer } from "~/lib/permissions.server";
 import { savedIdsAmong } from "~/lib/saved.server";
 import type { SessionUser } from "~/lib/types";
-import { APICallError, isStepCount, jsonSchema, streamText, tool, type ToolSet } from "ai";
-import { aiModel, aiProvider, getAnthropic, getOpenRouterModel, isAiConfigured, usesAnthropicDirectly } from "./client.server";
+import { aiModel, aiProvider, getAnthropic, isAiConfigured } from "./client.server";
 import { isWebSearchConfigured } from "./exa.server";
+import { PlaylabConversation, PlaylabError, parseToolCalls, toolCallFilter, withoutToolCalls } from "./playlab.server";
 import { executeTool, toolsFor, type ToolOutcome } from "./tools.server";
 
 type BetaMessageParam = Anthropic.Beta.Messages.BetaMessageParam;
@@ -187,8 +187,7 @@ async function runWithClaude(
   const convo: BetaMessageParam[] = messages.map((m) => ({ role: m.role, content: m.content }));
   const seen = new Set<string>();
   const reasons: Record<string, MatchReason[]> = {};
-  const direct = usesAnthropicDirectly();
-  const tools = toolsFor({ web: isWebSearchConfigured(), strict: direct, user });
+  const tools = toolsFor({ web: isWebSearchConfigured(), strict: true, user });
   const texts: string[] = [];
   let textCount = 0;
   let webQuery: string | null = null;
@@ -207,13 +206,8 @@ async function runWithClaude(
         tools,
         messages: convo,
       };
-      const stream = direct
-        ? // On a policy decline, Anthropic retries on its default fallback model.
-          client.beta.messages.stream({ ...params, betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" })
-        : // OpenRouter's Anthropic-compatible endpoint takes the plain Messages API.
-          (client.messages.stream(params as unknown as Anthropic.MessageCreateParamsStreaming) as unknown as ReturnType<
-            typeof client.beta.messages.stream
-          >);
+      // On a policy decline, Anthropic retries on its default fallback model.
+      const stream = client.beta.messages.stream({ ...params, betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" });
 
       // Stream text blocks out as they arrive; everything else waits for the final message.
       const openText = new Map<number, string>();
@@ -276,90 +270,130 @@ async function runWithClaude(
   }
 }
 
+/** How the Playlab model asks for lookups, since the Playlab API has no tool calling (parsed by parseToolCalls). */
+export const TOOL_PROTOCOL = `You cannot see NVA's database directly. You look things up by asking for tools, and the app runs them for you.
+- To use tools, reply with only one or more tool requests, one per line, exactly in this form and with nothing else in the reply:
+<tool_call>{"name": "search_people", "input": {"query": "sewing"}}</tool_call>
+- The next message brings the results, each inside <tool_result name="...">...</tool_result>. Ask for more tools if you need to.
+- When you have what you need, write your final answer for the staff member, with no tool requests in it.
+- Never write a tool result yourself, never guess what a tool would return, and never mention tool requests in your answer.`;
+
+function toolList(user: SessionUser): string {
+  return toolsFor({ web: isWebSearchConfigured(), strict: false, user })
+    .map((def) => `- ${def.name}: ${def.description}\n  input (JSON Schema): ${JSON.stringify(def.input_schema)}`)
+    .join("\n");
+}
+
+/** The first message of a Playlab run: the instructions, the tools, the chat so far and the question. */
+export function playlabFirstMessage(history: ChatTurn[], locale: Locale, user: SessionUser): string {
+  const earlier = history.slice(0, -1);
+  const question = history[history.length - 1]?.content ?? "";
+  return [
+    "# Instructions",
+    systemPromptFor(user),
+    contextBlock(locale, user),
+    "# Looking things up",
+    TOOL_PROTOCOL,
+    "Tools:",
+    toolList(user),
+    ...(earlier.length
+      ? [
+          "# The conversation so far",
+          earlier.map((m) => `${m.role === "user" ? "Staff member" : "Assistant"}: ${m.content}`).join("\n\n"),
+        ]
+      : []),
+    "# The staff member's message",
+    question,
+  ].join("\n\n");
+}
+
+function playlabErrorKey(error: unknown): AssistantErrorKey {
+  if (!(error instanceof PlaylabError)) return "assistant.errorGeneric";
+  if (error.status === 0) return "assistant.errorConnection";
+  if (error.status === 401 || error.status === 403) return "assistant.errorAuth";
+  if (error.status === 429 || error.status >= 500) return "assistant.errorBusy";
+  return "assistant.errorGeneric";
+}
+
 /**
- * The same assistant on OpenRouter (GLM by default) with the AI SDK: the
- * tools from tools.server.ts run through streamText's own tool loop, and the
- * same events report text and steps to the chat.
+ * The same assistant through the Playlab API: the model asks for tools in
+ * text (TOOL_PROTOCOL), the server runs them with executeTool (which checks
+ * the viewer's role and validates every input) and sends the results back in
+ * the same Playlab conversation. Text streams to the chat as it arrives;
+ * tool requests never do.
  */
-async function runWithOpenRouter(
+async function runWithPlaylab(
   messages: ChatTurn[],
   locale: Locale,
   user: SessionUser,
   events: AssistantEvents = {},
 ): Promise<AssistantResult> {
   const t = makeT(locale);
+  const conversation = new PlaylabConversation();
   const seen = new Set<string>();
   const reasons: Record<string, MatchReason[]> = {};
-  let webQuery: string | null = null;
-  const tools: ToolSet = Object.fromEntries(
-    toolsFor({ web: isWebSearchConfigured(), strict: false, user }).map((def) => [
-      def.name,
-      tool({
-        description: def.description,
-        inputSchema: jsonSchema(def.input_schema as Parameters<typeof jsonSchema>[0]),
-        execute: async (input: unknown, { toolCallId }: { toolCallId: string }) => {
-          const step: ToolStep = { id: toolCallId, name: def.name, input };
-          webQuery = webQueryOf(def.name, input) ?? webQuery;
-          events.toolStart?.(step);
-          const outcome = await executeTool(def.name, input, { user });
-          outcome.personIds.forEach((id) => seen.add(id));
-          Object.assign(reasons, outcome.reasons);
-          events.toolEnd?.(step, { found: countFound(def.name, outcome), isError: outcome.isError });
-          return outcome.content;
-        },
-      }),
-    ]),
-  );
-
   const texts: string[] = [];
-  let current = "";
-  let failure: unknown = null;
+  let webQuery: string | null = null;
+  let textCount = 0;
+  let callCount = 0;
+  let message = playlabFirstMessage(messages, locale, user);
+
   try {
-    const result = streamText({
-      model: getOpenRouterModel(),
-      system: `${systemPromptFor(user)}\n\n${contextBlock(locale, user)}`,
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
-      tools,
-      stopWhen: isStepCount(MAX_ITERATIONS),
-      maxOutputTokens: 4000,
-      providerOptions: { openrouter: { reasoning: { effort: "low" } } },
-      onError: ({ error }) => {
-        failure = error;
-      },
-    });
-    for await (const part of result.fullStream) {
-      if (part.type === "text-start") {
-        current = "";
-        events.textStart?.(part.id);
-      } else if (part.type === "text-delta") {
-        current += part.text;
-        events.textDelta?.(part.id, part.text);
-      } else if (part.type === "text-end") {
-        if (current.trim()) texts.push(current.trim());
-        events.textEnd?.(part.id);
-      } else if (part.type === "error") {
-        failure = part.error;
+    for (let i = 0; i < MAX_ITERATIONS; i++) {
+      let id: string | null = null;
+      const filter = toolCallFilter((text) => {
+        if (!id) {
+          id = `text-${++textCount}`;
+          events.textStart?.(id);
+        }
+        events.textDelta?.(id, text);
+      });
+      const reply = await conversation.send(message, filter.push);
+      filter.flush();
+      if (id) events.textEnd?.(id);
+
+      const text = withoutToolCalls(reply);
+      if (text) texts.push(text);
+      const calls = parseToolCalls(reply);
+      if (!calls.length) {
+        const answer = texts.join("\n\n") || t("assistant.emptyAnswer");
+        return {
+          ok: true,
+          answer,
+          personIds: await mentionedPeople(answer, seen, user),
+          mode: "ai",
+          reasons,
+          closing: webLeadsClosing(answer, webQuery, locale),
+        };
       }
+
+      const results = await Promise.all(
+        calls.slice(0, 6).map(async (call) => {
+          const step: ToolStep = { id: `playlab-tool-${++callCount}`, name: call.name, input: call.input };
+          webQuery = webQueryOf(call.name, call.input) ?? webQuery;
+          events.toolStart?.(step);
+          const outcome = await executeTool(call.name, call.input, { user });
+          outcome.personIds.forEach((pid) => seen.add(pid));
+          Object.assign(reasons, outcome.reasons);
+          events.toolEnd?.(step, { found: countFound(call.name, outcome), isError: outcome.isError });
+          const name = call.name.replace(/[^\w-]/g, "").slice(0, 60);
+          return `<tool_result name="${name}"${outcome.isError ? ' error="true"' : ""}>\n${outcome.content}\n</tool_result>`;
+        }),
+      );
+      message = [
+        ...results,
+        "Ask for more tools if you need to, or write your final answer for the staff member now.",
+      ].join("\n\n");
     }
+    return { ok: true, answer: t("assistant.tooManySteps"), personIds: [], mode: "ai" };
   } catch (error) {
-    failure = error;
+    if (texts.length) {
+      const answer = texts.join("\n\n");
+      return { ok: true, answer, personIds: await mentionedPeople(answer, seen, user), mode: "ai", reasons };
+    }
+    console.error("assistant: Playlab call failed", error instanceof Error ? error.message : "unknown");
+    return { ok: false, error: playlabErrorKey(error) };
   }
-  if (failure && !texts.length) {
-    const status = APICallError.isInstance(failure) ? failure.statusCode : undefined;
-    if (status === 401 || status === 403) return { ok: false, error: "assistant.errorAuth" };
-    if (status === 402 || status === 429 || (status ?? 0) >= 500) return { ok: false, error: "assistant.errorBusy" };
-    console.error("assistant: OpenRouter call failed", failure instanceof Error ? failure.message : "unknown");
-    return { ok: false, error: "assistant.errorGeneric" };
-  }
-  const answer = texts.join("\n\n") || t("assistant.emptyAnswer");
-  return {
-    ok: true,
-    answer,
-    personIds: await mentionedPeople(answer, seen, user),
-    mode: "ai",
-    reasons,
-    closing: webLeadsClosing(answer, webQuery, locale),
-  };
 }
 
 /**
@@ -521,8 +555,8 @@ export async function runAssistant({
     const { answer, personIds, reasons } = await fallbackAnswer(lastUser.content, locale, user);
     return { ok: true, answer, personIds, mode: "fallback", reasons };
   }
-  return aiProvider() === "openrouter"
-    ? runWithOpenRouter(history, locale, user, events)
+  return aiProvider() === "playlab"
+    ? runWithPlaylab(history, locale, user, events)
     : runWithClaude(history, locale, user, events);
 }
 

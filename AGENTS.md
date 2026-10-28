@@ -112,8 +112,8 @@ contacts, opportunities, follow-ups, staff requests, sign-up review, email). Spe
 - **Database:** `DATABASE_URL` (Postgres) when deployed; embedded PGlite in `.data/pglite`
   locally. Only one process can open PGlite: stop `npm run dev` before `npm run seed`.
 - **Core logic:** `app/lib/people.server.ts` (search, profiles, relationships, intro paths),
-  `app/lib/caps.server.ts`, `app/lib/auth.server.ts`, `app/lib/ai/*` (OpenRouter `z-ai/glm-5.3-flash`,
-  override with `AI_MODEL`).
+  `app/lib/caps.server.ts`, `app/lib/auth.server.ts`, `app/lib/ai/*` (the Playlab API: `PLAYLAB_API_KEY` +
+  `PLAYLAB_PROJECT_ID`, a published Playlab app; setup in `docs/playlab-app.md`. `ANTHROPIC_API_KEY` still works when those are unset).
 - **Bilingual:** every string goes through `useT()`/`t("namespace.key")`; one dictionary
   file per feature in `app/i18n/`, Spanish must have every English key (TypeScript checks).
   No em dashes in user-facing copy.
@@ -146,8 +146,8 @@ npm test            # vitest, in-memory database
 npm run typecheck
 ```
 
-Start the server with `ANTHROPIC_API_KEY` set (`ANTHROPIC_API_KEY=sk-ant-... npm run dev`) to turn on the AI
-assistant and web search for leads. Without it, search and the connection finder still work and the assistant
+Put `PLAYLAB_API_KEY` and `PLAYLAB_PROJECT_ID` in `.env.local` (gitignored; see `docs/playlab-app.md`) to turn on the AI
+assistant, email drafts and web lead write-ups (web search itself needs `EXA_API_KEY`). Without it, search and the connection finder still work and the assistant
 falls back to plain search.
 
 ## Project Context

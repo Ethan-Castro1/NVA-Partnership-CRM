@@ -10,7 +10,6 @@
  * automatically (see app/lib/email/send.server.ts). Admin-only.
  */
 import type Anthropic from "@anthropic-ai/sdk";
-import { generateText, jsonSchema, tool } from "ai";
 import { z } from "zod";
 import type { Locale } from "~/i18n";
 import { query } from "../db.server";
@@ -18,7 +17,8 @@ import { listHistory } from "../history.server";
 import { getPerson } from "../people.server";
 import type { SessionUser } from "../types";
 import { listMessagesForPerson, type DraftFact, type DraftPurpose } from "../email/store.server";
-import { aiModel, aiProvider, getAnthropic, getOpenRouterModel, isAiConfigured } from "./client.server";
+import { aiModel, aiProvider, getAnthropic, isAiConfigured } from "./client.server";
+import { playlabJson } from "./playlab.server";
 
 /** What each purpose asks the model to do (model-facing, English). */
 export const PURPOSE_BRIEF: Record<DraftPurpose, string> = {
@@ -157,24 +157,10 @@ const DraftOutput = z.object({
   flags: z.array(z.string().max(300)).catch([]),
 });
 
-/** The default model: GLM through OpenRouter (getOpenRouterModel), or Claude when only ANTHROPIC_API_KEY is set. */
+/** The default model: the Playlab app (a JSON reply), or Claude when only ANTHROPIC_API_KEY is set. */
 export const defaultDraftModel: DraftModel = async ({ system, prompt }) => {
-  if (aiProvider() === "openrouter") {
-    const { toolCalls } = await generateText({
-      model: getOpenRouterModel(),
-      system,
-      messages: [{ role: "user", content: prompt }],
-      tools: {
-        write_draft: tool({
-          description: WRITE_DRAFT.description,
-          inputSchema: jsonSchema(WRITE_DRAFT.input_schema as Parameters<typeof jsonSchema>[0]),
-        }),
-      },
-      toolChoice: { type: "tool", toolName: "write_draft" },
-      maxOutputTokens: 2000,
-      providerOptions: { openrouter: { reasoning: { effort: "low" } } },
-    });
-    return toolCalls.find((c) => c.toolName === "write_draft")?.input ?? null;
+  if (aiProvider() === "playlab") {
+    return playlabJson({ system: `${system}\n\n${WRITE_DRAFT.description}`, prompt, shape: WRITE_DRAFT.input_schema });
   }
   const response = await getAnthropic().messages.create({
     model: aiModel(),

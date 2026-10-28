@@ -1,7 +1,8 @@
 /**
  * One chat message, drawn the same way in the side panel, the full page and
- * the scripted example: what was looked up (one plain line per step), the
- * answer (with a Copy button), then cards for the people in it.
+ * the scripted example, with shadcn's Message and Bubble: the question as a
+ * bubble on the right; the answer on the left with what was looked up (one
+ * quiet line), the answer itself, Copy / Regenerate, and cards for the people in it.
  */
 import type { DynamicToolUIPart } from "ai";
 import {
@@ -14,6 +15,7 @@ import {
   FolderKanban,
   Globe,
   Loader2,
+  RefreshCw,
   Route,
   Search,
   UserRound,
@@ -21,7 +23,10 @@ import {
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { VillageMark } from "~/components/nva";
+import { Bubble, BubbleContent } from "~/components/ui/bubble";
 import { Button } from "~/components/ui/button";
+import { Message, MessageContent, MessageFooter } from "~/components/ui/message";
+import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
 import { useT, type MessageKey } from "~/i18n";
 import { cn } from "~/lib/utils";
 import type { AskMessage, StepOutput } from "./chat-types";
@@ -122,6 +127,20 @@ export function plainAnswer(text: string): string {
   return text.replace(/\[([^\]\n]+)\]\([^)\s]+\)/g, "$1").replace(/\*\*/g, "");
 }
 
+/** A small icon action under an answer, with its name as a tooltip. */
+function MessageAction({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button type="button" variant="ghost" size="icon-sm" onClick={onClick} aria-label={label} className="text-smoke hover:text-ink max-md:size-10">
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 function CopyAnswer({ text }: { text: string }) {
   const { t } = useT();
   const [copied, setCopied] = useState(false);
@@ -131,31 +150,40 @@ function CopyAnswer({ text }: { text: string }) {
     return () => clearTimeout(timer);
   }, [copied]);
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="sm"
-      className="-my-1 -ml-3 w-fit font-normal text-smoke hover:text-ink max-md:h-10"
+    <MessageAction
+      label={copied ? t("common.action.copied") : t("common.action.copy")}
       onClick={() => void navigator.clipboard?.writeText(plainAnswer(text)).then(() => setCopied(true))}
     >
       {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-      {copied ? t("common.action.copied") : t("common.action.copy")}
-    </Button>
+    </MessageAction>
   );
 }
 
-export function AskMessageView({ message, busy = false }: { message: AskMessage; busy?: boolean }) {
+export function AskMessageView({
+  message,
+  busy = false,
+  onRegenerate,
+}: {
+  message: AskMessage;
+  busy?: boolean;
+  /** Only on the latest answer: ask the same question again. */
+  onRegenerate?: () => void;
+}) {
   const { t } = useT();
 
   if (message.role === "user") {
     const text = message.parts.map((p) => (p.type === "text" ? p.text : "")).join("");
     return (
-      <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-br-md bg-ink px-3.5 py-2 text-sm whitespace-pre-wrap text-white">
-          <span className="sr-only">{t("assistant.you")}: </span>
-          {text}
-        </div>
-      </div>
+      <Message align="end">
+        <MessageContent>
+          <Bubble align="end" variant="muted" className="max-w-[85%]">
+            <BubbleContent className="rounded-3xl bg-taupe px-4 py-2.5 text-[0.95rem] whitespace-pre-wrap text-ink">
+              <span className="sr-only">{t("assistant.you")}: </span>
+              {text}
+            </BubbleContent>
+          </Bubble>
+        </MessageContent>
+      </Message>
     );
   }
 
@@ -167,10 +195,11 @@ export function AskMessageView({ message, busy = false }: { message: AskMessage;
   const people = message.parts.flatMap((p) => (p.type === "data-people" ? [p.data] : []))[0];
   const notice = message.parts.flatMap((p) => (p.type === "data-notice" ? [p.data.kind] : []))[0];
 
+  const showActions = !!text && !busy && notice !== "example";
   return (
-    <div className="flex gap-3">
-      <VillageMark className="mt-0.5 size-6 shrink-0" />
-      <div className="grid min-w-0 flex-1 gap-2.5">
+    <Message className="gap-3">
+      <VillageMark className="mt-0.5 size-7 shrink-0" />
+      <MessageContent className="min-w-0 flex-1 gap-2.5">
         <span className="sr-only">{t("assistant.assistantName")}</span>
         {notice && (
           <span
@@ -184,7 +213,7 @@ export function AskMessageView({ message, busy = false }: { message: AskMessage;
         )}
         {steps.length > 0 && <Steps steps={steps} />}
         {text ? (
-          <RichAnswer text={text} className="text-sm" />
+          <RichAnswer text={text} className="text-[0.95rem]" />
         ) : (
           busy &&
           !steps.length && (
@@ -194,7 +223,6 @@ export function AskMessageView({ message, busy = false }: { message: AskMessage;
             </p>
           )
         )}
-        {text && !busy && notice !== "example" && <CopyAnswer text={text} />}
         {people && people.people.length > 0 && (
           <ul aria-label={t("assistant.peopleMentioned")} className="grid gap-1.5">
             {people.people.map((p) => (
@@ -204,7 +232,17 @@ export function AskMessageView({ message, busy = false }: { message: AskMessage;
             ))}
           </ul>
         )}
-      </div>
-    </div>
+        {showActions && (
+          <MessageFooter className="-ml-2 gap-0.5 px-0">
+            <CopyAnswer text={text} />
+            {onRegenerate && (
+              <MessageAction label={t("assistant.regenerate")} onClick={onRegenerate}>
+                <RefreshCw aria-hidden="true" />
+              </MessageAction>
+            )}
+          </MessageFooter>
+        )}
+      </MessageContent>
+    </Message>
   );
 }

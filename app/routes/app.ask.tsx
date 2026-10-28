@@ -1,20 +1,23 @@
 /**
- * "Ask the village" as a full page: saved chats with their dates in a left
- * column (a "Past chats" menu on smaller screens), the conversation filling the rest. It shows the same chat as the side panel
- * (AssistantProvider), so a conversation can move between the two.
- * /app/ask?q=... asks that question in a new chat.
+ * "Ask the village" as a full page, laid out like other chat apps: saved chats
+ * in a sidebar on the left (grouped by date, searchable, collapsible; a sheet
+ * on smaller screens), the conversation filling the rest. It shows the same
+ * chat as the side panel (AssistantProvider), so a conversation can move
+ * between the two. /app/ask?q=... asks that question in a new chat.
  */
-import { useEffect, useRef } from "react";
-import { Link, useLoaderData, useNavigate } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { useLoaderData, useNavigate } from "react-router";
+import { PanelLeftClose, PanelLeftOpen, SquarePen } from "lucide-react";
 import type { Route } from "./+types/app.ask";
 import { useAssistant } from "~/components/assistant/assistant-provider";
-import { ChatHistoryList, ChatHistoryMenu } from "~/components/assistant/chat-history";
+import { ChatHistoryList, ChatHistorySheet } from "~/components/assistant/chat-history";
 import { AssistantConversation } from "~/components/assistant/conversation";
 import { MAX_MESSAGE_CHARS } from "~/components/assistant/types";
-import { ArrowLeft, SquarePen } from "lucide-react";
 import { Button } from "~/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
 import { makeT, useT } from "~/i18n";
 import { requireUser } from "~/lib/auth.server";
+import { cn } from "~/lib/utils";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const locale = (matches[0]?.data as { locale?: "en" | "es" } | undefined)?.locale ?? "en";
@@ -28,12 +31,50 @@ export async function loader({ request }: Route.LoaderArgs) {
   return { q };
 }
 
+/** Whether the past-chats sidebar is open on wide screens. Remembered per browser (a convenience only). */
+const HISTORY_KEY = "nva.ask.history";
+function useHistoryOpen(): [boolean, (open: boolean) => void] {
+  const [open, setOpen] = useState(true);
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(HISTORY_KEY) === "closed") setOpen(false);
+    } catch {
+      // Storage blocked: start open.
+    }
+  }, []);
+  const set = (next: boolean) => {
+    setOpen(next);
+    try {
+      window.localStorage.setItem(HISTORY_KEY, next ? "open" : "closed");
+    } catch {
+      // Not remembered; fine.
+    }
+  };
+  return [open, set];
+}
+
+/** Wide enough for the sidebar beside the chat (Tailwind lg). */
+function useWide(): boolean {
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 1024px)");
+    const update = () => setWide(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  return wide;
+}
+
 export default function Ask() {
   const { q } = useLoaderData<typeof loader>();
   const { t } = useT();
   const { ask, newChat } = useAssistant();
   const navigate = useNavigate();
   const asked = useRef<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useHistoryOpen();
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const wide = useWide();
 
   // Ask ?q= once (from the dashboard or a CAP page), then drop it from the URL.
   useEffect(() => {
@@ -43,35 +84,60 @@ export default function Ask() {
     navigate("/app/ask", { replace: true, preventScrollReset: true });
   }, [q, ask, navigate]);
 
-  // A chat layout: the page fills the window below the top bar (less the main padding; this page
-  // has no footer line), the messages scroll inside it and the question box stays at the bottom.
+  const sidebarShown = wide && historyOpen;
+  const toggleLabel = sidebarShown ? t("assistant.historyHide") : t("assistant.historyShow");
+  const toggle = () => (wide ? setHistoryOpen(!historyOpen) : setSheetOpen(true));
+
+  // A chat layout: the page fills the window below the top bar (less the main padding), the messages
+  // scroll inside it and the question box stays at the bottom.
   return (
-    <div className="flex h-[calc(100dvh-7rem)] min-h-[26rem] min-w-0 flex-col gap-4 md:h-[calc(100dvh-8rem)]">
-      <div className="flex shrink-0 items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <Button asChild variant="ghost" size="icon-sm" className="-ml-2 max-md:hidden">
-            <Link to="/app" aria-label={t("common.action.back")}>
-              <ArrowLeft aria-hidden="true" />
-            </Link>
-          </Button>
-          <h1 className="truncate font-display text-xl font-bold tracking-tight md:text-2xl">{t("assistant.title")}</h1>
+    <div className="flex h-[calc(100dvh-7rem)] min-h-[26rem] min-w-0 gap-6 md:h-[calc(100dvh-8rem)]">
+      <aside
+        aria-hidden={!sidebarShown || undefined}
+        inert={!sidebarShown || undefined}
+        className={cn(
+          "hidden shrink-0 overflow-hidden transition-[width,opacity] duration-200 ease-out lg:block",
+          sidebarShown ? "w-64 opacity-100" : "w-0 opacity-0",
+        )}
+      >
+        <div className="flex h-full w-64 flex-col border-r border-stone pr-4">
+          <ChatHistoryList className="flex-1" />
         </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <ChatHistoryMenu labeled className="lg:hidden" />
-          <Button type="button" variant="outline" size="sm" onClick={newChat} className="max-sm:size-10 max-sm:px-0 max-md:h-10">
-            <SquarePen aria-hidden="true" />
-            <span className="max-sm:sr-only">{t("assistant.newChat")}</span>
-          </Button>
+      </aside>
+
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={toggle}
+                aria-label={toggleLabel}
+                aria-expanded={wide ? historyOpen : sheetOpen}
+                className="-ml-1.5 text-graphite max-md:size-10"
+              >
+                {sidebarShown ? <PanelLeftClose aria-hidden="true" /> : <PanelLeftOpen aria-hidden="true" />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{toggleLabel}</TooltipContent>
+          </Tooltip>
+          <h1 className="min-w-0 flex-1 truncate font-display text-lg font-bold tracking-tight md:text-xl">{t("assistant.title")}</h1>
+          {/* With the sidebar open, New chat is at its top; otherwise here. */}
+          {!sidebarShown && (
+            <Button type="button" variant="outline" size="sm" onClick={newChat} className="max-sm:size-10 max-sm:px-0 max-md:h-10">
+              <SquarePen aria-hidden="true" />
+              <span className="max-sm:sr-only">{t("assistant.newChat")}</span>
+            </Button>
+          )}
         </div>
-      </div>
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-[240px_minmax(0,1fr)]">
-        <aside className="hidden min-h-0 overflow-y-auto border-r border-stone pr-3 lg:block">
-          <ChatHistoryList />
-        </aside>
-        <section className="mx-auto flex min-h-0 w-full max-w-3xl flex-col">
+        <section className="flex min-h-0 w-full flex-1 flex-col">
           <AssistantConversation variant="page" />
         </section>
       </div>
+
+      {!wide && <ChatHistorySheet open={sheetOpen} onOpenChange={setSheetOpen} />}
     </div>
   );
 }

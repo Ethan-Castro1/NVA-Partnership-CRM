@@ -5,7 +5,7 @@ per environment. Village Partners is the `partners` app of the `nva` school.
 
 | Environment | Tenant | Deploys | URL |
 |---|---|---|---|
-| dev | `exdnva` | every push to `main` | `https://partners-nva.dev.labschools.ai` (VPN only) |
+| dev | `exdnva` | every push to `main` (once `EASEL_DEPLOY` is `true`) | `https://partners-nva.dev.labschools.ai` (VPN only) |
 | prod | `extnva` | by hand: Actions → Deploy → Run workflow (`prod`, `apply`), from `main` | `https://partners-nva.labschools.ai` |
 
 ## What this repo provides
@@ -41,7 +41,9 @@ per environment. Village Partners is the `partners` app of the `nva` school.
    - `https://partners-nva.dev.labschools.ai/auth/callback`
    - `http://localhost:5173/auth/callback`
 4. **Set the GitHub variables and secrets** below (repo level for both environments, or on the `exdnva` / `extnva`
-   environments for one), then push to `main`.
+   environments for one).
+5. **Turn on deploys:** set the repo variable `EASEL_DEPLOY` to `true`, then push to `main` (or run the Deploy
+   workflow). Until then, pushes to `main` only run the tests, so nothing tries to deploy before step 1 is merged.
 
 ## Settings
 

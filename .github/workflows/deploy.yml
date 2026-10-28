@@ -6,6 +6,8 @@
 # under the `nva` school in that repo's config/exttenant/schools.tfvars.
 #   dev:  every push to main
 #   prod: Actions → Deploy → Run workflow, from main
+# Pushes only test until the repo variable EASEL_DEPLOY is "true" (set it once the
+# app is registered in schools.tfvars); running the workflow by hand always deploys.
 # See docs/easel.md.
 name: Deploy
 on:
@@ -35,6 +37,7 @@ jobs:
 
   deploy:
     needs: test
+    if: github.event_name == 'workflow_dispatch' || vars.EASEL_DEPLOY == 'true'
     uses: playlab-education/duplocloud-infrastructure/.github/workflows/extapp-workflow.yml@main
     secrets: inherit
     with:

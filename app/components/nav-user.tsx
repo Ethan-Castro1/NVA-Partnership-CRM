@@ -1,5 +1,5 @@
 import { Form, Link, useRouteLoaderData } from "react-router";
-import { ChevronsUpDownIcon, LogOutIcon, Plug, UserRound } from "lucide-react";
+import { ChevronsUpDownIcon, LogOutIcon, Plug, SignpostBig, UserRound } from "lucide-react";
 import { PersonAvatar } from "~/components/nva";
 import {
   DropdownMenu,
@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
+import { useTour } from "~/components/tour/site-tour";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "~/components/ui/sidebar";
 import { useT } from "~/i18n";
 import type { SessionUser } from "~/lib/types";
@@ -17,6 +18,7 @@ import type { SessionUser } from "~/lib/types";
 export function NavUser({ user }: { user: SessionUser }) {
   const { isMobile } = useSidebar();
   const { t } = useT();
+  const tour = useTour();
   // The MCP connector page exists only when MCP_CONNECTOR=true (see mcp-keys.server.ts).
   const mcpConnector = (useRouteLoaderData("root") as { mcpConnector?: boolean } | undefined)?.mcpConnector ?? false;
 
@@ -59,6 +61,10 @@ export function NavUser({ user }: { user: SessionUser }) {
                   <UserRound />
                   {t("common.nav.account")}
                 </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={tour.start}>
+                <SignpostBig />
+                {t("tour.take")}
               </DropdownMenuItem>
               {mcpConnector && (
                 <DropdownMenuItem asChild>

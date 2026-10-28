@@ -34,7 +34,7 @@ export function QuickActions({
   const close = (next: boolean) => !next && setOpen(null);
 
   return (
-    <div role="group" aria-label={t("dashboard.quick.label")} className="flex flex-wrap items-center gap-2">
+    <div role="group" aria-label={t("dashboard.quick.label")} data-tour="quick-actions" className="flex flex-wrap items-center gap-2">
       <Button asChild variant="brand">
         <Link to="/app/people/new">
           <UserPlus aria-hidden="true" />

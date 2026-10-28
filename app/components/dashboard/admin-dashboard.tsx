@@ -42,7 +42,7 @@ export function AdminDashboard({
       */}
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
         <div className="contents lg:grid lg:min-w-0 lg:gap-6">
-          <Panel title={t("dashboard.fu.title")} action={<ViewAll to="/app/follow-ups" />} className="order-1 min-w-0">
+          <Panel title={t("dashboard.fu.title")} action={<ViewAll to="/app/follow-ups" />} className="order-1 min-w-0" tour="follow-ups">
             <DashboardFollowUps
               today={data.today}
               empty={t("dashboard.fu.empty")}

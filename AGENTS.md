@@ -137,6 +137,10 @@ contacts, opportunities, follow-ups, staff requests, sign-up review, email). Spe
   per staff member (`assistant_chats`). The panel lives in the app layout: it docks beside the page from 2xl (1536px)
   and stays open across pages; below that it is an overlay sheet (a dialog) that doesn't shift the page.
   The "Watch an example" walkthrough is scripted with `@shadcn/helpers/ai-sdk`.
+- **Guided tour:** `app/components/tour/site-tour.tsx` (text in `app/i18n/tour.ts`), one for staff and one for admins.
+  It opens on a first visit to the dashboard (remembered per browser) and from "Take the tour" in the name menu.
+  Steps point at `data-tour` markers: `PageHeader` is `data-tour="page"`; `Panel` takes a `tour` prop. Moving or
+  renaming a page means updating its step.
 - **MCP connector:** `/mcp/<key>` (stateless Streamable HTTP, `app/lib/ai/mcp.server.ts`) exposes the same
   read-only tools to Claude or ChatGPT. Staff make personal keys at `/app/connect`. Off unless `MCP_CONNECTOR=true`.
 

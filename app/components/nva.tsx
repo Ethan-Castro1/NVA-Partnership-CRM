@@ -82,7 +82,8 @@ export function PageHeader({
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-col gap-4 md:flex-row md:items-end md:justify-between", className)}>
+    // data-tour: what the guided tour highlights on most pages.
+    <div data-tour="page" className={cn("flex flex-col gap-4 md:flex-row md:items-end md:justify-between", className)}>
       <div className="min-w-0 max-w-3xl space-y-1">
         {eyebrow && <p className="text-eyebrow text-gold-ink">{eyebrow}</p>}
         {/* CRM-sized titles: 24px on phones, 30px from md up (the dashboard welcome stays larger). */}
@@ -101,15 +102,18 @@ export function Panel({
   children,
   className,
   bodyClassName,
+  tour,
 }: {
   title?: ReactNode;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
   bodyClassName?: string;
+  /** Marks the panel for the guided tour (data-tour). */
+  tour?: string;
 }) {
   return (
-    <section className={cn("rounded-card bg-taupe p-5 md:p-6", className)}>
+    <section data-tour={tour} className={cn("rounded-card bg-taupe p-5 md:p-6", className)}>
       {(title || action) && (
         <div className="mb-4 flex items-center justify-between gap-3">
           {title && <h2 className="text-section">{title}</h2>}

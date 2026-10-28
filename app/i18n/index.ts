@@ -28,6 +28,7 @@ import publicPages from "./public";
 import requests from "./requests";
 import resources from "./resources";
 import settings from "./settings";
+import tour from "./tour";
 
 export type { Locale } from "./define";
 export { LOCALES } from "./define";
@@ -50,6 +51,7 @@ const namespaces = {
   directory,
   resources,
   settings,
+  tour,
 };
 type Namespaces = typeof namespaces;
 

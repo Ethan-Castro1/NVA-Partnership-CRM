@@ -39,7 +39,7 @@ export function NeedSearch() {
   const { t } = useT();
   const inputId = "need-search";
   return (
-    <section aria-labelledby={`${inputId}-label`} className="rounded-card bg-canvas p-5 shadow-whisper md:p-8">
+    <section aria-labelledby={`${inputId}-label`} data-tour="need-search" className="rounded-card bg-canvas p-5 shadow-whisper md:p-8">
       <Form method="get" action="/app/people" role="search" className="grid gap-3">
         <h1 className="text-heading">
           <label id={`${inputId}-label`} htmlFor={inputId}>

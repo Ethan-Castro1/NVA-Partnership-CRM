@@ -461,4 +461,8 @@ CREATE TABLE IF NOT EXISTS staff_request_shares (
   PRIMARY KEY (request_id, user_id)
 );
 CREATE INDEX IF NOT EXISTS staff_request_shares_user_idx ON staff_request_shares (user_id);
+
+-- Sign in with Playlab: the Playlab user id an account is linked to (see playlab-sign-in.server.ts).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS playlab_id TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS users_playlab_id ON users (playlab_id) WHERE playlab_id IS NOT NULL;
 `;

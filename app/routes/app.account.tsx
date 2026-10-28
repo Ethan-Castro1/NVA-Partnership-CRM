@@ -16,6 +16,7 @@ import {
   MIN_PASSWORD_LENGTH,
   endAllSessions,
   isLockedDemoEmail,
+  isPlaylabSignInEnabled,
   passwordProblem,
   requireUser,
   setPassword,
@@ -30,7 +31,8 @@ export const meta: Route.MetaFunction = ({ matches }) => {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
-  return { user, minLength: MIN_PASSWORD_LENGTH };
+  // With Sign in with Playlab there are no passwords here; Playlab manages them.
+  return { user, minLength: MIN_PASSWORD_LENGTH, passwords: !isPlaylabSignInEnabled() };
 }
 
 type FieldName = "name" | "current" | "next" | "confirm";
@@ -65,6 +67,7 @@ export async function action({ request }: Route.ActionArgs) {
     );
   }
 
+  if (isPlaylabSignInEnabled()) return fail({ ok: false, form: "password", error: "auth.usePlaylab" });
   // Demo mode: everyone shares this account, so one visitor can't change its password for the rest.
   if (isLockedDemoEmail(user.email)) return fail({ ok: false, form: "password", error: "account.error.demoLocked" });
   const hash = await getPasswordHash(user.id);
@@ -78,7 +81,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function Account() {
-  const { user, minLength } = useLoaderData<typeof loader>();
+  const { user, minLength, passwords } = useLoaderData<typeof loader>();
   const { t } = useT();
 
   return (
@@ -95,7 +98,7 @@ export default function Account() {
       </Sheet>
       <div className="grid gap-6 lg:grid-cols-2">
         <ProfileForm name={user.name} locale={user.locale} />
-        <PasswordForm minLength={minLength} />
+        {passwords && <PasswordForm minLength={minLength} />}
       </div>
     </div>
   );

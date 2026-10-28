@@ -91,7 +91,7 @@ const schema = z.object({
 A bilingual (English/Spanish) partnership CRM for New Village Academy, Annapolis.
 Community members sign up at `/join` to teach a skills lesson, volunteer in a class,
 host an internship or partner on a Community Action Project (CAP). Two roles sign in at
-`/login` (email + password; admins create accounts): **staff** (Search, Connect, Arrange: find
+`/login` (Sign in with Playlab on Easel, email + password locally; admins create accounts): **staff** (Search, Connect, Arrange: find
 approved resources, request introductions, track their requests) and **admin** (the full CRM:
 contacts, opportunities, follow-ups, staff requests, sign-up review, email). Spec:
 `docs/requirements.md`; build plan and ownership: `docs/build-contract.md`.
@@ -111,6 +111,11 @@ contacts, opportunities, follow-ups, staff requests, sign-up review, email). Spe
   `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`). Adults only: never store student data.
 - **Database:** `DATABASE_URL` (Postgres) when deployed; embedded PGlite in `.data/pglite`
   locally. Only one process can open PGlite: stop `npm run dev` before `npm run seed`.
+- **Hosting: Easel** (Playlab's lab school hosting on AWS; `docs/easel.md`). The deploy runs `npm run db:migrate`
+  as the database owner, and the running app's role can't change tables, so schema changes must go through
+  SCHEMA_SQL / migrations.server.ts (never DDL at request time). Sign-in there is Sign in with Playlab
+  (`app/lib/playlab-sign-in.server.ts`); passwords are local-only. The MCP connector is off unless `MCP_CONNECTOR=true`.
+  Don't add third-party services (fonts, CDNs, analytics, APIs) without checking they are approved subprocessors.
 - **Core logic:** `app/lib/people.server.ts` (search, profiles, relationships, intro paths),
   `app/lib/caps.server.ts`, `app/lib/auth.server.ts`, `app/lib/ai/*` (the Playlab API: `PLAYLAB_API_KEY` +
   `PLAYLAB_PROJECT_ID`, a published Playlab app; setup in `docs/playlab-app.md`; the app's instructions are generated, `npm run playlab:instructions`. `ANTHROPIC_API_KEY` still works when those are unset).
@@ -133,7 +138,7 @@ contacts, opportunities, follow-ups, staff requests, sign-up review, email). Spe
   and stays open across pages; below that it is an overlay sheet (a dialog) that doesn't shift the page.
   The "Watch an example" walkthrough is scripted with `@shadcn/helpers/ai-sdk`.
 - **MCP connector:** `/mcp/<key>` (stateless Streamable HTTP, `app/lib/ai/mcp.server.ts`) exposes the same
-  read-only tools to Claude or ChatGPT. Staff make personal keys at `/app/connect`.
+  read-only tools to Claude or ChatGPT. Staff make personal keys at `/app/connect`. Off unless `MCP_CONNECTOR=true`.
 
 ### Local development
 

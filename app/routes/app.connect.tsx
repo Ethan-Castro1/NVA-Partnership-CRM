@@ -4,7 +4,7 @@
  * once; afterwards only its name and dates are listed, and it can be turned off.
  */
 import { useState } from "react";
-import { data, Link, useFetcher, useLoaderData } from "react-router";
+import { data, Link, redirect, useFetcher, useLoaderData } from "react-router";
 import { ArrowLeft, Check, Copy, Plug, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Route } from "./+types/app.connect";
@@ -23,7 +23,7 @@ import {
 import { Input } from "~/components/ui/input";
 import { makeT, useT } from "~/i18n";
 import { requireUser } from "~/lib/auth.server";
-import { createMcpKey, listMcpKeys, revokeMcpKey } from "~/lib/mcp-keys.server";
+import { createMcpKey, isMcpConnectorEnabled, listMcpKeys, revokeMcpKey } from "~/lib/mcp-keys.server";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const locale = (matches[0]?.data as { locale?: "en" | "es" } | undefined)?.locale ?? "en";
@@ -33,6 +33,7 @@ export const meta: Route.MetaFunction = ({ matches }) => {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
+  if (!isMcpConnectorEnabled()) throw redirect("/app");
   return { keys: await listMcpKeys(user.id) };
 }
 
@@ -40,6 +41,7 @@ type ActionResult = { created?: string; tooMany?: boolean; revoked?: boolean };
 
 export async function action({ request }: Route.ActionArgs) {
   const user = await requireUser(request);
+  if (!isMcpConnectorEnabled()) throw redirect("/app");
   const form = await request.formData();
   if (form.get("intent") === "revoke") {
     await revokeMcpKey(user.id, String(form.get("id") ?? ""));

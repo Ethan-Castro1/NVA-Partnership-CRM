@@ -1,9 +1,12 @@
-# Build and deploy to New Village Academy's (nva) tenants in Duplo (see terraform/).
-#   dev  (exdnva): every push to main.
-#   prod (extnva): only when run by hand (Actions → Deploy → Run workflow),
-#                     and only from main.
-# The tenants (GitHub environments) and ECR repo (named after this repo) come from
-# duplocloud-infrastructure modules/exttenant.
+# Deploys Village Partners to New Village Academy's Easel tenants (Playlab's lab
+# school hosting on AWS) with the Ext App Deploy workflow in
+# duplocloud-infrastructure. It builds this repo's Dockerfile, and this repo's
+# GitHub variables and secrets become the app's env vars (the repo's for both,
+# the exdnva/extnva environment's for just that one). The app is `partners`
+# under the `nva` school in that repo's config/exttenant/schools.tfvars.
+#   dev:  every push to main
+#   prod: Actions → Deploy → Run workflow, from main
+# See docs/easel.md.
 name: Deploy
 on:
   push:
@@ -11,67 +14,31 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: Where to deploy
         type: choice
-        default: exdnva
-        options: [exdnva, extnva]
+        default: dev
+        options: [dev, prod]
       cmd:
         description: plan to preview, apply to deploy
         type: choice
         default: plan
         options: [plan, apply]
-
-# One deploy per tenant at a time; never interrupt a Terraform apply.
-concurrency:
-  group: deploy-${{ inputs.environment || 'exdnva' }}
-  cancel-in-progress: false
-
 jobs:
-  ci:
+  test:
     runs-on: ubuntu-latest
     steps:
-      - name: Prod deploys only from main
-        if: inputs.environment == 'extnva' && github.ref != 'refs/heads/main'
-        run: |
-          echo "::error::Deploy to prod from main (this run is on ${GITHUB_REF_NAME})."
-          exit 1
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
       - run: npm ci && npm run typecheck && npm test
 
-  image:
-    needs: ci
-    runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.build.outputs.tag }}
-    env:
-      DUPLO_HOST: ${{ vars.DUPLO_HOST }}
-      DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
-      DUPLO_TENANT: ${{ inputs.environment || 'exdnva' }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: duplocloud/actions@main
-        with:
-          admin: true
-      - id: build
-        uses: duplocloud/actions/build-image@main
-        with:
-          type: buildx
-          repo: ${{ github.event.repository.name }} # one ECR repo for dev and prod
-          push: true
-
   deploy:
-    needs: image
-    uses: playlab-education/duplocloud-infrastructure/.github/workflows/app-module.yml@labschools-domain
+    needs: test
+    uses: playlab-education/duplocloud-infrastructure/.github/workflows/extapp-workflow.yml@main
     secrets: inherit
     with:
-      extapp: true # terraform/ uses components/extapp; also sets its state key
+      environment: ${{ inputs.environment || 'dev' }}
       cmd: ${{ inputs.cmd || 'apply' }}
-      environment: ${{ inputs.environment || 'exdnva' }}
-      tag: ${{ needs.image.outputs.tag }}
-
-  # No curl check here: Bot Control (the WAF) blocks scripted requests. The
-  # deploy's last step prints the app's URL; open it in a browser.
+      # Runs in the new image, as the database owner, before it deploys; the deploy stops if it fails.
+      before_update: npm run db:migrate

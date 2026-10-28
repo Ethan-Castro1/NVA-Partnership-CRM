@@ -1,7 +1,10 @@
 /**
- * Email + password sign-in for NVA staff. No SSO, no public sign-up: an admin
- * creates each account (or BOOTSTRAP_ADMIN_* creates the first one).
+ * Sign-in for NVA staff. No public sign-up: an admin creates each account (or
+ * BOOTSTRAP_ADMIN_* creates the first one).
  *
+ * - On Easel (PLAYLAB_URL, PLAYLAB_CLIENT_ID and PLAYLAB_CLIENT_SECRET set),
+ *   people sign in with Playlab (playlab-sign-in.server.ts) and passwords are
+ *   off. Elsewhere (local development), email + password.
  * - Passwords: scrypt with a per-user salt (node:crypto, no extra deps).
  * - Sessions: a random 32-byte token in an httpOnly cookie; the database keeps
  *   only its SHA-256, so a leaked sessions table can't sign anyone in.
@@ -52,6 +55,14 @@ function sessionCookieFor(request: Request) {
   if (!cookie) devCookies.set(name, (cookie = createCookie(name, cookieOptions)));
   return cookie;
 }
+
+/** "Sign in with Playlab" is configured, so it is the only way in (no passwords). */
+export function isPlaylabSignInEnabled(): boolean {
+  return Boolean(process.env.PLAYLAB_URL && process.env.PLAYLAB_CLIENT_ID && process.env.PLAYLAB_CLIENT_SECRET);
+}
+
+/** Stored for accounts that sign in with Playlab: matches no password (verifyPassword wants scrypt$...). */
+const NO_PASSWORD = "playlab-sign-in";
 
 // ---------- passwords ----------
 
@@ -108,27 +119,24 @@ function recordFailure(key: string) {
 }
 
 /**
- * The visitor's IP, for rate limits. The first X-Forwarded-For entry is
- * whatever the client sent, so it is never trusted. On Vercel the edge sets
- * x-vercel-forwarded-for and x-real-ip itself; elsewhere the right-most
- * X-Forwarded-For entry is the one our own proxy added.
+ * The visitor's IP, for rate limits: the right-most X-Forwarded-For entry,
+ * which the AWS load balancer appends. Everything to its left, and headers
+ * such as X-Real-IP, come from the client as sent, so they are never trusted.
  */
 export function clientIp(request: Request): string {
-  const header = (name: string) => request.headers.get(name)?.trim() || "";
-  const onVercel = !!process.env.VERCEL;
-  const vercel = onVercel ? header("x-vercel-forwarded-for").split(",")[0]?.trim() : "";
-  const forwarded = header("x-forwarded-for")
+  const forwarded = (request.headers.get("x-forwarded-for") ?? "")
     .split(",")
     .map((part) => part.trim())
     .filter(Boolean);
-  return vercel || header("x-real-ip") || forwarded[forwarded.length - 1] || "local";
+  return forwarded[forwarded.length - 1] || "local";
 }
 
 export type LoginResult =
   | { ok: true; user: SessionUser; setCookie: string }
-  | { ok: false; error: "auth.invalid" | "auth.tooManyAttempts" };
+  | { ok: false; error: "auth.invalid" | "auth.tooManyAttempts" | "auth.usePlaylab" };
 
 export async function login(request: Request, email: string, password: string): Promise<LoginResult> {
+  if (isPlaylabSignInEnabled()) return { ok: false, error: "auth.usePlaylab" };
   const normalized = email.trim().toLowerCase();
   const ip = clientIp(request);
   const ipKey = `ip:${ip}`;
@@ -160,7 +168,7 @@ export async function login(request: Request, email: string, password: string): 
 }
 
 /** Starts a session for a user and returns the Set-Cookie header value. */
-async function startSession(request: Request, userId: string): Promise<string> {
+export async function startSession(request: Request, userId: string): Promise<string> {
   const token = randomBytes(32).toString("base64url");
   const expires = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
   await query("INSERT INTO sessions (id, user_id, expires_at) VALUES ($1, $2, $3)", [hashToken(token), userId, expires]);
@@ -309,17 +317,19 @@ export function safeNext(next: string | null | undefined, fallback = "/app"): st
 
 // ---------- accounts ----------
 
+/** Creates an account. Without a password it can only sign in with Playlab. */
 export async function createUser(input: {
   email: string;
   name: string;
-  password: string;
+  password?: string | null;
   role: Role;
   locale?: "en" | "es";
 }): Promise<string> {
   const id = newId();
+  const hash = input.password ? await hashPassword(input.password) : NO_PASSWORD;
   await query(
     "INSERT INTO users (id, email, name, password_hash, role, locale) VALUES ($1, $2, $3, $4, $5, $6)",
-    [id, input.email.trim().toLowerCase(), input.name.trim(), await hashPassword(input.password), input.role, input.locale ?? "en"],
+    [id, input.email.trim().toLowerCase(), input.name.trim(), hash, input.role, input.locale ?? "en"],
   );
   return id;
 }

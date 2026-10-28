@@ -1,4 +1,4 @@
-import { Form, Link } from "react-router";
+import { Form, Link, useRouteLoaderData } from "react-router";
 import { ChevronsUpDownIcon, LogOutIcon, Plug, UserRound } from "lucide-react";
 import { PersonAvatar } from "~/components/nva";
 import {
@@ -17,6 +17,8 @@ import type { SessionUser } from "~/lib/types";
 export function NavUser({ user }: { user: SessionUser }) {
   const { isMobile } = useSidebar();
   const { t } = useT();
+  // The MCP connector page exists only when MCP_CONNECTOR=true (see mcp-keys.server.ts).
+  const mcpConnector = (useRouteLoaderData("root") as { mcpConnector?: boolean } | undefined)?.mcpConnector ?? false;
 
   return (
     <SidebarMenu>
@@ -58,12 +60,14 @@ export function NavUser({ user }: { user: SessionUser }) {
                   {t("common.nav.account")}
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/app/connect">
-                  <Plug />
-                  {t("account.connect.title")}
-                </Link>
-              </DropdownMenuItem>
+              {mcpConnector && (
+                <DropdownMenuItem asChild>
+                  <Link to="/app/connect">
+                    <Plug />
+                    {t("account.connect.title")}
+                  </Link>
+                </DropdownMenuItem>
+              )}
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>

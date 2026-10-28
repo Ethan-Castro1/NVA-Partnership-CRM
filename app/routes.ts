@@ -13,6 +13,9 @@ export default [
   route("join/thanks", "routes/join.thanks.tsx"),
   route("login", "routes/login.tsx"),
   route("logout", "routes/logout.ts"),
+  // Sign in with Playlab (Easel): start, and where Playlab sends people back.
+  route("auth/login", "routes/auth.login.ts"),
+  route("auth/callback", "routes/auth.callback.ts"),
   route("lang", "routes/lang.ts"),
   route("healthcheck", "routes/healthcheck.ts"),
 

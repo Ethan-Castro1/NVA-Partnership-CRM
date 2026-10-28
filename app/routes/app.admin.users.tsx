@@ -17,6 +17,7 @@ import {
   createUser,
   endAllSessions,
   isLockedDemoAccount,
+  isPlaylabSignInEnabled,
   passwordProblem,
   requireAdmin,
   setPassword,
@@ -32,7 +33,8 @@ export const meta: Route.MetaFunction = ({ matches }) => {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireAdmin(request);
-  return { users: await listStaff(), meId: me.id, minLength: MIN_PASSWORD_LENGTH };
+  // With Sign in with Playlab, accounts have no passwords: people sign in with the Playlab account that has their email.
+  return { users: await listStaff(), meId: me.id, minLength: MIN_PASSWORD_LENGTH, passwords: !isPlaylabSignInEnabled() };
 }
 
 const id = z.string().min(1).max(100);
@@ -42,7 +44,7 @@ const ActionSchema = z.discriminatedUnion("intent", [
     name: z.string().trim().max(120),
     email: z.string().trim().toLowerCase().max(320),
     role: z.enum(ROLES).catch("staff"),
-    password: z.string().max(200),
+    password: z.string().max(200).default(""),
   }),
   z.object({ intent: z.literal("role"), userId: id, role: z.enum(ROLES) }),
   z.object({ intent: z.literal("active"), userId: id, active: z.enum(["true", "false"]) }),
@@ -67,10 +69,11 @@ export async function action({ request }: Route.ActionArgs) {
     case "create": {
       if (!input.name) return fail({ ok: false, error: "admin.error.nameRequired", field: "name" });
       if (!z.email().safeParse(input.email).success) return fail({ ok: false, error: "admin.error.emailInvalid", field: "email" });
-      if (passwordProblem(input.password)) return fail({ ok: false, error: "admin.error.passwordTooShort", field: "password" });
+      const passwords = !isPlaylabSignInEnabled();
+      if (passwords && passwordProblem(input.password)) return fail({ ok: false, error: "admin.error.passwordTooShort", field: "password" });
       if (await emailTaken(input.email)) return fail({ ok: false, error: "admin.error.duplicateEmail", field: "email" }, 409);
       try {
-        await createUser({ name: input.name, email: input.email, role: input.role, password: input.password });
+        await createUser({ name: input.name, email: input.email, role: input.role, password: passwords ? input.password : null });
       } catch (error) {
         // Two admins creating the same email at once: the unique index catches the second.
         if ((error as { code?: string }).code === "23505") return fail({ ok: false, error: "admin.error.duplicateEmail", field: "email" }, 409);
@@ -90,6 +93,7 @@ export async function action({ request }: Route.ActionArgs) {
       return data<StaffActionResult>({ ok: true, done: active ? "reactivated" : "deactivated" });
     }
     case "reset": {
+      if (isPlaylabSignInEnabled()) return fail({ ok: false, error: "auth.usePlaylab" });
       if (passwordProblem(input.password)) return fail({ ok: false, error: "admin.error.passwordTooShort", field: "password" });
       if (!(await getStaff(input.userId))) return fail({ ok: false, error: "admin.error.userNotFound" }, 404);
       await setPassword(input.userId, input.password);
@@ -101,7 +105,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function StaffAccounts() {
-  const { users, meId, minLength } = useLoaderData<typeof loader>();
+  const { users, meId, minLength, passwords } = useLoaderData<typeof loader>();
   const { t } = useT();
   const [adding, setAdding] = useState(false);
 
@@ -124,7 +128,7 @@ export default function StaffAccounts() {
         }
       />
 
-      {adding && <CreateAccount minLength={minLength} />}
+      {adding && <CreateAccount minLength={minLength} passwords={passwords} />}
 
       <Sheet className="px-4 py-1 md:px-5">
         <ul className="divide-y divide-stone">
@@ -145,7 +149,7 @@ export default function StaffAccounts() {
                   {u.email} · <LastSignIn iso={u.last_login_at} />
                 </span>
               </div>
-              <StaffActions user={u} isSelf={u.id === meId} minLength={minLength} />
+              <StaffActions user={u} isSelf={u.id === meId} minLength={minLength} passwords={passwords} />
             </li>
           ))}
         </ul>
@@ -159,7 +163,7 @@ function LastSignIn({ iso }: { iso: string | null }) {
   return iso ? <>{t("admin.users.lastSignIn", { date: formatDate(iso, locale) })}</> : <>{t("admin.users.neverSignedIn")}</>;
 }
 
-function CreateAccount({ minLength }: { minLength: number }) {
+function CreateAccount({ minLength, passwords }: { minLength: number; passwords: boolean }) {
   const { t } = useT();
   const fetcher = useFetcher<StaffActionResult>();
   const formRef = useRef<HTMLFormElement>(null);
@@ -211,13 +215,17 @@ function CreateAccount({ minLength }: { minLength: number }) {
               </SelectContent>
             </Select>
           </Field>
-          <TempPasswordField
-            id="new-password"
-            minLength={minLength}
-            value={password}
-            onChange={setPasswordValue}
-            error={fieldError("password")}
-          />
+          {passwords ? (
+            <TempPasswordField
+              id="new-password"
+              minLength={minLength}
+              value={password}
+              onChange={setPasswordValue}
+              error={fieldError("password")}
+            />
+          ) : (
+            <p className="self-end text-sm text-smoke">{t("admin.users.playlabSignIn")}</p>
+          )}
           {result && !result.ok && !result.field && (
             <p role="alert" className="rounded-xl bg-rust-soft px-3.5 py-2.5 text-sm text-rust-ink sm:col-span-2">
               {t(result.error)}

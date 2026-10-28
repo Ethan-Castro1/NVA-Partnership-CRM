@@ -160,12 +160,10 @@ describe("clientIp", () => {
     expect(clientIp(req({ "x-forwarded-for": "203.0.113.7" }))).toBe("203.0.113.7");
   });
 
-  it("prefers x-real-ip, and x-vercel-forwarded-for only on Vercel", () => {
-    expect(clientIp(req({ "x-real-ip": "198.51.100.2", "x-forwarded-for": "6.6.6.6, 203.0.113.7" }))).toBe("198.51.100.2");
-    const headers = { "x-vercel-forwarded-for": "192.0.2.9", "x-real-ip": "198.51.100.2" };
-    expect(clientIp(req(headers))).toBe("198.51.100.2");
-    vi.stubEnv("VERCEL", "1");
-    expect(clientIp(req(headers))).toBe("192.0.2.9");
+  it("ignores headers the client can set itself (the AWS load balancer passes them through)", () => {
+    const spoofed = { "x-real-ip": "198.51.100.2", "x-vercel-forwarded-for": "192.0.2.9", "x-forwarded-for": "6.6.6.6, 203.0.113.7" };
+    expect(clientIp(req(spoofed))).toBe("203.0.113.7");
+    expect(clientIp(req({ "x-real-ip": "198.51.100.2" }))).toBe("local");
   });
 
   it("falls back to local", () => {

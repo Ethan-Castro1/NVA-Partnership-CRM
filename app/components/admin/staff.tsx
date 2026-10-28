@@ -102,10 +102,13 @@ export function StaffActions({
   user,
   isSelf,
   minLength,
+  passwords = true,
 }: {
   user: { id: string; name: string; role: Role; active: boolean };
   isSelf: boolean;
   minLength: number;
+  /** False with Sign in with Playlab: no reset-password item. */
+  passwords?: boolean;
 }) {
   const { t } = useT();
   const roleFetcher = useFetcher<StaffActionResult>();
@@ -158,15 +161,17 @@ export function StaffActions({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
-            <DropdownMenuItem
-              onSelect={() => {
-                setResetDone(false);
-                setResetOpen(true);
-              }}
-            >
-              <KeyRound aria-hidden="true" />
-              {t("admin.users.resetPassword")}
-            </DropdownMenuItem>
+            {passwords && (
+              <DropdownMenuItem
+                onSelect={() => {
+                  setResetDone(false);
+                  setResetOpen(true);
+                }}
+              >
+                <KeyRound aria-hidden="true" />
+                {t("admin.users.resetPassword")}
+              </DropdownMenuItem>
+            )}
             {!isSelf && (
               <DropdownMenuItem variant={user.active ? "destructive" : "default"} onSelect={toggleActive}>
                 <Power aria-hidden="true" />

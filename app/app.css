@@ -19,8 +19,8 @@
  *   (the -ink shades are for text and icons in each colour).
  */
 @theme {
-  --font-sans: "Arimo", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-display: "Montserrat", "Arimo", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Arimo Variable", "Arimo", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Montserrat", "Arimo Variable", ui-sans-serif, system-ui, sans-serif;
   --font-accent: "Kaushan Script", "Brush Script MT", cursive;
 
   /* Surfaces, lightest to deepest. */

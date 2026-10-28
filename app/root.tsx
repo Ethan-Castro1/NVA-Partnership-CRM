@@ -11,6 +11,15 @@ import {
 } from "react-router";
 
 import type { Route } from "./+types/root";
+// Brand kit fonts, served from the app itself (no request to Google): Montserrat (titles),
+// Arimo (headings and text), Kaushan Script (accent).
+import "@fontsource-variable/arimo/wght.css";
+import "@fontsource-variable/arimo/wght-italic.css";
+import "@fontsource/montserrat/300.css";
+import "@fontsource/montserrat/400.css";
+import "@fontsource/montserrat/600.css";
+import "@fontsource/montserrat/700.css";
+import "@fontsource/kaushan-script/400.css";
 import "./app.css";
 import { VillageMark } from "~/components/nva";
 import { Toaster } from "~/components/ui/sonner";
@@ -18,16 +27,10 @@ import { TooltipProvider } from "~/components/ui/tooltip";
 import { translate, type Locale } from "~/i18n";
 import { getLocale } from "~/i18n/locale.server";
 import { isAiConfigured } from "~/lib/ai/client.server";
+import { isMcpConnectorEnabled } from "~/lib/mcp-keys.server";
 import { getUser } from "~/lib/auth.server";
 
 export const links: Route.LinksFunction = () => [
-  { rel: "preconnect", href: "https://fonts.googleapis.com" },
-  { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-  {
-    rel: "stylesheet",
-    // Brand kit: Montserrat (titles), Arimo (headings and text), Kaushan Script (accent).
-    href: "https://fonts.googleapis.com/css2?family=Arimo:ital,wght@0,400..700;1,400..700&family=Kaushan+Script&family=Montserrat:wght@300;400;600;700&display=swap",
-  },
   { rel: "icon", type: "image/png", href: "/favicon-64.png" },
   { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
 ];
@@ -35,7 +38,7 @@ export const links: Route.LinksFunction = () => [
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await getUser(request);
   const locale = await getLocale(request, user?.locale);
-  return data({ user, locale, aiConfigured: isAiConfigured() });
+  return data({ user, locale, aiConfigured: isAiConfigured(), mcpConnector: isMcpConnectorEnabled() });
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {

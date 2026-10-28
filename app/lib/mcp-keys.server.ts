@@ -7,6 +7,15 @@ import { createHash, randomBytes } from "node:crypto";
 import { query, queryOne } from "./db.server";
 import type { SessionUser } from "./types";
 
+/**
+ * The connector sends directory data to each person's own Claude or ChatGPT
+ * account, which Easel's approved subprocessors don't cover, so it is off
+ * unless MCP_CONNECTOR=true (an explicit choice by NVA and Playlab).
+ */
+export function isMcpConnectorEnabled(): boolean {
+  return process.env.MCP_CONNECTOR === "true";
+}
+
 export type McpKeySummary = { id: string; label: string; created_at: string; last_used_at: string | null };
 
 const hash = (key: string) => createHash("sha256").update(key).digest("hex");

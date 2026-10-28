@@ -1,5 +1,7 @@
 .react-router
 build
 node_modules
-README.mdapi
-vercel.json
+.data
+.env*
+.git
+.vercel

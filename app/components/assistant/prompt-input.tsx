@@ -17,7 +17,7 @@ type PromptInputProps = {
   onSubmit: () => void;
   onStop: () => void;
   busy: boolean;
-  /** Shown under the box (the "never include student information" line). */
+  /** Shown under the box (where answers come from, when the AI is off). */
   hint?: string;
   /** The bigger, centered box of an empty chat. */
   large?: boolean;
@@ -61,7 +61,7 @@ export function PromptInput({ id, value, onChange, onSubmit, onStop, busy, hint,
           onKeyDown={onKeyDown}
           placeholder={t("assistant.placeholder")}
           aria-invalid={tooLong || undefined}
-          aria-describedby={`${id}-hint`}
+          aria-describedby={tooLong || hint ? `${id}-hint` : undefined}
           className={cn("max-h-48 px-4 pt-3.5 text-[0.95rem]", large ? "min-h-20" : "min-h-12")}
         />
         <InputGroupAddon align="block-end" className="justify-end gap-2 px-3 pb-2.5">
@@ -89,9 +89,11 @@ export function PromptInput({ id, value, onChange, onSubmit, onStop, busy, hint,
           )}
         </InputGroupAddon>
       </InputGroup>
-      <p id={`${id}-hint`} className={cn("px-2 text-center text-xs", tooLong ? "text-rust-ink" : "text-smoke")}>
-        {tooLong ? t("assistant.errorTooLong") : hint}
-      </p>
+      {(tooLong || hint) && (
+        <p id={`${id}-hint`} className={cn("px-2 text-center text-xs", tooLong ? "text-rust-ink" : "text-smoke")}>
+          {tooLong ? t("assistant.errorTooLong") : hint}
+        </p>
+      )}
     </form>
   );
 }

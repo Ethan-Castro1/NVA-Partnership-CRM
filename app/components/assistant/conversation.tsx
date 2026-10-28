@@ -104,7 +104,7 @@ function ChatView({ chat, variant }: { chat: Chat<AskMessage>; variant: Variant 
   // Our server sends translated error text; anything else (a dropped connection) gets the general message.
   const errorText = error && error.message && error.message.length < 240 && !error.message.startsWith("{") ? error.message : t("assistant.errorGeneric");
   // Plain search (AI off): say where answers come from; each answer carries its own small tag.
-  const hint = t(root?.aiConfigured === false ? "assistant.enterHintSearch" : "assistant.enterHint");
+  const hint = root?.aiConfigured === false ? t("assistant.enterHintSearch") : undefined;
   const prompt = (large: boolean) => (
     <PromptInput
       ref={inputRef}

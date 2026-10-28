@@ -84,7 +84,7 @@ function AppShell() {
         >
           <Outlet />
         </main>
-        {/* The Ask page says the same thing under its question box. */}
+        {/* The Ask page fills the window, so no footer there. */}
         {!fullBleed && (
           <footer className="mx-auto w-full max-w-[1280px] px-4 pb-6 text-xs text-smoke md:px-8">{t("common.footer.privacy")}</footer>
         )}

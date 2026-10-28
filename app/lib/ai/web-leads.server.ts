@@ -207,14 +207,16 @@ async function viaDescription(viaId: string | null | undefined, viewer: { id: st
 
 const PLACE = "Annapolis, Anne Arundel County, Maryland";
 
+type LeadQuery = { query: string; category: ExaCategory };
+
 /**
  * The Exa searches for one need: people and organizations around Annapolis,
  * plus, when a board or staff member is chosen, people at their organization
  * (the "who does our board member's world reach?" search).
  */
-export function buildLeadQueries(need: string, viaOrganization: string | null): { query: string; category: ExaCategory }[] {
+export function buildLeadQueries(need: string, viaOrganization: string | null): LeadQuery[] {
   // Exa works best with the entity first, then the traits that qualify it, then the source type.
-  const queries: { query: string; category: ExaCategory }[] = [
+  const queries: LeadQuery[] = [
     { query: `professional profiles of people in ${PLACE} with experience in ${need}`, category: "people" },
     { query: `organizations and businesses in ${PLACE} that work on ${need}`, category: "company" },
   ];
@@ -227,10 +229,24 @@ export function buildLeadQueries(need: string, viaOrganization: string | null): 
   return queries;
 }
 
+/**
+ * People searches use Exa's `deep` type: it tries several phrasings and keeps
+ * the results that meet every part of the need, which matters for narrow asks
+ * ("Spanish-speaking small business owners who could teach financial
+ * literacy"). It adds about 10 seconds, so only this deliberate search uses it;
+ * organization searches stay on `auto`, which is already precise for them.
+ */
+const typeFor = (category: ExaCategory) => (category === "people" ? "deep" : "auto");
+
 /** Runs the searches; drops failed ones unless all fail. Dedupes by URL. */
-async function searchAll(queries: { query: string; category: ExaCategory }[]): Promise<(ExaResult & { category: ExaCategory })[]> {
+async function searchAll(queries: LeadQuery[]): Promise<(ExaResult & { category: ExaCategory })[]> {
   const settled = await Promise.allSettled(
-    queries.map(async (q) => (await exaSearch({ query: q.query, category: q.category, numResults: MAX_LEADS })).map((r) => ({ ...r, category: q.category }))),
+    queries.map(async (q) =>
+      (await exaSearch({ query: q.query, category: q.category, type: typeFor(q.category), numResults: MAX_LEADS })).map((r) => ({
+        ...r,
+        category: q.category,
+      })),
+    ),
   );
   const ok = settled.filter((s): s is PromiseFulfilledResult<(ExaResult & { category: ExaCategory })[]> => s.status === "fulfilled");
   if (!ok.length) throw (settled[0] as PromiseRejectedResult).reason;
@@ -296,7 +312,9 @@ async function leadsWithClaude(
     title: r.title,
     url: r.url,
     author: r.author,
-    excerpt: r.highlights.join(" ").slice(0, 450),
+    // Exa returns about 2,000 characters of highlights per result; 800 keeps the
+    // useful part (role, employer, location) without an enormous message.
+    excerpt: r.highlights.join(" ").slice(0, 800),
   }));
   const messages: Anthropic.MessageParam[] = [
     {

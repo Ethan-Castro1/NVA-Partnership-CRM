@@ -659,7 +659,7 @@ const executors: { [K in ToolName]: Executor<K> } = {
             url: r.url,
             author: r.author,
             published: r.publishedDate,
-            excerpt: clip(r.highlights.join(" "), 300),
+            excerpt: clip(r.highlights.join(" "), 500),
           })),
         }),
         isError: false,

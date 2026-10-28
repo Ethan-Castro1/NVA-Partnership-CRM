@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { query } from "../db.server";
 import { createPerson, getPerson } from "../people.server";
 import {
@@ -166,5 +166,32 @@ describe("Exa lead search pieces", () => {
       ["Bay Center", null, null],
     ]);
     expect(leads[0].source_urls).toEqual(["https://linkedin.com/in/jane"]);
+  });
+});
+
+describe("the Exa searches behind web leads", () => {
+  it("uses deep search for people and auto for organizations, with highlights", async () => {
+    const { createUser } = await import("~/lib/auth.server");
+    const userId = await createUser({ email: "exa-types@nva.test", name: "Exa Types", role: "admin" });
+    vi.stubEnv("EXA_API_KEY", "test");
+    const bodies: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        bodies.push(JSON.parse(String(init.body)));
+        return Response.json({ results: [] });
+      }),
+    );
+    try {
+      expect(await findWebLeads({ need: "oyster restoration", locale: "en", userId, role: "admin" })).toEqual({ ok: true, count: 0 });
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+    expect(bodies.map((b) => [b.category, b.type])).toEqual([
+      ["people", "deep"],
+      ["company", "auto"],
+    ]);
+    expect(bodies[0]).toMatchObject({ numResults: 20, contents: { highlights: true } });
   });
 });

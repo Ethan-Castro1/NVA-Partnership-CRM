@@ -111,7 +111,9 @@ describe("stages", () => {
     expect(opp).toMatchObject({ title: "Sewing workshop, fall", stage: "committed", amount: null });
     expect(await statusOf(person)).toBe("new");
     const history = await getOpportunityHistory(admin(), id);
-    expect(history[0]?.meta).toMatchObject({ from: "not_contacted", to: "committed" });
+    // Created and changed can share a millisecond, so find the stage change rather than relying on order.
+    const change = history.find((h) => (h.meta as { to?: string } | null)?.to === "committed");
+    expect(change?.meta).toMatchObject({ from: "not_contacted", to: "committed" });
   });
 });
 

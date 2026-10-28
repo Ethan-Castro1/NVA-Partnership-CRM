@@ -2,9 +2,17 @@
  * Web search through Exa (EXA_API_KEY). Used by the connection finder's
  * "Search beyond our network" and the assistant's search_web tool.
  *
- * Exa's `people` and `company` categories return profile and company pages,
- * which is what partner research needs. Everything found here is unverified:
- * callers keep it apart from NVA's own records.
+ * Exa's `people` category covers public professional profiles (mostly
+ * LinkedIn) and `company` covers organization pages, which is what partner
+ * research needs. Everything found here is unverified: callers keep it apart
+ * from NVA's own records.
+ *
+ * Search types (Exa docs, Oct 2026): `auto` (default, ~1-2s), `deep` (runs
+ * several query variations and checks them, ~10s, more precise for narrow
+ * needs; about the same price for 20 results), `lite` (cached only, cheapest).
+ * `fast`/`instant` are legacy names for `lite`. Contents come back as
+ * highlights: Exa picks about 2,000 characters per result. Exa reports
+ * deprecated or ignored options in `warnings`, which are logged here.
  */
 export function isWebSearchConfigured(): boolean {
   return Boolean(process.env.EXA_API_KEY);
@@ -37,7 +45,7 @@ export async function exaSearch(input: {
   query: string;
   category?: ExaCategory;
   numResults?: number;
-  type?: "auto" | "fast";
+  type?: "auto" | "deep" | "lite";
 }): Promise<ExaResult[]> {
   const key = process.env.EXA_API_KEY;
   if (!key) throw new ExaError("EXA_API_KEY is not set", null);
@@ -53,7 +61,8 @@ export async function exaSearch(input: {
         ...(input.category ? { category: input.category } : {}),
         numResults: Math.min(Math.max(input.numResults ?? 8, 1), 25),
         userLocation: "US",
-        contents: { highlights: { query: input.query.slice(0, 200) } },
+        // Exa picks the excerpts that match the query (its recommended default).
+        contents: { highlights: true },
       }),
       signal: AbortSignal.timeout(45_000),
     });
@@ -65,7 +74,11 @@ export async function exaSearch(input: {
     throw new ExaError(`Exa search failed with HTTP ${response.status}`, response.status);
   }
 
-  const body = (await response.json()) as { results?: unknown[] };
+  const body = (await response.json()) as { results?: unknown[]; warnings?: unknown[] };
+  // Deprecated or ignored options show up here first; never log the query itself.
+  if (Array.isArray(body.warnings) && body.warnings.length) {
+    console.warn("Exa warnings:", JSON.stringify(body.warnings).slice(0, 500));
+  }
   const results: ExaResult[] = [];
   for (const raw of body.results ?? []) {
     const r = raw as Record<string, unknown>;

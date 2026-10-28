@@ -51,7 +51,7 @@ export function PromptInput({ id, value, onChange, onSubmit, onStop, busy, hint,
         {t("assistant.inputLabel")}
       </label>
       {/* The group dims itself when anything inside is disabled; only the send button ever is, so keep it bright. */}
-      <InputGroup className="rounded-3xl border-stone bg-canvas shadow-[0_8px_30px_-18px_rgba(0,0,0,0.35)] has-disabled:bg-canvas has-disabled:opacity-100 has-[[data-slot=input-group-control]:focus-visible]:border-gold has-[[data-slot=input-group-control]:focus-visible]:ring-gold/25">
+      <InputGroup className="rounded-3xl border-smoke/45 bg-canvas shadow-[0_8px_30px_-18px_rgba(0,0,0,0.35)] has-disabled:bg-canvas has-disabled:opacity-100 has-[[data-slot=input-group-control]:focus-visible]:border-gold has-[[data-slot=input-group-control]:focus-visible]:ring-gold/25">
         <InputGroupTextarea
           ref={ref}
           id={id}

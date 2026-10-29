@@ -183,9 +183,12 @@ export async function startSession(request: Request, userId: string): Promise<st
  * Demo mode (DEMO_LOGIN=true, or a SEED_DEMO deployment): /login shows
  * "Continue as Administrator / Continue as Staff", which start a real session
  * for the fictional demo account of that role. Never set it on a real deployment.
+ * It is also on for the Vercel deployment (VERCEL=1), the public demo with fictional
+ * data; DEMO_LOGIN=false turns it off there. Real data lives on Easel (docs/easel.md).
  */
 export function isDemoLoginEnabled(): boolean {
-  return process.env.DEMO_LOGIN === "true" || process.env.SEED_DEMO === "true";
+  const flag = process.env.DEMO_LOGIN;
+  return flag === "true" || process.env.SEED_DEMO === "true" || (process.env.VERCEL === "1" && flag !== "false");
 }
 export const DEMO_LOGIN = isDemoLoginEnabled();
 
@@ -194,7 +197,7 @@ const globalForDemo = globalThis as unknown as { __nvaDemoWarned?: boolean };
 if (DEMO_LOGIN && !globalForDemo.__nvaDemoWarned) {
   globalForDemo.__nvaDemoWarned = true;
   console.warn(
-    "[auth] Demo login is ON (DEMO_LOGIN or SEED_DEMO is true): anyone can open /login and continue as the demo " +
+    "[auth] Demo login is ON (DEMO_LOGIN, SEED_DEMO or Vercel): anyone can open /login and continue as the demo " +
       "administrator. Only use this with fictional demo data, never on a deployment with real contacts.",
   );
 }

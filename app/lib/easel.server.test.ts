@@ -7,7 +7,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { loader as healthcheck } from "~/routes/healthcheck";
 import { loader as loginLoader } from "~/routes/login";
 import { loader as mcpLoader } from "~/routes/mcp.$key";
-import { createUser, login } from "./auth.server";
+import { createUser, isDemoLoginEnabled, login } from "./auth.server";
 import { migrateDatabase, query, queryOne, requireSchema } from "./db.server";
 import { isMcpConnectorEnabled } from "./mcp-keys.server";
 import { accountForPlaylabUser } from "./playlab-sign-in.server";
@@ -106,5 +106,18 @@ describe("the MCP connector", () => {
     expect(response.status).toBe(404);
     vi.stubEnv("MCP_CONNECTOR", "true");
     expect(isMcpConnectorEnabled()).toBe(true);
+  });
+});
+
+describe("the Vercel demo", () => {
+  it("has demo sign-in on unless DEMO_LOGIN=false; Easel (no VERCEL) never does by default", () => {
+    vi.stubEnv("DEMO_LOGIN", "");
+    vi.stubEnv("SEED_DEMO", "");
+    vi.stubEnv("VERCEL", "");
+    expect(isDemoLoginEnabled()).toBe(false);
+    vi.stubEnv("VERCEL", "1");
+    expect(isDemoLoginEnabled()).toBe(true);
+    vi.stubEnv("DEMO_LOGIN", "false");
+    expect(isDemoLoginEnabled()).toBe(false);
   });
 });

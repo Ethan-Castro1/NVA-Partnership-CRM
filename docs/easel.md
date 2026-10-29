@@ -89,6 +89,13 @@ password (and the demo buttons with `DEMO_LOGIN`) still work.
 
 Logs go to Playlab's New Relic account; the app logs error names, never people's details.
 
+## The Vercel demo
+
+`nva-village-partners.vercel.app` (from the public `Ethan-Castro1/NVA-Partnership-CRM` repo) is the public demo,
+with fictional data in its own Neon database. It runs the same code through `vercel.json` and `api/server.mjs`, which
+Easel ignores. On Vercel (`VERCEL=1`) the demo sign-in buttons are on unless `DEMO_LOGIN=false`. Never put real
+contacts there.
+
 ## Moving the existing data
 
 The first version ran on Vercel with a Neon database. To bring real records over: on the VPN, with the owner

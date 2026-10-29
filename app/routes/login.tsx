@@ -83,13 +83,14 @@ function DemoButtons({ next, busy }: { next: string; busy: boolean }) {
         </h2>
         <p className="text-xs text-smoke">{t("auth.demoHelp")}</p>
       </div>
-      <div className="grid gap-2 sm:grid-cols-2">
+      {/* Stacked: side by side, "Continue as Administrator" doesn't fit (or "Continuar como administración"). */}
+      <div className="grid gap-2">
         {(["admin", "staff"] as const).map((role) => (
           <Form key={role} method="post">
             <input type="hidden" name="intent" value="demo" />
             <input type="hidden" name="role" value={role} />
             <input type="hidden" name="next" value={next} />
-            <Button type="submit" variant="outline" className="w-full bg-canvas" disabled={busy}>
+            <Button type="submit" variant="outline" className="h-11 w-full bg-canvas" disabled={busy}>
               {role === "admin" ? <ShieldCheck aria-hidden="true" /> : <UserRound aria-hidden="true" />}
               {role === "admin" ? t("auth.demoAdmin") : t("auth.demoStaff")}
             </Button>
